@@ -21,7 +21,7 @@ export default function AdminPage() {
   useEffect(() => {
     Promise.all([getPlayers(), getMatches(), loadUsers()]).then(([p, m, u]) => {
       setPlayers(p); setMatches(m); setUsers(u); setLoading(false);
-    });
+    }).catch(e => { toast.error('Errore caricamento: ' + e.message); setLoading(false); });
   }, []);
 
   async function loadUsers() {
@@ -80,9 +80,13 @@ export default function AdminPage() {
   };
 
   const handleSetRole = async (uid, newRole) => {
-    await updateDoc(doc(db, 'users', uid), { role: newRole });
-    setUsers(u => u.map(user => user.id === uid ? { ...user, role: newRole } : user));
-    toast.success(`Ruolo aggiornato: ${newRole}`);
+    try {
+      await updateDoc(doc(db, 'users', uid), { role: newRole });
+      setUsers(u => u.map(user => user.id === uid ? { ...user, role: newRole } : user));
+      toast.success(`Ruolo aggiornato: ${newRole}`);
+    } catch (e) {
+      toast.error('Errore aggiornamento ruolo: ' + e.message);
+    }
   };
 
   if (loading) return (

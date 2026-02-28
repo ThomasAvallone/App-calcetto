@@ -52,7 +52,7 @@ export default function MatchPage() {
     if (id !== activeMatchId) {
       loadMatch(id);
     }
-    return () => {};
+    return () => unloadMatch();
   }, [id]);
 
   // Timer display update loop

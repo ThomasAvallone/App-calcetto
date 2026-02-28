@@ -232,7 +232,7 @@ select.input option { background: var(--bg-card); }
 
 .page-content {
   flex: 1;
-  padding: 72px 1rem 80px;
+  padding: 72px 1rem calc(80px + env(safe-area-inset-bottom));
   max-width: 600px;
   margin: 0 auto;
   width: 100%;

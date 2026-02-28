@@ -9,7 +9,7 @@ export async function loginWithGoogle() {
   const userRef = doc(db, 'users', user.uid);
   const snap = await getDoc(userRef);
 
-  const ADMIN_EMAIL = 'thomasavallone45@gmail.com';
+  const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL || '';
 
   if (!snap.exists()) {
     await setDoc(userRef, {

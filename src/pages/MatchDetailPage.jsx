@@ -29,7 +29,7 @@ export default function MatchDetailPage() {
   const [showReport, setShowReport] = useState(false);
 
   useEffect(() => {
-    getMatch(id).then(m => { setMatch(m); setLoading(false); });
+    getMatch(id).then(m => { setMatch(m); setLoading(false); }).catch(() => setLoading(false));
   }, [id]);
 
   if (loading) return <div className="page-content" style={{ textAlign: 'center', paddingTop: '3rem', color: '#718096' }}>Caricamento...</div>;

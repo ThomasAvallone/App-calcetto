@@ -80,10 +80,12 @@ export default function Layout() {
           <span>Giocatori</span>
         </NavLink>
 
-        <NavLink to="/stagioni" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-          <IconBook />
-          <span>Annali</span>
-        </NavLink>
+        {!activeMatchId && (
+          <NavLink to="/stagioni" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+            <IconBook />
+            <span>Annali</span>
+          </NavLink>
+        )}
 
         {role === 'admin' && (
           <NavLink to="/admin" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
