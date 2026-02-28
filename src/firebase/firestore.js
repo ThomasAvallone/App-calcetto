@@ -18,10 +18,12 @@ export async function getPlayer(id) {
 }
 
 export async function createPlayer(data) {
+  const emptyStats = { goals: 0, assists: 0, autogoals: 0, gkGoalsConceded: 0, gkMatches: 0, wins: 0, losses: 0, draws: 0, matches: 0 };
+  const initialPI = computeCombinedPowerIndex(emptyStats, data.historicalStats || null);
   return await addDoc(collection(db, 'players'), {
     ...data,
-    powerIndex: 50,
-    stats: { goals: 0, assists: 0, autogoals: 0, gkGoalsConceded: 0, gkMatches: 0, wins: 0, losses: 0, draws: 0, matches: 0 },
+    powerIndex: initialPI,
+    stats: emptyStats,
     createdAt: serverTimestamp(),
   });
 }
@@ -87,7 +89,8 @@ export function subscribeToMatches(callback) {
 // ─── POWER INDEX RECALCULATION ────────────────────────────────────────────────
 
 export async function recalculatePlayerStats(playerIds) {
-  const allMatches = await getMatches();
+  const [allMatches, allPlayers] = await Promise.all([getMatches(), getPlayers()]);
+  const playerMap = Object.fromEntries(allPlayers.map(p => [p.id, p]));
   const batch = writeBatch(db);
 
   for (const pid of playerIds) {
@@ -125,7 +128,9 @@ export async function recalculatePlayerStats(playerIds) {
       }
     }
 
-    const pi = computePowerIndex(stats);
+    // Power Index = app stats + historical stats combined
+    const historicalStats = playerMap[pid]?.historicalStats || null;
+    const pi = computeCombinedPowerIndex(stats, historicalStats);
     batch.update(doc(db, 'players', pid), { stats, powerIndex: pi, updatedAt: serverTimestamp() });
   }
 
@@ -155,14 +160,6 @@ export async function seedHistoricalSeasons(seasons) {
 export async function getHistoricalSeasons() {
   const snap = await getDocs(query(collection(db, 'historicalSeasons'), orderBy('id')));
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
-}
-
-export async function linkPlayerToHistory(playerId, historicalNames, cumulativeStats) {
-  await updateDoc(doc(db, 'players', playerId), {
-    historicalNames,
-    historicalStats: cumulativeStats,
-    updatedAt: serverTimestamp(),
-  });
 }
 
 // Recalculate Power Index using app stats + historical stats combined

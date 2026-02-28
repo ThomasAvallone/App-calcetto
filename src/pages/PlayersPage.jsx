@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import usePlayersStore from '../store/playersStore';
 import useAuthStore from '../store/authStore';
-import { linkPlayerToHistory } from '../firebase/firestore';
-import { suggestHistoricalNames, computeCumulativeStats, getAllHistoricalNames, getUnlinkedNames } from '../data/historicalData';
+import { computeCombinedPowerIndex } from '../firebase/firestore';
+import { suggestHistoricalNames, computeCumulativeStats, getUnlinkedNames } from '../data/historicalData';
 import toast from 'react-hot-toast';
 
 const ROLES = ['Portiere', 'Difensore', 'Centrocampista', 'Attaccante'];
@@ -77,8 +77,8 @@ export default function PlayersPage() {
     if (!form.name.trim()) { toast.error('Inserisci il nome'); return; }
     setLoading(true);
     try {
-      // Compute cumulative historical stats (zeros if no names linked)
-      const historicalStats = computeCumulativeStats(linkedNames);
+      // Null if no names linked (avoids storing zeroed object on all players)
+      const historicalStats = linkedNames.length > 0 ? computeCumulativeStats(linkedNames) : null;
 
       const playerData = {
         name: form.name.trim(),
@@ -89,9 +89,13 @@ export default function PlayersPage() {
       };
 
       if (editId) {
-        await editPlayer(editId, playerData);
+        // Recompute power index combining app stats + new historicalStats
+        const currentPlayer = players.find(p => p.id === editId);
+        const pi = computeCombinedPowerIndex(currentPlayer?.stats, historicalStats);
+        await editPlayer(editId, { ...playerData, powerIndex: pi });
         toast.success('Giocatore aggiornato');
       } else {
+        // createPlayer already computes PI from historicalStats on creation
         await addPlayer(playerData);
         toast.success(linkedNames.length > 0
           ? `Giocatore aggiunto con storico (${linkedNames.length} alias)!`
