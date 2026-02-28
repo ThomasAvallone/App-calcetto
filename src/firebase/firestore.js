@@ -138,12 +138,14 @@ export async function recalculatePlayerStats(playerIds) {
 }
 
 export function computePowerIndex(stats) {
-  const { goals, assists, autogoals, gkGoalsConceded, wins, draws, matches } = stats;
+  const { goals, assists, autogoals, gkGoalsConceded, gkMatches, wins, draws, matches } = stats;
   if (matches === 0) return 50;
   const winRate = (wins + draws * 0.5) / matches;
-  const attackScore = (goals * 3 + assists * 2 - autogoals * 2);
-  const gkPenalty = gkGoalsConceded * 0.5;
-  const raw = 50 + winRate * 20 + attackScore - gkPenalty;
+  // Normalize attack contribution per match so historical cumulative data doesn't overflow
+  const attackPerMatch = (goals * 3 + assists * 2 - autogoals * 2) / matches;
+  // Normalize GK penalty per GK match (not total goals conceded)
+  const gkPenalty = gkMatches > 0 ? (gkGoalsConceded / gkMatches) * 2 : 0;
+  const raw = 50 + winRate * 20 + attackPerMatch * 6 - gkPenalty;
   return Math.max(0, Math.min(100, Math.round(raw * 10) / 10));
 }
 
