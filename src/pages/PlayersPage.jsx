@@ -152,13 +152,20 @@ export default function PlayersPage() {
           )}
         </div>
 
-        <div className="card mb-4" style={{ textAlign: 'center', padding: '2rem' }}>
-          <div style={{ fontSize: '3rem', marginBottom: '0.5rem' }}>{getRoleIcon(p.primaryRole)}</div>
-          <div style={{ fontSize: '2.5rem', fontWeight: 900, color: '#4FD1C5' }}>
-            {(p.powerIndex || 50).toFixed(1)}
+        <div className="card mb-4" style={{ textAlign: 'center', padding: '1.75rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '0.75rem' }}>
+            <div style={{ position: 'relative', width: 120, height: 120 }}>
+              <PiArc value={p.powerIndex || 50} />
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
+                <div style={{ fontSize: '1.25rem', lineHeight: 1 }}>{getRoleIcon(p.primaryRole)}</div>
+                <div style={{ fontSize: '1.65rem', fontWeight: 900, color: '#4FD1C5', lineHeight: 1 }}>
+                  {(p.powerIndex || 50).toFixed(1)}
+                </div>
+                <div style={{ fontSize: '0.55rem', color: '#718096', letterSpacing: '0.06em' }}>POWER INDEX</div>
+              </div>
+            </div>
           </div>
-          <div className="text-sm text-muted">Power Index</div>
-          <div className="flex gap-2 justify-center mt-2">
+          <div className="flex gap-2 justify-center">
             <span className="badge badge-teal">{p.primaryRole || 'N/D'}</span>
             {p.secondaryRole && <span className="badge badge-gray">{p.secondaryRole}</span>}
             {hasHistory && <span className="badge" style={{ background: 'rgba(246,224,94,0.15)', color: '#F6E05E', border: '1px solid rgba(246,224,94,0.3)', fontSize: '0.65rem' }}>📚 Storico</span>}
@@ -313,7 +320,7 @@ export default function PlayersPage() {
         return (
           <div key={p.id}
             className="card mb-2"
-            style={{ cursor: 'pointer' }}
+            style={{ cursor: 'pointer', borderLeft: i === 0 ? '3px solid #F6E05E' : i === 1 ? '3px solid #9CA3AF' : i === 2 ? '3px solid #C05621' : undefined }}
             onClick={() => setSelectedPlayer(p.id)}
           >
             <div className="flex items-center gap-3">
@@ -472,6 +479,24 @@ function HistoricalLinkSection({ linkedNames, suggestions, showAll, allNames, hi
         </p>
       )}
     </div>
+  );
+}
+
+function PiArc({ value, size = 120 }) {
+  const r = size * 0.38;
+  const sw = size * 0.068;
+  const circ = 2 * Math.PI * r;
+  const fill = (Math.max(0, Math.min(100, value)) / 100) * circ;
+  const mid = size / 2;
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ display: 'block' }}>
+      <circle cx={mid} cy={mid} r={r} fill="none" stroke="#2D3748" strokeWidth={sw} />
+      <circle cx={mid} cy={mid} r={r} fill="none" stroke="#4FD1C5" strokeWidth={sw}
+        strokeDasharray={`${fill} ${circ}`}
+        strokeLinecap="round"
+        transform={`rotate(-90 ${mid} ${mid})`}
+      />
+    </svg>
   );
 }
 

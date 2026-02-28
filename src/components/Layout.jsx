@@ -64,7 +64,7 @@ export default function Layout() {
         </NavLink>
 
         {activeMatchId && (
-          <button className="nav-item active" onClick={() => navigate(`/match/${activeMatchId}`)}>
+          <button className="nav-item active nav-item-live" onClick={() => navigate(`/match/${activeMatchId}`)}>
             <IconBall />
             <span>Partita</span>
           </button>

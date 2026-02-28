@@ -39,7 +39,7 @@ export default function DashboardPage() {
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span style={{ fontSize: '1.5rem' }}>⚽</span>
-            <h1 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#4FD1C5' }}>
+            <h1 className="gradient-text" style={{ fontSize: '1.4rem', fontWeight: 800 }}>
               Calcetto Analytics
             </h1>
           </div>
@@ -60,13 +60,13 @@ export default function DashboardPage() {
       {/* Quick Stats */}
       <div className="grid-3 mb-4">
         {[
-          { label: 'Giocatori', value: players.length, icon: '👥' },
-          { label: 'Partite', value: totalMatches, icon: '🏟️' },
-          { label: 'Gol Totali', value: totalGoals, icon: '⚽' },
+          { label: 'Giocatori', value: players.length, icon: '👥', accent: '#4FD1C5' },
+          { label: 'Partite', value: totalMatches, icon: '🏟️', accent: '#63B3ED' },
+          { label: 'Gol Totali', value: totalGoals, icon: '⚽', accent: '#FC8181' },
         ].map(s => (
-          <div key={s.label} className="card" style={{ textAlign: 'center', padding: '1rem 0.5rem' }}>
+          <div key={s.label} className="card" style={{ textAlign: 'center', padding: '1rem 0.5rem', borderTop: `2px solid ${s.accent}` }}>
             <div style={{ fontSize: '1.4rem' }}>{s.icon}</div>
-            <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#4FD1C5' }}>{s.value}</div>
+            <div style={{ fontSize: '1.6rem', fontWeight: 800, color: s.accent }}>{s.value}</div>
             <div style={{ fontSize: '0.7rem', color: '#718096' }}>{s.label}</div>
           </div>
         ))}
@@ -77,8 +77,9 @@ export default function DashboardPage() {
         <div
           className="card mb-4"
           style={{
-            background: 'linear-gradient(135deg, rgba(79,209,197,0.15), rgba(79,209,197,0.05))',
-            border: '1px solid rgba(79,209,197,0.4)',
+            background: 'linear-gradient(135deg, rgba(79,209,197,0.18) 0%, rgba(99,179,237,0.08) 100%)',
+            border: '1px solid rgba(79,209,197,0.5)',
+            boxShadow: '0 0 20px rgba(79,209,197,0.08)',
             cursor: 'pointer',
           }}
           onClick={() => navigate(`/match/${activeMatchId}`)}
@@ -132,27 +133,30 @@ export default function DashboardPage() {
           <p className="text-muted text-sm text-center" style={{ padding: '1rem' }}>
             Nessun giocatore registrato
           </p>
-        ) : ranking.map((p, i) => (
-          <div key={p.id} className="flex items-center gap-3"
-            style={{ padding: '0.6rem 0', borderBottom: i < ranking.length - 1 ? '1px solid #4A5568' : 'none' }}>
-            <span style={{
-              fontSize: '1.1rem',
-              minWidth: '28px',
-              fontWeight: 700,
-              color: i === 0 ? '#F6E05E' : i === 1 ? '#A0AEC0' : i === 2 ? '#C05621' : '#718096',
-            }}>
-              {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}.`}
-            </span>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>{p.name}</div>
-              <div className="text-xs text-muted">{p.primaryRole || 'N/D'}</div>
+        ) : ranking.map((p, i) => {
+          const piColor = i === 0 ? '#F6E05E' : '#4FD1C5';
+          return (
+            <div key={p.id} className="flex items-center gap-3"
+              style={{ padding: '0.6rem 0', borderBottom: i < ranking.length - 1 ? '1px solid rgba(74,85,104,0.5)' : 'none' }}>
+              <span style={{ fontSize: '1.1rem', minWidth: '28px', fontWeight: 700,
+                color: i === 0 ? '#F6E05E' : i === 1 ? '#A0AEC0' : i === 2 ? '#C05621' : '#718096' }}>
+                {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`}
+              </span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: '0.95rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: 4 }}>
+                  <div style={{ flex: 1, height: 3, background: '#2D3748', borderRadius: 999, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${p.powerIndex || 50}%`, background: piColor, borderRadius: 999 }} />
+                  </div>
+                  <span className="text-xs text-muted" style={{ whiteSpace: 'nowrap' }}>{p.primaryRole || 'N/D'}</span>
+                </div>
+              </div>
+              <div style={{ fontWeight: 700, color: piColor, minWidth: '42px', textAlign: 'right' }}>
+                {p.powerIndex?.toFixed(1) || '50.0'}
+              </div>
             </div>
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontWeight: 700, color: '#4FD1C5' }}>{p.powerIndex?.toFixed(1) || '50.0'}</div>
-              <div className="text-xs text-muted">PI</div>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Recent Matches */}
