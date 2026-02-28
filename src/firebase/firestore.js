@@ -142,6 +142,43 @@ export function computePowerIndex(stats) {
   return Math.max(0, Math.min(100, Math.round(raw * 10) / 10));
 }
 
+// ─── HISTORICAL SEASONS ─────────────────────────────────────────────────────
+
+export async function seedHistoricalSeasons(seasons) {
+  const batch = writeBatch(db);
+  for (const season of seasons) {
+    batch.set(doc(db, 'historicalSeasons', season.id), season);
+  }
+  await batch.commit();
+}
+
+export async function getHistoricalSeasons() {
+  const snap = await getDocs(query(collection(db, 'historicalSeasons'), orderBy('id')));
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+export async function linkPlayerToHistory(playerId, historicalNames, cumulativeStats) {
+  await updateDoc(doc(db, 'players', playerId), {
+    historicalNames,
+    historicalStats: cumulativeStats,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+// Recalculate Power Index using app stats + historical stats combined
+export function computeCombinedPowerIndex(stats, historicalStats) {
+  const combined = {
+    goals: (stats?.goals || 0) + (historicalStats?.goals || 0),
+    assists: (stats?.assists || 0) + (historicalStats?.assists || 0),
+    autogoals: (stats?.autogoals || 0) + (historicalStats?.autogoals || 0),
+    gkGoalsConceded: stats?.gkGoalsConceded || 0,
+    wins: (stats?.wins || 0) + (historicalStats?.wins || 0),
+    draws: (stats?.draws || 0) + (historicalStats?.draws || 0),
+    matches: (stats?.matches || 0) + (historicalStats?.matches || 0),
+  };
+  return computePowerIndex(combined);
+}
+
 // ─── LIVE MATCH STATE (timer sync) ───────────────────────────────────────────
 
 export async function saveMatchTimerState(matchId, state) {

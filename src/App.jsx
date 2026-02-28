@@ -11,6 +11,7 @@ import HistoryPage from './pages/HistoryPage';
 import MatchDetailPage from './pages/MatchDetailPage';
 import PlayersPage from './pages/PlayersPage';
 import AdminPage from './pages/AdminPage';
+import StagioniPage from './pages/StagioniPage';
 import Layout from './components/Layout';
 import Spinner from './components/Spinner';
 
@@ -73,6 +74,7 @@ export default function App() {
           <Route path="history" element={<HistoryPage />} />
           <Route path="history/:id" element={<MatchDetailPage />} />
           <Route path="players" element={<PlayersPage />} />
+          <Route path="stagioni" element={<StagioniPage />} />
           <Route path="admin" element={<AdminRoute><AdminPage /></AdminRoute>} />
         </Route>
 

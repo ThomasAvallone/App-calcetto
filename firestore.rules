@@ -40,5 +40,11 @@ service cloud.firestore {
       allow read: if isAuth();
       allow write: if isAdmin();
     }
+
+    // Historical Seasons (annali): authenticated users can read; only admins can write
+    match /historicalSeasons/{seasonId} {
+      allow read: if isAuth();
+      allow write: if isAdmin();
+    }
   }
 }

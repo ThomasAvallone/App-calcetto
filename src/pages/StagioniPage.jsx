@@ -1,0 +1,237 @@
+import React, { useState, useMemo } from 'react';
+import { HISTORICAL_SEASONS } from '../data/historicalData';
+
+const SORT_KEYS = [
+  { key: 'gol', label: 'Gol' },
+  { key: 'presenze', label: 'Pres.' },
+  { key: 'assist', label: 'Assist' },
+  { key: 'vinte', label: 'Vinte' },
+  { key: 'perse', label: 'Perse' },
+];
+
+export default function StagioniPage() {
+  const seasons = HISTORICAL_SEASONS;
+  const [selectedIdx, setSelectedIdx] = useState(seasons.length - 1);
+  const [sortKey, setSortKey] = useState('gol');
+  const season = seasons[selectedIdx];
+
+  const sortedPlayers = useMemo(() => {
+    if (!season) return [];
+    return [...season.players].sort((a, b) => (b[sortKey] || 0) - (a[sortKey] || 0));
+  }, [season, sortKey]);
+
+  // All-time totals
+  const totals = useMemo(() => {
+    let matches = 0, goals = 0, autogoals = 0, seasonCount = 0;
+    for (const s of seasons) {
+      matches += s.totalMatches;
+      goals += s.totalGoals;
+      autogoals += s.totalAutoGoals;
+      seasonCount++;
+    }
+    return { matches, goals, autogoals, seasonCount };
+  }, [seasons]);
+
+  if (!season) return null;
+  const rec = season.records || {};
+  const hasAssists = season.players.some(p => p.assist !== null);
+
+  return (
+    <div className="page-content">
+      {/* Header */}
+      <div style={{ paddingTop: '0.5rem', marginBottom: '1rem' }}>
+        <h2 style={{ marginBottom: '0.25rem' }}>📚 Annali del Calcetto</h2>
+        <p className="text-sm text-muted">
+          {totals.seasonCount} stagioni · {totals.matches} partite · {totals.goals} gol
+        </p>
+      </div>
+
+      {/* Season selector */}
+      <div style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', paddingBottom: '0.75rem', marginBottom: '1rem' }}>
+        {seasons.map((s, i) => (
+          <button
+            key={s.id}
+            onClick={() => setSelectedIdx(i)}
+            style={{
+              flexShrink: 0,
+              padding: '0.4rem 0.85rem',
+              borderRadius: '999px',
+              border: i === selectedIdx ? '2px solid #4FD1C5' : '1px solid #4A5568',
+              background: i === selectedIdx ? 'rgba(79,209,197,0.15)' : 'transparent',
+              color: i === selectedIdx ? '#4FD1C5' : '#A0AEC0',
+              fontWeight: i === selectedIdx ? 700 : 500,
+              fontSize: '0.8rem',
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {s.label.replace('20', "'").replace('/20', "/")}
+            {s.inCorso && ' *'}
+          </button>
+        ))}
+      </div>
+
+      {/* Season banner */}
+      <div className="card mb-4" style={{
+        background: season.inCorso
+          ? 'linear-gradient(135deg, rgba(246,224,94,0.12), rgba(246,224,94,0.03))'
+          : 'linear-gradient(135deg, rgba(79,209,197,0.12), rgba(79,209,197,0.03))',
+        border: season.inCorso ? '1px solid rgba(246,224,94,0.3)' : '1px solid rgba(79,209,197,0.3)',
+      }}>
+        <div className="flex items-center gap-2 mb-2">
+          <h3 style={{ color: season.inCorso ? '#F6E05E' : '#4FD1C5', fontSize: '1.2rem' }}>
+            {season.label}
+          </h3>
+          {season.inCorso && <span className="badge badge-gold">In Corso</span>}
+        </div>
+        <p className="text-xs text-muted mb-3">{season.months}</p>
+
+        <div className="grid-3">
+          {[
+            { label: 'Partite', value: season.totalMatches, icon: '🏟️' },
+            { label: 'Gol', value: season.totalGoals, icon: '⚽' },
+            { label: 'Giocatori', value: season.totalPlayers, icon: '👥' },
+          ].map(s => (
+            <div key={s.label} style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '1.1rem' }}>{s.icon}</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#F7FAFC' }}>{s.value}</div>
+              <div style={{ fontSize: '0.65rem', color: '#718096' }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+
+        {season.notes && (
+          <p className="text-xs mt-2" style={{ color: '#F6E05E', fontStyle: 'italic' }}>
+            {season.notes}
+          </p>
+        )}
+      </div>
+
+      {/* Records */}
+      <div className="card mb-4">
+        <h3 className="mb-3">🏆 Record della Stagione</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+          {rec.topScorer && (
+            <RecordItem emoji="⚽" label="Capocannoniere" name={rec.topScorer.name} value={`${rec.topScorer.value} gol`} />
+          )}
+          {rec.mostPresent && (
+            <RecordItem emoji="📋" label="Più presente" name={rec.mostPresent.name} value={`${rec.mostPresent.value} pres.`} />
+          )}
+          {rec.assistman && (
+            <RecordItem emoji="🎯" label="Assistman" name={rec.assistman.name} value={`${rec.assistman.value} ass.`} />
+          )}
+          {rec.topWinner && (
+            <RecordItem emoji="✅" label="Più vittorioso" name={rec.topWinner.name} value={`${rec.topWinner.value} vinte`} />
+          )}
+          {rec.bestMonth && (
+            <RecordItem emoji="📅" label="Mese top" name={rec.bestMonth.name} value={`${rec.bestMonth.value} gol`} />
+          )}
+          {rec.bestWinStreak && (
+            <RecordItem emoji="🔥" label="Vitt. consec." name={rec.bestWinStreak.name} value={`${rec.bestWinStreak.value}`} />
+          )}
+          {rec.biggestMatch && (
+            <RecordItem emoji="💥" label="Partita record" name={rec.biggestMatch.score} value={`${rec.biggestMatch.totalGoals} gol`} />
+          )}
+          {rec.bestMatchGoals && (
+            <RecordItem emoji="🎩" label="Gol in 1 partita" name={rec.bestMatchGoals.name} value={`${rec.bestMatchGoals.value}`} />
+          )}
+        </div>
+      </div>
+
+      {/* Sort controls */}
+      <div className="flex items-center gap-2 mb-3">
+        <h3 style={{ flex: 1 }}>📊 Classifica Giocatori</h3>
+      </div>
+      <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.75rem', overflowX: 'auto' }}>
+        {SORT_KEYS.filter(s => s.key !== 'assist' || hasAssists).map(s => (
+          <button
+            key={s.key}
+            onClick={() => setSortKey(s.key)}
+            style={{
+              padding: '0.3rem 0.65rem',
+              borderRadius: '999px',
+              border: sortKey === s.key ? '1px solid #4FD1C5' : '1px solid #4A5568',
+              background: sortKey === s.key ? 'rgba(79,209,197,0.15)' : 'transparent',
+              color: sortKey === s.key ? '#4FD1C5' : '#A0AEC0',
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Player table */}
+      <div className="card" style={{ padding: '0.5rem' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+          <thead>
+            <tr style={{ borderBottom: '1px solid #4A5568', color: '#718096' }}>
+              <th style={{ textAlign: 'left', padding: '0.5rem 0.3rem', fontWeight: 600 }}>#</th>
+              <th style={{ textAlign: 'left', padding: '0.5rem 0.3rem', fontWeight: 600 }}>Nome</th>
+              <th style={{ textAlign: 'center', padding: '0.5rem 0.2rem', fontWeight: 600 }}>P</th>
+              <th style={{ textAlign: 'center', padding: '0.5rem 0.2rem', fontWeight: 600, color: sortKey === 'gol' ? '#4FD1C5' : undefined }}>G</th>
+              {hasAssists && <th style={{ textAlign: 'center', padding: '0.5rem 0.2rem', fontWeight: 600, color: sortKey === 'assist' ? '#4FD1C5' : undefined }}>A</th>}
+              <th style={{ textAlign: 'center', padding: '0.5rem 0.2rem', fontWeight: 600, color: sortKey === 'vinte' ? '#4FD1C5' : undefined }}>V</th>
+              <th style={{ textAlign: 'center', padding: '0.5rem 0.2rem', fontWeight: 600, color: sortKey === 'perse' ? '#4FD1C5' : undefined }}>S</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sortedPlayers.map((p, i) => (
+              <tr key={p.name} style={{ borderBottom: '1px solid #2D3748' }}>
+                <td style={{ padding: '0.45rem 0.3rem', color: i < 3 ? '#F6E05E' : '#718096', fontWeight: i < 3 ? 700 : 400 }}>
+                  {i + 1}
+                </td>
+                <td style={{ padding: '0.45rem 0.3rem', fontWeight: 600, maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {p.name}
+                </td>
+                <td style={{ textAlign: 'center', padding: '0.45rem 0.2rem', color: '#A0AEC0' }}>{p.presenze}</td>
+                <td style={{ textAlign: 'center', padding: '0.45rem 0.2rem', fontWeight: sortKey === 'gol' ? 700 : 400, color: sortKey === 'gol' ? '#4FD1C5' : '#F7FAFC' }}>
+                  {p.gol}
+                </td>
+                {hasAssists && (
+                  <td style={{ textAlign: 'center', padding: '0.45rem 0.2rem', fontWeight: sortKey === 'assist' ? 700 : 400, color: sortKey === 'assist' ? '#4FD1C5' : '#F7FAFC' }}>
+                    {p.assist ?? '-'}
+                  </td>
+                )}
+                <td style={{ textAlign: 'center', padding: '0.45rem 0.2rem', color: '#81E6D9' }}>{p.vinte}</td>
+                <td style={{ textAlign: 'center', padding: '0.45rem 0.2rem', color: '#FC8181' }}>{p.perse}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Autogol note */}
+      {season.totalAutoGoals > 0 && (
+        <p className="text-xs text-muted mt-2" style={{ textAlign: 'center' }}>
+          + {season.totalAutoGoals} autogol nella stagione
+        </p>
+      )}
+    </div>
+  );
+}
+
+function RecordItem({ emoji, label, name, value }) {
+  return (
+    <div style={{
+      background: 'rgba(26,32,44,0.5)',
+      borderRadius: '8px',
+      padding: '0.6rem',
+    }}>
+      <div style={{ fontSize: '0.65rem', color: '#718096', marginBottom: '0.15rem' }}>
+        {emoji} {label}
+      </div>
+      <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#F7FAFC', lineHeight: 1.2 }}>
+        {name}
+      </div>
+      <div style={{ fontSize: '0.75rem', color: '#4FD1C5', fontWeight: 600 }}>
+        {value}
+      </div>
+    </div>
+  );
+}

@@ -32,6 +32,13 @@ const IconBall = () => (
   </svg>
 );
 
+const IconBook = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+    <path d="M4 19.5A2.5 2.5 0 016.5 17H20"/>
+    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/>
+  </svg>
+);
+
 const IconAdmin = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
     <circle cx="12" cy="12" r="3"/>
@@ -71,6 +78,11 @@ export default function Layout() {
         <NavLink to="/players" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
           <IconPlayers />
           <span>Giocatori</span>
+        </NavLink>
+
+        <NavLink to="/stagioni" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+          <IconBook />
+          <span>Annali</span>
         </NavLink>
 
         {role === 'admin' && (

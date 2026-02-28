@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { getMatches, getPlayers } from '../firebase/firestore';
+import { getMatches, getPlayers, seedHistoricalSeasons } from '../firebase/firestore';
 import { syncAllHistoryToSheets } from '../services/sheetsService';
 import { downloadExcel } from '../services/excelService';
 import { recalculatePlayerStats } from '../firebase/firestore';
 import { doc, getDocs, collection, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
+import { HISTORICAL_SEASONS } from '../data/historicalData';
 import toast from 'react-hot-toast';
 
 export default function AdminPage() {
@@ -15,6 +16,7 @@ export default function AdminPage() {
   const [syncing, setSyncing] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [recalculating, setRecalculating] = useState(false);
+  const [seeding, setSeeding] = useState(false);
 
   useEffect(() => {
     Promise.all([getPlayers(), getMatches(), loadUsers()]).then(([p, m, u]) => {
@@ -48,6 +50,19 @@ export default function AdminPage() {
       toast.error('Errore export: ' + e.message);
     } finally {
       setExporting(false);
+    }
+  };
+
+  const handleSeedHistory = async () => {
+    if (!window.confirm(`Importare ${HISTORICAL_SEASONS.length} stagioni storiche su Firestore? I dati esistenti verranno sovrascritti.`)) return;
+    setSeeding(true);
+    try {
+      await seedHistoricalSeasons(HISTORICAL_SEASONS);
+      toast.success(`${HISTORICAL_SEASONS.length} stagioni importate su Firestore!`);
+    } catch (e) {
+      toast.error('Errore import: ' + e.message);
+    } finally {
+      setSeeding(false);
     }
   };
 
@@ -98,6 +113,22 @@ export default function AdminPage() {
           <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#4FD1C5' }}>{totalGoals}</div>
           <div style={{ fontSize: '0.7rem', color: '#718096' }}>Gol Totali</div>
         </div>
+      </div>
+
+      {/* Import Historical Seasons */}
+      <div className="card mb-4">
+        <h3 className="mb-1">📚 Importa Annali Storici</h3>
+        <p className="text-sm text-muted mb-3">
+          Carica su Firestore tutte le {HISTORICAL_SEASONS.length} stagioni storiche (2018/19 → oggi).
+          Serve per la pagina Annali e per il collegamento giocatori ↔ storico.
+        </p>
+        <button
+          className="btn btn-teal btn-full"
+          onClick={handleSeedHistory}
+          disabled={seeding}
+        >
+          {seeding ? '⏳ Importazione...' : '📥 Importa Stagioni Storiche'}
+        </button>
       </div>
 
       {/* Google Sheets */}
