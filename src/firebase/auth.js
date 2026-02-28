@@ -9,13 +9,15 @@ export async function loginWithGoogle() {
   const userRef = doc(db, 'users', user.uid);
   const snap = await getDoc(userRef);
 
+  const ADMIN_EMAIL = 'thomasavallone45@gmail.com';
+
   if (!snap.exists()) {
     await setDoc(userRef, {
       uid: user.uid,
       email: user.email,
       displayName: user.displayName,
       photoURL: user.photoURL,
-      role: 'viewer',
+      role: user.email === ADMIN_EMAIL ? 'admin' : 'viewer',
       createdAt: serverTimestamp(),
     });
   }
