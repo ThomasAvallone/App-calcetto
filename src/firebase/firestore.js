@@ -131,7 +131,8 @@ export async function recalculatePlayerStats(playerIds) {
     // Power Index = app stats + historical stats combined
     const historicalStats = playerMap[pid]?.historicalStats || null;
     const pi = computeCombinedPowerIndex(stats, historicalStats);
-    batch.update(doc(db, 'players', pid), { stats, powerIndex: pi, updatedAt: serverTimestamp() });
+    const recentForm = computeRecentForm(allMatches, pid);
+    batch.update(doc(db, 'players', pid), { stats, powerIndex: pi, recentForm: recentForm ?? null, updatedAt: serverTimestamp() });
   }
 
   await batch.commit();
@@ -147,6 +148,60 @@ export function computePowerIndex(stats) {
   const gkPenalty = gkMatches > 0 ? (gkGoalsConceded / gkMatches) * 2 : 0;
   const raw = 50 + winRate * 20 + attackPerMatch * 6 - gkPenalty;
   return Math.max(0, Math.min(100, Math.round(raw * 10) / 10));
+}
+
+// ─── RATINGS & RECENT FORM ───────────────────────────────────────────────────
+
+export async function rateMatch(matchId, userId, scores) {
+  // scores: { [playerId]: number (1-10) }
+  await updateDoc(doc(db, 'matches', matchId), {
+    [`ratings.${userId}`]: { scores, ratedAt: serverTimestamp() },
+    updatedAt: serverTimestamp(),
+  });
+}
+
+// Pure function: compute recent form for a player from allMatches data
+export function computeRecentForm(allMatches, playerId) {
+  const getMs = d => d?.toMillis ? d.toMillis() : d ? new Date(d).getTime() : 0;
+  const playerMatches = allMatches
+    .filter(m =>
+      m.status === 'finished' &&
+      [...(m.redTeam || []), ...(m.blueTeam || [])].some(p => p.id === playerId)
+    )
+    .sort((a, b) => getMs(b.date) - getMs(a.date))
+    .slice(0, 5);
+
+  if (playerMatches.length === 0) return null;
+
+  const matchAvgs = playerMatches
+    .map(m => {
+      const raterScores = Object.values(m.ratings || {})
+        .map(r => r.scores?.[playerId])
+        .filter(s => typeof s === 'number');
+      if (raterScores.length === 0) return null;
+      return raterScores.reduce((a, b) => a + b, 0) / raterScores.length;
+    })
+    .filter(a => a !== null);
+
+  if (matchAvgs.length === 0) return null;
+
+  const avg = matchAvgs.reduce((a, b) => a + b, 0) / matchAvgs.length;
+  return {
+    avg: Math.round(avg * 10) / 10,
+    ratedMatches: matchAvgs.length,
+    totalMatches: playerMatches.length,
+  };
+}
+
+// Recalculate recentForm for given players and save to Firestore
+export async function recalculateRecentFormForPlayers(playerIds) {
+  const allMatches = await getMatches();
+  const batch = writeBatch(db);
+  for (const pid of playerIds) {
+    const form = computeRecentForm(allMatches, pid);
+    batch.update(doc(db, 'players', pid), { recentForm: form ?? null, updatedAt: serverTimestamp() });
+  }
+  await batch.commit();
 }
 
 // ─── HISTORICAL SEASONS ─────────────────────────────────────────────────────

@@ -134,6 +134,8 @@ export default function PlayersPage() {
       gkGoalsConceded: as.gkGoalsConceded || 0,
     };
     const hasHistory = (p.historicalNames || []).length > 0;
+    const rf = p.recentForm;
+    const formColor = rf ? (rf.avg >= 7 ? '#68D391' : rf.avg >= 5 ? '#F6E05E' : '#FC8181') : null;
 
     return (
       <div className="page-content">
@@ -161,6 +163,17 @@ export default function PlayersPage() {
             {p.secondaryRole && <span className="badge badge-gray">{p.secondaryRole}</span>}
             {hasHistory && <span className="badge" style={{ background: 'rgba(246,224,94,0.15)', color: '#F6E05E', border: '1px solid rgba(246,224,94,0.3)', fontSize: '0.65rem' }}>📚 Storico</span>}
           </div>
+          {rf && (
+            <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid #2D3748' }}>
+              <div style={{ fontSize: '0.62rem', color: '#718096', letterSpacing: '0.06em', marginBottom: '0.2rem' }}>⭐ FORMA RECENTE</div>
+              <div style={{ fontSize: '1.75rem', fontWeight: 800, lineHeight: 1, color: formColor }}>
+                {rf.avg.toFixed(1)}<span style={{ fontSize: '0.85rem', color: '#718096' }}>/10</span>
+              </div>
+              <div style={{ fontSize: '0.68rem', color: '#718096', marginTop: '0.2rem' }}>
+                {rf.ratedMatches}/{rf.totalMatches} partite valutate (ultimi 5)
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="grid-2 mb-4">
@@ -322,6 +335,11 @@ export default function PlayersPage() {
               </div>
               <div style={{ textAlign: 'right' }}>
                 <div style={{ fontWeight: 700, color: '#4FD1C5' }}>{(p.powerIndex || 50).toFixed(1)}</div>
+                {p.recentForm && (
+                  <div className="text-xs" style={{ fontWeight: 600, color: p.recentForm.avg >= 7 ? '#68D391' : p.recentForm.avg >= 5 ? '#F6E05E' : '#FC8181' }}>
+                    ⭐ {p.recentForm.avg.toFixed(1)}
+                  </div>
+                )}
                 <div className="text-xs text-muted">
                   {totalGoals}⚽ {totalAssists}🎯
                 </div>
