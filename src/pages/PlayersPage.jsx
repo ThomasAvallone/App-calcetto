@@ -128,16 +128,15 @@ export default function PlayersPage() {
     const p = players.find(pl => pl.id === selectedPlayer);
     if (!p) { setSelectedPlayer(null); return null; }
 
-    const hs = p.historicalStats || {};
     const as = p.stats || {};
     const total = {
-      goals: (as.goals || 0) + (hs.goals || 0),
-      assists: (as.assists || 0) + (hs.assists || 0),
-      autogoals: (as.autogoals || 0) + (hs.autogoals || 0),
-      matches: (as.matches || 0) + (hs.matches || 0),
-      wins: (as.wins || 0) + (hs.wins || 0),
-      draws: (as.draws || 0) + (hs.draws || 0),
-      losses: (as.losses || 0) + (hs.losses || 0),
+      goals: as.goals || 0,
+      assists: as.assists || 0,
+      autogoals: as.autogoals || 0,
+      matches: as.matches || 0,
+      wins: as.wins || 0,
+      draws: as.draws || 0,
+      losses: as.losses || 0,
       gkMatches: as.gkMatches || 0,
       gkGoalsConceded: as.gkGoalsConceded || 0,
     };
@@ -320,11 +319,10 @@ export default function PlayersPage() {
           <p>{search ? 'Nessun risultato' : 'Nessun giocatore registrato'}</p>
         </div>
       ) : ranking.map((p, i) => {
-        const hs = p.historicalStats || {};
         const as = p.stats || {};
-        const totalGoals = (as.goals || 0) + (hs.goals || 0);
-        const totalAssists = (as.assists || 0) + (hs.assists || 0);
-        const totalMatches = (as.matches || 0) + (hs.matches || 0);
+        const totalGoals = as.goals || 0;
+        const totalAssists = as.assists || 0;
+        const totalMatches = as.matches || 0;
         const hasHistory = (p.historicalNames || []).length > 0;
 
         return (

@@ -119,15 +119,14 @@ export default function StatsPage() {
   const withStats = useMemo(() => {
     if (period === 'all') {
       return players.map(p => {
-        const hs = p.historicalStats || {};
         const as = p.stats || {};
         return {
           ...p,
-          totalGoals:   (as.goals   || 0) + (hs.goals   || 0),
-          totalAssists: (as.assists || 0) + (hs.assists || 0),
-          totalMatches: (as.matches || 0) + (hs.matches || 0),
-          totalWins:    (as.wins    || 0) + (hs.wins    || 0),
-          totalDraws:   (as.draws   || 0) + (hs.draws   || 0),
+          totalGoals:   as.goals   || 0,
+          totalAssists: as.assists || 0,
+          totalMatches: as.matches || 0,
+          totalWins:    as.wins    || 0,
+          totalDraws:   as.draws   || 0,
           gkMatches:    as.gkMatches || 0,
           gkGoalsConceded: as.gkGoalsConceded || 0,
         };
