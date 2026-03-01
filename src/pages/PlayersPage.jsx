@@ -235,9 +235,9 @@ export default function PlayersPage() {
                 </span>
               ))}
             </div>
-            {hs.matches > 0 && (
+            {total.matches > 0 && (
               <p className="text-xs text-muted mt-2">
-                Storico: {hs.matches} partite · {hs.goals} gol · {hs.assists} assist
+                Totale: {total.matches} partite · {total.goals} gol · {total.assists} assist
               </p>
             )}
           </div>
