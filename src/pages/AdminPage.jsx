@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { getMatches, getPlayers, seedHistoricalSeasons } from '../firebase/firestore';
+import { getMatches, getPlayers, seedHistoricalSeasons, createPlayer } from '../firebase/firestore';
 import { syncAllHistoryToSheets } from '../services/sheetsService';
 import { downloadExcel } from '../services/excelService';
 import { recalculatePlayerStats } from '../firebase/firestore';
 import { doc, getDocs, collection, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
-import { HISTORICAL_SEASONS } from '../data/historicalData';
+import { HISTORICAL_SEASONS, getCurrentRosterPlayers, computeCumulativeStats } from '../data/historicalData';
 import toast from 'react-hot-toast';
 
 export default function AdminPage() {
@@ -17,6 +17,8 @@ export default function AdminPage() {
   const [exporting, setExporting] = useState(false);
   const [recalculating, setRecalculating] = useState(false);
   const [seeding, setSeeding] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState(null);
 
   useEffect(() => {
     Promise.all([getPlayers(), getMatches(), loadUsers()]).then(([p, m, u]) => {
@@ -50,6 +52,44 @@ export default function AdminPage() {
       toast.error('Errore export: ' + e.message);
     } finally {
       setExporting(false);
+    }
+  };
+
+  const handleImportCurrentPlayers = async () => {
+    const roster = getCurrentRosterPlayers();
+    const existingNames = new Set(players.map(p => p.name.toLowerCase()));
+    const toImport = roster.filter(p => !existingNames.has(p.displayName.toLowerCase()));
+
+    if (toImport.length === 0) {
+      toast('Tutti i giocatori sono già presenti!');
+      return;
+    }
+    if (!window.confirm(`Importare ${toImport.length} giocatori con le loro statistiche storiche?`)) return;
+
+    setImporting(true);
+    setImportProgress({ done: 0, total: toImport.length, current: '' });
+    let done = 0;
+    try {
+      for (const p of toImport) {
+        setImportProgress({ done, total: toImport.length, current: p.displayName });
+        const historicalStats = computeCumulativeStats(p.historicalNames);
+        await createPlayer({
+          name: p.displayName,
+          primaryRole: 'Centrocampista',
+          secondaryRole: '',
+          historicalNames: p.historicalNames,
+          historicalStats,
+        });
+        done++;
+      }
+      toast.success(`${done} giocatori importati con storico!`);
+      const updated = await getPlayers();
+      setPlayers(updated);
+    } catch (e) {
+      toast.error('Errore importazione: ' + e.message);
+    } finally {
+      setImporting(false);
+      setImportProgress(null);
     }
   };
 
@@ -117,6 +157,27 @@ export default function AdminPage() {
           <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#4FD1C5' }}>{totalGoals}</div>
           <div style={{ fontSize: '0.7rem', color: '#718096' }}>Gol Totali</div>
         </div>
+      </div>
+
+      {/* Import Current Players */}
+      <div className="card mb-4">
+        <h3 className="mb-1">👥 Importa Giocatori</h3>
+        <p className="text-sm text-muted mb-3">
+          Importa automaticamente la rosa corrente (ultimi 3 stagioni, min 5 presenze)
+          con le statistiche storiche già collegate.
+        </p>
+        {importProgress && (
+          <p className="text-sm text-muted mb-2">
+            ⏳ {importProgress.current} ({importProgress.done}/{importProgress.total})
+          </p>
+        )}
+        <button
+          className="btn btn-teal btn-full"
+          onClick={handleImportCurrentPlayers}
+          disabled={importing}
+        >
+          {importing ? '⏳ Importazione...' : '👥 Importa Rosa Corrente'}
+        </button>
       </div>
 
       {/* Import Historical Seasons */}

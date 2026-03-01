@@ -507,6 +507,38 @@ export function suggestHistoricalNames(playerName, linkedNames = []) {
     .sort((a, b) => b.score - a.score);
 }
 
+// ─── Utility: rosa corrente (ultimi 3 stagioni, min 5 presenze totali) ───────
+export function getCurrentRosterPlayers() {
+  const recentIds = new Set(['2023-24', '2024-25', '2025-26']);
+  const map = new Map(); // key uppercase → { displayName, historicalNames, totalPresenze }
+
+  const toTitleCase = str =>
+    str.split(/\s+/).map(word => {
+      if (word.endsWith('.')) return word.charAt(0).toUpperCase() + word.slice(1, -1).toLowerCase() + '.';
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    }).join(' ');
+
+  for (const season of HISTORICAL_SEASONS) {
+    if (!recentIds.has(season.id)) continue;
+    for (const p of season.players) {
+      const key = p.name.toUpperCase().trim();
+      if (!map.has(key)) {
+        map.set(key, {
+          displayName: toTitleCase(p.name),
+          historicalNames: [p.name],
+          totalPresenze: p.presenze || 0,
+        });
+      } else {
+        map.get(key).totalPresenze += p.presenze || 0;
+      }
+    }
+  }
+
+  return [...map.values()]
+    .filter(p => p.totalPresenze >= 5)
+    .sort((a, b) => b.totalPresenze - a.totalPresenze);
+}
+
 // ─── Utility: nomi storici non ancora linkati a nessun giocatore ────────────
 export function getUnlinkedNames(players) {
   const linked = new Set();
