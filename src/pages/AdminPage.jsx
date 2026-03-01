@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { getMatches, getPlayers, seedHistoricalSeasons, createPlayer } from '../firebase/firestore';
+import { getMatches, getPlayers, seedHistoricalSeasons, createPlayer, importHistoricalMatches, recalculatePlayerStats } from '../firebase/firestore';
 import { syncAllHistoryToSheets } from '../services/sheetsService';
 import { downloadExcel } from '../services/excelService';
-import { recalculatePlayerStats } from '../firebase/firestore';
 import { doc, getDocs, collection, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { HISTORICAL_SEASONS, getCurrentRosterPlayers, computeCumulativeStats } from '../data/historicalData';
@@ -19,6 +18,8 @@ export default function AdminPage() {
   const [seeding, setSeeding] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(null);
+  const [importingMatches, setImportingMatches] = useState(false);
+  const [importMatchProgress, setImportMatchProgress] = useState(null);
 
   useEffect(() => {
     Promise.all([getPlayers(), getMatches(), loadUsers()]).then(([p, m, u]) => {
@@ -119,6 +120,35 @@ export default function AdminPage() {
     }
   };
 
+  const handleImportHistoricalMatchesData = async () => {
+    const existingHistorical = matches.filter(m => m.isHistorical);
+    if (existingHistorical.length > 0) {
+      if (!window.confirm(`Attenzione: ci sono già ${existingHistorical.length} partite storiche importate. Vuoi importare di nuovo (verranno create copie duplicate)?`)) return;
+    } else {
+      if (!window.confirm('Importare 300 partite storiche (2018-2026) su Firestore? L\'operazione può richiedere qualche minuto.')) return;
+    }
+
+    setImportingMatches(true);
+    setImportMatchProgress({ done: 0, total: 300, matchNum: '' });
+    try {
+      const { HISTORICAL_MATCHES } = await import('../data/historicalMatches.js');
+      const done = await importHistoricalMatches(
+        HISTORICAL_MATCHES,
+        players,
+        (done, total, matchNum) => setImportMatchProgress({ done, total, matchNum })
+      );
+      toast.success(`${done} partite storiche importate!`);
+      // Reload matches
+      const updated = await getMatches();
+      setMatches(updated);
+    } catch (e) {
+      toast.error('Errore importazione partite: ' + e.message);
+    } finally {
+      setImportingMatches(false);
+      setImportMatchProgress(null);
+    }
+  };
+
   const handleSetRole = async (uid, newRole) => {
     try {
       await updateDoc(doc(db, 'users', uid), { role: newRole });
@@ -177,6 +207,27 @@ export default function AdminPage() {
           disabled={importing}
         >
           {importing ? '⏳ Importazione...' : '👥 Importa Rosa Corrente'}
+        </button>
+      </div>
+
+      {/* Import Historical Matches */}
+      <div className="card mb-4">
+        <h3 className="mb-1">⚽ Importa Partite Storiche</h3>
+        <p className="text-sm text-muted mb-3">
+          Importa le 300 partite storiche (2018/19 → 2025/26) con gol e autorete.
+          Le statistiche dei giocatori verranno collegate automaticamente tramite i nomi storici.
+        </p>
+        {importMatchProgress && (
+          <p className="text-sm text-muted mb-2">
+            ⏳ Partita #{importMatchProgress.matchNum} ({importMatchProgress.done}/{importMatchProgress.total})
+          </p>
+        )}
+        <button
+          className="btn btn-teal btn-full"
+          onClick={handleImportHistoricalMatchesData}
+          disabled={importingMatches}
+        >
+          {importingMatches ? '⏳ Importazione partite...' : '⚽ Importa Partite Storiche (300)'}
         </button>
       </div>
 

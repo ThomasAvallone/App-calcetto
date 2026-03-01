@@ -300,3 +300,109 @@ export function subscribeToScheduledMatch(callback) {
     callback(snap.exists() ? snap.data() : null);
   });
 }
+
+// ─── HISTORICAL MATCH IMPORT ─────────────────────────────────────────────────
+
+/**
+ * Import historical matches from parsed Excel data.
+ * @param {Array} historicalMatches - array from HISTORICAL_MATCHES
+ * @param {Array} players - current players array from Firestore (with historicalNames)
+ * @param {Function} onProgress - callback(done, total, matchNum)
+ */
+export async function importHistoricalMatches(historicalMatches, players, onProgress) {
+  // Build name → { id, name } lookup from historicalNames
+  const nameMap = new Map(); // uppercase name → { id, name }
+  for (const p of players) {
+    // Map the display name
+    nameMap.set(p.name.toUpperCase().trim(), { id: p.id, name: p.name });
+    // Map all historical names
+    for (const hn of (p.historicalNames || [])) {
+      nameMap.set(hn.toUpperCase().trim(), { id: p.id, name: p.name });
+    }
+  }
+
+  function lookupPlayer(rawName) {
+    const key = rawName.toUpperCase().trim();
+    // Exact match
+    if (nameMap.has(key)) return nameMap.get(key);
+    // Partial match: check if any map key starts with or includes this name
+    for (const [k, v] of nameMap) {
+      if (k.startsWith(key) || key.startsWith(k)) return v;
+    }
+    return null; // unknown player
+  }
+
+  const total = historicalMatches.length;
+  let done = 0;
+
+  // Process in batches of 400 (Firestore limit is 500)
+  const BATCH_SIZE = 400;
+  for (let i = 0; i < historicalMatches.length; i += BATCH_SIZE) {
+    const chunk = historicalMatches.slice(i, i + BATCH_SIZE);
+    const batch = writeBatch(db);
+
+    for (const hm of chunk) {
+      // Map teams to player objects
+      const redTeam = hm.leftTeam.map(p => {
+        const found = lookupPlayer(p.name);
+        return found ? { id: found.id, name: found.name } : { name: p.name };
+      });
+      const blueTeam = hm.rightTeam.map(p => {
+        const found = lookupPlayer(p.name);
+        return found ? { id: found.id, name: found.name } : { name: p.name };
+      });
+
+      // Build events: one goal event per goal scored
+      const events = [];
+      for (const p of hm.leftTeam) {
+        const found = lookupPlayer(p.name);
+        if (found && p.goals > 0) {
+          for (let g = 0; g < p.goals; g++) {
+            events.push({ type: 'goal', scorerId: found.id, team: 'red' });
+          }
+        }
+      }
+      for (const p of hm.rightTeam) {
+        const found = lookupPlayer(p.name);
+        if (found && p.goals > 0) {
+          for (let g = 0; g < p.goals; g++) {
+            events.push({ type: 'goal', scorerId: found.id, team: 'blue' });
+          }
+        }
+      }
+      // Autogoals
+      for (const ag of (hm.autogoals || [])) {
+        const found = lookupPlayer(ag.scorerName);
+        if (found) {
+          // The scorer's team is the opposite of the benefited team
+          const scorerTeam = ag.benefitedTeam === 'right' ? 'red' : 'blue';
+          events.push({ type: 'autogoal', scorerId: found.id, team: scorerTeam });
+        }
+      }
+
+      // Parse date string to Firestore Timestamp
+      const dateTs = Timestamp.fromDate(new Date(hm.date + 'T12:00:00'));
+
+      const matchRef = doc(collection(db, 'matches'));
+      batch.set(matchRef, {
+        status: 'finished',
+        date: dateTs,
+        redTeam,
+        blueTeam,
+        redScore: hm.leftScore,
+        blueScore: hm.rightScore,
+        events,
+        isHistorical: true,
+        matchNum: hm.matchNum,
+        createdAt: serverTimestamp(),
+      });
+
+      done++;
+      if (onProgress) onProgress(done, total, hm.matchNum);
+    }
+
+    await batch.commit();
+  }
+
+  return done;
+}
