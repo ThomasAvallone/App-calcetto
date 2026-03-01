@@ -1,11 +1,17 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useAuthStore from '../store/authStore';
 import usePlayersStore from '../store/playersStore';
 import useMatchStore from '../store/matchStore';
-import { subscribeToMatches } from '../firebase/firestore';
+import {
+  subscribeToMatches,
+  subscribeToScheduledMatch,
+  setScheduledMatch,
+  clearScheduledMatch,
+} from '../firebase/firestore';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
+import toast from 'react-hot-toast';
 
 function safeDate(val) {
   if (!val) return null;
@@ -14,23 +20,106 @@ function safeDate(val) {
   return new Date(val);
 }
 
+function getCountdown(dateStr) {
+  if (!dateStr) return null;
+  const d = new Date(dateStr);
+  const diff = d - Date.now();
+  if (diff <= 0) return null;
+  const days  = Math.floor(diff / (1000 * 60 * 60 * 24));
+  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  const mins  = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+  if (days > 0) return `tra ${days} giorn${days === 1 ? 'o' : 'i'} e ${hours}h`;
+  if (hours > 0) return `tra ${hours}h e ${mins} min`;
+  return `tra ${mins} min`;
+}
+
 export default function DashboardPage() {
   const { user, role, logout } = useAuthStore();
   const { players, getRanking } = usePlayersStore();
   const { activeMatchId } = useMatchStore();
   const navigate = useNavigate();
-  const [recentMatches, setRecentMatches] = useState([]);
+  const isAdmin = role === 'admin';
+
+  const [allMatches, setAllMatches] = useState([]);
+  const [scheduledMatch, setScheduledMatchState] = useState(null);
+  const [showScheduleForm, setShowScheduleForm] = useState(false);
+  const [scheduleForm, setScheduleForm] = useState({ date: '', note: '' });
+  const [savingSchedule, setSavingSchedule] = useState(false);
 
   useEffect(() => {
-    const unsub = subscribeToMatches((matches) => {
-      setRecentMatches(matches.slice(0, 5));
-    });
+    const unsub = subscribeToMatches(setAllMatches);
     return unsub;
   }, []);
 
+  useEffect(() => {
+    const unsub = subscribeToScheduledMatch(setScheduledMatchState);
+    return unsub;
+  }, []);
+
+  const recentMatches = allMatches.slice(0, 5);
+  const finishedMatches = allMatches.filter(m => m.status === 'finished');
+  const totalGoals = finishedMatches.reduce((s, m) => s + (m.redScore || 0) + (m.blueScore || 0), 0);
+
   const ranking = getRanking().slice(0, 5);
-  const totalMatches = recentMatches.length;
-  const totalGoals = recentMatches.reduce((s, m) => s + (m.redScore || 0) + (m.blueScore || 0), 0);
+
+  // Coppa di Latta mensile
+  const coppaDiLatta = useMemo(() => {
+    const now = Date.now();
+    const cutoff = now - 30 * 24 * 60 * 60 * 1000;
+    const getMs = d => d?.toMillis ? d.toMillis() : d ? new Date(d).getTime() : 0;
+    const monthly = finishedMatches.filter(m => getMs(m.date) >= cutoff);
+    if (monthly.length === 0) return null;
+
+    const ps = {};
+    for (const m of monthly) {
+      for (const p of [...(m.redTeam || []), ...(m.blueTeam || [])]) {
+        if (!ps[p.id]) ps[p.id] = { name: p.name, goals: 0, assists: 0, autogoals: 0, gkMatches: 0, gkGoalsConceded: 0 };
+      }
+      for (const ev of (m.events || [])) {
+        if (ev.type === 'goal') {
+          if (ev.scorerId && ps[ev.scorerId]) ps[ev.scorerId].goals++;
+          if (ev.assistId && ps[ev.assistId]) ps[ev.assistId].assists++;
+        }
+        if (ev.type === 'autogoal' && ev.scorerId && ps[ev.scorerId]) ps[ev.scorerId].autogoals++;
+        if (ev.type === 'gk_turn' && ev.playerId && ps[ev.playerId]) {
+          ps[ev.playerId].gkMatches++;
+          ps[ev.playerId].gkGoalsConceded += ev.goalsConceded || 0;
+        }
+      }
+    }
+    const list = Object.values(ps);
+    const topScorer   = list.filter(p => p.goals > 0).sort((a, b) => b.goals - a.goals)[0] || null;
+    const topAssist   = list.filter(p => p.assists > 0).sort((a, b) => b.assists - a.assists)[0] || null;
+    const topAutogoal = list.filter(p => p.autogoals > 0).sort((a, b) => b.autogoals - a.autogoals)[0] || null;
+    const worstGk     = list
+      .filter(p => p.gkMatches >= 2)
+      .sort((a, b) => b.gkGoalsConceded / b.gkMatches - a.gkGoalsConceded / a.gkMatches)[0] || null;
+    if (!topScorer && !topAssist && !topAutogoal && !worstGk) return null;
+    return { topScorer, topAssist, topAutogoal, worstGk, matchCount: monthly.length };
+  }, [finishedMatches]);
+
+  const handleSaveSchedule = async () => {
+    if (!scheduleForm.date) { toast.error('Seleziona data e ora'); return; }
+    setSavingSchedule(true);
+    try {
+      await setScheduledMatch(scheduleForm.date, scheduleForm.note);
+      toast.success('Prossima partita salvata!');
+      setShowScheduleForm(false);
+    } catch (e) {
+      toast.error('Errore: ' + e.message);
+    } finally {
+      setSavingSchedule(false);
+    }
+  };
+
+  const handleClearSchedule = async () => {
+    await clearScheduledMatch();
+    toast.success('Partita rimossa dal calendario');
+  };
+
+  const scheduledDate = scheduledMatch?.date ? new Date(scheduledMatch.date) : null;
+  const countdown = scheduledMatch?.date ? getCountdown(scheduledMatch.date) : null;
+  const isScheduledFuture = countdown !== null;
 
   return (
     <div className="page-content">
@@ -45,7 +134,7 @@ export default function DashboardPage() {
           </div>
           <p className="text-sm text-muted">
             Ciao, <strong style={{ color: '#F7FAFC' }}>{user?.displayName?.split(' ')[0]}</strong>
-            {role === 'admin' && <span className="badge badge-gold" style={{ marginLeft: '0.5rem' }}>Admin</span>}
+            {isAdmin && <span className="badge badge-gold" style={{ marginLeft: '0.5rem' }}>Admin</span>}
           </p>
         </div>
         <button className="btn btn-ghost btn-icon" onClick={logout} title="Logout">
@@ -60,9 +149,9 @@ export default function DashboardPage() {
       {/* Quick Stats */}
       <div className="grid-3 mb-4">
         {[
-          { label: 'Giocatori', value: players.length, icon: '👥', accent: '#4FD1C5' },
-          { label: 'Partite', value: totalMatches, icon: '🏟️', accent: '#63B3ED' },
-          { label: 'Gol Totali', value: totalGoals, icon: '⚽', accent: '#FC8181' },
+          { label: 'Giocatori', value: players.length,       icon: '👥', accent: '#4FD1C5' },
+          { label: 'Partite',   value: finishedMatches.length, icon: '🏟️', accent: '#63B3ED' },
+          { label: 'Gol Totali', value: totalGoals,           icon: '⚽', accent: '#FC8181' },
         ].map(s => (
           <div key={s.label} className="card" style={{ textAlign: 'center', padding: '1rem 0.5rem', borderTop: `2px solid ${s.accent}` }}>
             <div style={{ fontSize: '1.4rem' }}>{s.icon}</div>
@@ -97,33 +186,112 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* Scheduled match countdown */}
+      {scheduledMatch && scheduledDate && (
+        <div className="card mb-4" style={{
+          background: isScheduledFuture
+            ? 'linear-gradient(135deg, rgba(246,224,94,0.1) 0%, rgba(246,173,85,0.05) 100%)'
+            : 'rgba(74,85,104,0.3)',
+          border: `1px solid ${isScheduledFuture ? 'rgba(246,224,94,0.4)' : 'rgba(74,85,104,0.5)'}`,
+        }}>
+          <div className="flex items-center gap-3">
+            <div style={{ fontSize: '1.5rem' }}>📅</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 700, color: isScheduledFuture ? '#F6E05E' : '#A0AEC0', fontSize: '0.95rem' }}>
+                Prossima partita
+              </div>
+              <div className="text-sm" style={{ color: '#A0AEC0' }}>
+                {format(scheduledDate, "EEE d MMM 'alle' HH:mm", { locale: it })}
+                {scheduledMatch.note && <span> · {scheduledMatch.note}</span>}
+              </div>
+              {isScheduledFuture && (
+                <div style={{ fontSize: '0.78rem', color: '#F6E05E', marginTop: '0.15rem' }}>
+                  {countdown}
+                </div>
+              )}
+              {!isScheduledFuture && (
+                <div style={{ fontSize: '0.75rem', color: '#718096' }}>Data passata</div>
+              )}
+            </div>
+            {isAdmin && (
+              <button
+                onClick={handleClearSchedule}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#718096', fontSize: '1.1rem', padding: '0.25rem' }}
+                title="Rimuovi"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Admin Quick Actions */}
-      {role === 'admin' && (
+      {isAdmin && (
         <div className="card mb-4">
           <h3 className="mb-3">⚡ Azioni Rapide</h3>
           <div className="flex gap-3 mb-2">
-            <button
-              className="btn btn-teal"
-              style={{ flex: 1 }}
-              onClick={() => navigate('/match/setup')}
-            >
+            <button className="btn btn-teal" style={{ flex: 1 }} onClick={() => navigate('/match/setup')}>
               + Nuova Partita
             </button>
-            <button
-              className="btn btn-ghost"
-              style={{ flex: 1 }}
-              onClick={() => navigate('/admin')}
-            >
+            <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => navigate('/admin')}>
               ⚙️ Admin
             </button>
           </div>
-          <button
-            className="btn btn-ghost"
-            style={{ width: '100%', fontSize: '0.85rem' }}
-            onClick={() => navigate('/stagioni')}
-          >
-            📚 Annali Storici
-          </button>
+          <div className="flex gap-3 mb-2">
+            <button
+              className="btn btn-ghost"
+              style={{ flex: 1, fontSize: '0.85rem' }}
+              onClick={() => { setShowScheduleForm(v => !v); setScheduleForm({ date: '', note: '' }); }}
+            >
+              📅 {scheduledMatch ? 'Riprogramma' : 'Programma Partita'}
+            </button>
+            <button
+              className="btn btn-ghost"
+              style={{ flex: 1, fontSize: '0.85rem' }}
+              onClick={() => navigate('/stagioni')}
+            >
+              📚 Annali Storici
+            </button>
+          </div>
+
+          {showScheduleForm && (
+            <div style={{
+              marginTop: '0.75rem', padding: '0.75rem', borderRadius: '8px',
+              background: 'rgba(246,224,94,0.06)', border: '1px solid rgba(246,224,94,0.2)',
+            }}>
+              <p style={{ fontSize: '0.8rem', color: '#F6E05E', marginBottom: '0.6rem', fontWeight: 600 }}>
+                📅 Prossima Partita
+              </p>
+              <input
+                type="datetime-local"
+                className="input"
+                value={scheduleForm.date}
+                onChange={e => setScheduleForm(f => ({ ...f, date: e.target.value }))}
+                style={{ marginBottom: '0.5rem' }}
+              />
+              <input
+                className="input"
+                placeholder="Nota (opzionale, es. Campo Centrale)"
+                value={scheduleForm.note}
+                onChange={e => setScheduleForm(f => ({ ...f, note: e.target.value }))}
+                style={{ marginBottom: '0.6rem' }}
+              />
+              <div className="flex gap-2">
+                <button className="btn btn-ghost" style={{ flex: 1, fontSize: '0.85rem' }} onClick={() => setShowScheduleForm(false)}>
+                  Annulla
+                </button>
+                <button
+                  className="btn btn-teal"
+                  style={{ flex: 1, fontSize: '0.85rem' }}
+                  onClick={handleSaveSchedule}
+                  disabled={savingSchedule}
+                >
+                  {savingSchedule ? '...' : 'Salva'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -166,6 +334,36 @@ export default function DashboardPage() {
         })}
       </div>
 
+      {/* Coppa di Latta mensile */}
+      {coppaDiLatta && (
+        <div className="card mb-4" style={{ background: 'rgba(246,224,94,0.04)', border: '1px solid rgba(246,224,94,0.2)' }}>
+          <div className="flex items-center justify-between mb-3">
+            <h3 style={{ color: '#F6E05E' }}>🏅 Coppa di Latta del Mese</h3>
+            <span className="text-xs text-muted">{coppaDiLatta.matchCount} partite</span>
+          </div>
+          {[
+            coppaDiLatta.topScorer   && { icon: '⚽', label: 'Bomber del Mese',    name: coppaDiLatta.topScorer.name,   val: `${coppaDiLatta.topScorer.goals} gol`, color: '#4FD1C5' },
+            coppaDiLatta.topAssist   && { icon: '🎯', label: 'Assistman del Mese', name: coppaDiLatta.topAssist.name,   val: `${coppaDiLatta.topAssist.assists} assist`, color: '#63B3ED' },
+            coppaDiLatta.worstGk     && { icon: '🧤', label: 'Peggior Portiere',   name: coppaDiLatta.worstGk.name,     val: `${(coppaDiLatta.worstGk.gkGoalsConceded / coppaDiLatta.worstGk.gkMatches).toFixed(1)} gol/turno`, color: '#FC8181' },
+            coppaDiLatta.topAutogoal && { icon: '🤦', label: 'Re degli Autogol',   name: coppaDiLatta.topAutogoal.name, val: `${coppaDiLatta.topAutogoal.autogoals} autogol`, color: '#B794F4' },
+          ].filter(Boolean).map(award => (
+            <div key={award.label} className="flex items-center gap-3"
+              style={{ padding: '0.45rem 0', borderBottom: '1px solid rgba(74,85,104,0.3)' }}>
+              <span style={{ fontSize: '1.1rem', minWidth: '24px' }}>{award.icon}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: '0.72rem', color: '#718096', fontWeight: 600 }}>{award.label}</div>
+                <div style={{ fontWeight: 700, fontSize: '0.9rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {award.name}
+                </div>
+              </div>
+              <div style={{ fontWeight: 700, color: award.color, fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
+                {award.val}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Recent Matches */}
       <div className="card">
         <div className="flex items-center justify-between mb-3">
@@ -184,10 +382,7 @@ export default function DashboardPage() {
           return (
             <div key={m.id}
               className="flex items-center gap-3"
-              style={{
-                padding: '0.75rem 0', cursor: 'pointer',
-                borderBottom: '1px solid #4A5568',
-              }}
+              style={{ padding: '0.75rem 0', cursor: 'pointer', borderBottom: '1px solid #4A5568' }}
               onClick={() => navigate(`/history/${m.id}`)}
             >
               <div style={{

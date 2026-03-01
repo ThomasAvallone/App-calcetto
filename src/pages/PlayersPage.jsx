@@ -1,8 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import usePlayersStore from '../store/playersStore';
 import useAuthStore from '../store/authStore';
-import { computeCombinedPowerIndex } from '../firebase/firestore';
+import { computeCombinedPowerIndex, subscribeToMatches } from '../firebase/firestore';
 import { suggestHistoricalNames, computeCumulativeStats, getUnlinkedNames } from '../data/historicalData';
+import { format } from 'date-fns';
+import { it } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 
 const ROLES = ['Portiere', 'Difensore', 'Centrocampista', 'Attaccante'];
@@ -25,6 +27,12 @@ export default function PlayersPage() {
   const [linkedNames, setLinkedNames] = useState([]);
   const [showAllHistorical, setShowAllHistorical] = useState(false);
   const [historicalSearch, setHistoricalSearch] = useState('');
+
+  const [allMatches, setAllMatches] = useState([]);
+  useEffect(() => {
+    const unsub = subscribeToMatches(setAllMatches);
+    return unsub;
+  }, []);
 
   const filtered = players.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
   const ranking = [...filtered].sort((a, b) => (b.powerIndex || 50) - (a.powerIndex || 50));
@@ -216,7 +224,7 @@ export default function PlayersPage() {
         </div>
 
         {hasHistory && (
-          <div className="card" style={{ background: 'rgba(246,224,94,0.05)', border: '1px solid rgba(246,224,94,0.2)' }}>
+          <div className="card mb-4" style={{ background: 'rgba(246,224,94,0.05)', border: '1px solid rgba(246,224,94,0.2)' }}>
             <h3 className="mb-2" style={{ color: '#F6E05E', fontSize: '0.95rem' }}>📚 Alias Storici Collegati</h3>
             <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
               {p.historicalNames.map(n => (
@@ -235,6 +243,8 @@ export default function PlayersPage() {
             )}
           </div>
         )}
+
+        <PlayerMatchHistory matches={allMatches} playerId={p.id} />
       </div>
     );
   }
@@ -522,6 +532,64 @@ function PlayerAvatar({ name, size = 36 }) {
       color,
     }}>
       {(name || '?')[0].toUpperCase()}
+    </div>
+  );
+}
+
+function PlayerMatchHistory({ matches, playerId }) {
+  const getMs = d => d?.toMillis ? d.toMillis() : d ? new Date(d).getTime() : 0;
+  const playerMatches = matches
+    .filter(m =>
+      m.status === 'finished' &&
+      [...(m.redTeam || []), ...(m.blueTeam || [])].some(p => p.id === playerId)
+    )
+    .sort((a, b) => getMs(b.date) - getMs(a.date))
+    .slice(0, 8);
+
+  if (playerMatches.length === 0) return null;
+
+  return (
+    <div className="card">
+      <h3 className="mb-3" style={{ fontSize: '0.95rem' }}>🕐 Ultime Partite</h3>
+      {playerMatches.map(m => {
+        const inRed = (m.redTeam || []).some(p => p.id === playerId);
+        const myScore = inRed ? m.redScore : m.blueScore;
+        const theirScore = inRed ? m.blueScore : m.redScore;
+        const result = myScore > theirScore ? 'win' : myScore < theirScore ? 'loss' : 'draw';
+        const resultColor = result === 'win' ? '#68D391' : result === 'loss' ? '#FC8181' : '#F6E05E';
+        const resultLabel = result === 'win' ? 'V' : result === 'loss' ? 'S' : 'P';
+        const myGoals = (m.events || []).filter(e => e.type === 'goal' && e.scorerId === playerId).length;
+        const myAssists = (m.events || []).filter(e => e.type === 'goal' && e.assistId === playerId).length;
+        const myAutogoals = (m.events || []).filter(e => e.type === 'autogoal' && e.scorerId === playerId).length;
+        const d = m.date?.toDate ? m.date.toDate() : new Date(m.date);
+        return (
+          <div key={m.id} className="flex items-center gap-3"
+            style={{ padding: '0.5rem 0', borderBottom: '1px solid rgba(74,85,104,0.4)' }}>
+            <div style={{
+              width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+              background: resultColor + '22', border: `2px solid ${resultColor}`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontWeight: 800, fontSize: '0.75rem', color: resultColor,
+            }}>
+              {resultLabel}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 600, fontSize: '0.88rem' }}>
+                🔴 {m.redScore ?? '–'} — {m.blueScore ?? '–'} 🔵
+              </div>
+              <div className="text-xs text-muted">
+                {format(d, 'dd MMM yyyy', { locale: it })}
+                {myGoals > 0 && <span style={{ color: '#4FD1C5', marginLeft: '0.4rem' }}>⚽{myGoals}</span>}
+                {myAssists > 0 && <span style={{ color: '#63B3ED', marginLeft: '0.3rem' }}>🎯{myAssists}</span>}
+                {myAutogoals > 0 && <span style={{ color: '#FC8181', marginLeft: '0.3rem' }}>🤦{myAutogoals}</span>}
+              </div>
+            </div>
+            <div style={{ fontSize: '0.75rem', color: '#718096', whiteSpace: 'nowrap' }}>
+              {inRed ? '🔴' : '🔵'}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

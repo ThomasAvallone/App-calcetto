@@ -65,6 +65,10 @@ export default function MatchSetupPage() {
     navigator.clipboard.writeText(preview).then(() => toast.success('Preview copiata!'));
   };
 
+  const shareWhatsApp = () => {
+    window.open(`https://wa.me/?text=${encodeURIComponent(preview)}`, '_blank');
+  };
+
   const handlePlayerTap = (playerId, team) => {
     if (!swapPick) {
       // First tap: select this player
@@ -176,9 +180,14 @@ export default function MatchSetupPage() {
         <div className="card mb-4">
           <div className="flex items-center justify-between mb-3">
             <h3>🎙️ Match Preview</h3>
-            <button className="btn btn-ghost text-sm" style={{ padding: '0.3rem 0.75rem', minHeight: 'auto' }} onClick={copyPreview}>
-              📋 Copia
-            </button>
+            <div className="flex gap-2">
+              <button className="btn btn-ghost text-sm" style={{ padding: '0.3rem 0.75rem', minHeight: 'auto' }} onClick={copyPreview}>
+                📋 Copia
+              </button>
+              <button className="btn btn-ghost text-sm" style={{ padding: '0.3rem 0.75rem', minHeight: 'auto', color: '#25D366' }} onClick={shareWhatsApp}>
+                💬 WhatsApp
+              </button>
+            </div>
           </div>
           <pre style={{
             fontFamily: 'Inter, monospace', fontSize: '0.78rem',

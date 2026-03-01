@@ -280,3 +280,23 @@ export function subscribeToMatchState(matchId, callback) {
     callback(snap.exists() ? snap.data() : null);
   });
 }
+
+// ─── SCHEDULED MATCH ─────────────────────────────────────────────────────────
+
+export async function setScheduledMatch(date, note) {
+  await setDoc(doc(db, 'settings', 'nextMatch'), {
+    date, // ISO string
+    note: note || '',
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export async function clearScheduledMatch() {
+  await deleteDoc(doc(db, 'settings', 'nextMatch'));
+}
+
+export function subscribeToScheduledMatch(callback) {
+  return onSnapshot(doc(db, 'settings', 'nextMatch'), snap => {
+    callback(snap.exists() ? snap.data() : null);
+  });
+}
