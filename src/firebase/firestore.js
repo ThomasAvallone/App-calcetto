@@ -19,7 +19,7 @@ export async function getPlayer(id) {
 
 export async function createPlayer(data) {
   const emptyStats = { goals: 0, assists: 0, autogoals: 0, gkGoalsConceded: 0, gkMatches: 0, wins: 0, losses: 0, draws: 0, matches: 0 };
-  const initialPI = computeCombinedPowerIndex(emptyStats, data.historicalStats || null);
+  const initialPI = 50; // Will be recalculated after match import
   return await addDoc(collection(db, 'players'), {
     ...data,
     powerIndex: initialPI,
@@ -88,64 +88,103 @@ export function subscribeToMatches(callback) {
 
 // ─── POWER INDEX RECALCULATION ────────────────────────────────────────────────
 
-export async function recalculatePlayerStats(playerIds) {
-  const [allMatches, allPlayers] = await Promise.all([getMatches(), getPlayers()]);
-  const playerMap = Object.fromEntries(allPlayers.map(p => [p.id, p]));
-  const batch = writeBatch(db);
+const RECENT_MATCHES_WINDOW = 20; // last N matches for recent PI
 
-  for (const pid of playerIds) {
-    const stats = {
+export async function recalculatePlayerStats(playerIds) {
+  const allMatches = await getMatches();
+  const batch = writeBatch(db);
+  const getMs = d => d?.toMillis ? d.toMillis() : d ? new Date(d).getTime() : 0;
+  const now = Date.now();
+
+  // Helper: calculate stats from a list of matches for a player
+  function calcStatsForPlayer(matchList, pid) {
+    const s = {
       goals: 0, assists: 0, autogoals: 0,
       gkGoalsConceded: 0, gkMatches: 0,
       wins: 0, losses: 0, draws: 0, matches: 0
     };
-
-    for (const match of allMatches) {
-      if (match.status !== 'finished') continue;
-      const redTeam = match.redTeam || [];
-      const blueTeam = match.blueTeam || [];
-      const inRed = redTeam.some(p => p.id === pid);
-      const inBlue = blueTeam.some(p => p.id === pid);
-      if (!inRed && !inBlue) continue;
-
-      stats.matches++;
+    for (const match of matchList) {
+      const inRed = (match.redTeam || []).some(p => p.id === pid);
+      s.matches++;
       const myScore = inRed ? match.redScore : match.blueScore;
       const theirScore = inRed ? match.blueScore : match.redScore;
-      if (myScore > theirScore) stats.wins++;
-      else if (myScore < theirScore) stats.losses++;
-      else stats.draws++;
-
+      if (myScore > theirScore) s.wins++;
+      else if (myScore < theirScore) s.losses++;
+      else s.draws++;
       for (const ev of (match.events || [])) {
         if (ev.type === 'goal') {
-          if (ev.scorerId === pid) stats.goals++;
-          if (ev.assistId === pid) stats.assists++;
+          if (ev.scorerId === pid) s.goals++;
+          if (ev.assistId === pid) s.assists++;
         }
-        if (ev.type === 'autogoal' && ev.scorerId === pid) stats.autogoals++;
+        if (ev.type === 'autogoal' && ev.scorerId === pid) s.autogoals++;
         if (ev.type === 'gk_turn' && ev.playerId === pid) {
-          stats.gkMatches++;
-          stats.gkGoalsConceded += ev.goalsConceded || 0;
+          s.gkMatches++;
+          s.gkGoalsConceded += ev.goalsConceded || 0;
         }
       }
     }
+    return s;
+  }
 
-    // Power Index = app stats + historical stats combined
-    const historicalStats = playerMap[pid]?.historicalStats || null;
-    const pi = computeCombinedPowerIndex(stats, historicalStats);
+  for (const pid of playerIds) {
+    // Get all finished matches for this player, sorted newest first
+    const playerMatches = allMatches
+      .filter(m => {
+        if (m.status !== 'finished') return false;
+        return [...(m.redTeam || []), ...(m.blueTeam || [])].some(p => p.id === pid);
+      })
+      .sort((a, b) => getMs(b.date) - getMs(a.date));
+
+    // All-time stats (NO more historicalStats doubling — matches are all in Firestore now)
+    const stats = calcStatsForPlayer(playerMatches, pid);
+
+    // Recent stats (last 20 matches)
+    const recentStats = calcStatsForPlayer(playerMatches.slice(0, RECENT_MATCHES_WINDOW), pid);
+
+    // Calculate both PIs
+    const overallPI = computePowerIndex(stats);
+    const recentPI = computePowerIndex(recentStats);
+
+    // Activity decay: penalize inactive players (30+ days without playing)
+    let activityFactor = 1;
+    if (playerMatches.length > 0) {
+      const lastMatchMs = getMs(playerMatches[0].date);
+      const daysSinceLastMatch = (now - lastMatchMs) / (1000 * 60 * 60 * 24);
+      if (daysSinceLastMatch > 30) {
+        // Decay from 1.0 at 30 days → 0.5 floor at ~1 year
+        activityFactor = Math.max(0.5, 1 - (daysSinceLastMatch - 30) / 730);
+      }
+    } else {
+      activityFactor = 0.5;
+    }
+
+    // Blend: 60% recent + 40% overall (need at least 3 recent matches)
+    const blendedPI = recentStats.matches >= 3
+      ? recentPI * 0.6 + overallPI * 0.4
+      : overallPI;
+
+    // Apply activity decay
+    const finalPI = Math.max(0, Math.min(100, Math.round(blendedPI * activityFactor * 10) / 10));
+
     const recentForm = computeRecentForm(allMatches, pid);
     const streak = computeStreak(allMatches, pid);
-    batch.update(doc(db, 'players', pid), { stats, powerIndex: pi, recentForm: recentForm ?? null, streak: streak ?? null, updatedAt: serverTimestamp() });
+    batch.update(doc(db, 'players', pid), {
+      stats,
+      powerIndex: finalPI,
+      recentForm: recentForm ?? null,
+      streak: streak ?? null,
+      updatedAt: serverTimestamp(),
+    });
   }
 
   await batch.commit();
 }
 
 export function computePowerIndex(stats) {
-  const { goals, assists, autogoals, gkGoalsConceded, gkMatches, wins, draws, matches } = stats;
+  const { goals = 0, assists = 0, autogoals = 0, gkGoalsConceded = 0, gkMatches = 0, wins = 0, draws = 0, matches = 0 } = stats;
   if (matches === 0) return 50;
   const winRate = (wins + draws * 0.5) / matches;
-  // Normalize attack contribution per match so historical cumulative data doesn't overflow
   const attackPerMatch = (goals * 3 + assists * 2 - autogoals * 2) / matches;
-  // Normalize GK penalty per GK match (not total goals conceded)
   const gkPenalty = gkMatches > 0 ? (gkGoalsConceded / gkMatches) * 2 : 0;
   const raw = 50 + winRate * 20 + attackPerMatch * 6 - gkPenalty;
   return Math.max(0, Math.min(100, Math.round(raw * 10) / 10));
@@ -197,7 +236,7 @@ export function computeRecentForm(allMatches, playerId) {
       [...(m.redTeam || []), ...(m.blueTeam || [])].some(p => p.id === playerId)
     )
     .sort((a, b) => getMs(b.date) - getMs(a.date))
-    .slice(0, 5);
+    .slice(0, 15);
 
   if (playerMatches.length === 0) return null;
 
