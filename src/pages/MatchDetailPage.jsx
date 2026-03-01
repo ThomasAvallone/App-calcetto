@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getMatch, updateMatch, recalculatePlayerStats, rateMatch, recalculateRecentFormForPlayers } from '../firebase/firestore';
+import { getMatch, updateMatch, deleteMatch, recalculatePlayerStats, rateMatch, recalculateRecentFormForPlayers } from '../firebase/firestore';
 import useAuthStore from '../store/authStore';
 import usePlayersStore from '../store/playersStore';
 import { generateMatchReport } from '../services/reportService';
@@ -165,6 +165,21 @@ export default function MatchDetailPage() {
     setShowReport(true);
   };
 
+  const handleDeleteMatch = async () => {
+    if (!window.confirm('Eliminare questa partita? Le statistiche verranno ricalcolate. Azione irreversibile.')) return;
+    setSaving(true);
+    try {
+      const allIds = [...(match.redTeam || []), ...(match.blueTeam || [])].map(p => p.id);
+      await deleteMatch(id);
+      await recalculatePlayerStats(allIds);
+      toast.success('Partita eliminata');
+      navigate('/history');
+    } catch (e) {
+      toast.error(e.message);
+      setSaving(false);
+    }
+  };
+
   if (showReport) {
     return (
       <div className="page-content">
@@ -179,10 +194,16 @@ export default function MatchDetailPage() {
             {reportText}
           </pre>
         </div>
-        <button className="btn btn-teal btn-full"
-          onClick={() => navigator.clipboard.writeText(reportText).then(() => toast.success('Copiato!'))}>
-          📋 Copia negli Appunti
-        </button>
+        <div className="flex gap-3">
+          <button className="btn btn-teal" style={{ flex: 1 }}
+            onClick={() => navigator.clipboard.writeText(reportText).then(() => toast.success('Copiato!'))}>
+            📋 Copia
+          </button>
+          <button className="btn" style={{ flex: 1, background: '#25D366', color: '#fff', border: 'none' }}
+            onClick={() => window.open('https://wa.me/?text=' + encodeURIComponent(reportText), '_blank')}>
+            📲 WhatsApp
+          </button>
+        </div>
       </div>
     );
   }
@@ -233,6 +254,20 @@ export default function MatchDetailPage() {
       {/* Rating section */}
       {isAdmin && match.status === 'finished' && user && (
         <RatingSection match={match} userId={user.uid} onRated={setMatch} />
+      )}
+
+      {/* Delete match */}
+      {isAdmin && (
+        <div style={{ marginBottom: '1rem', textAlign: 'right' }}>
+          <button
+            className="btn btn-danger text-sm"
+            style={{ padding: '0.4rem 0.9rem', minHeight: 'auto' }}
+            onClick={handleDeleteMatch}
+            disabled={saving}
+          >
+            🗑️ Elimina Partita
+          </button>
+        </div>
       )}
 
       {/* Events */}

@@ -132,7 +132,8 @@ export async function recalculatePlayerStats(playerIds) {
     const historicalStats = playerMap[pid]?.historicalStats || null;
     const pi = computeCombinedPowerIndex(stats, historicalStats);
     const recentForm = computeRecentForm(allMatches, pid);
-    batch.update(doc(db, 'players', pid), { stats, powerIndex: pi, recentForm: recentForm ?? null, updatedAt: serverTimestamp() });
+    const streak = computeStreak(allMatches, pid);
+    batch.update(doc(db, 'players', pid), { stats, powerIndex: pi, recentForm: recentForm ?? null, streak: streak ?? null, updatedAt: serverTimestamp() });
   }
 
   await batch.commit();
@@ -161,6 +162,33 @@ export async function rateMatch(matchId, userId, scores) {
 }
 
 // Pure function: compute recent form for a player from allMatches data
+export function computeStreak(allMatches, playerId) {
+  const getMs = d => d?.toMillis ? d.toMillis() : d ? new Date(d).getTime() : 0;
+  const playerMatches = allMatches
+    .filter(m =>
+      m.status === 'finished' &&
+      [...(m.redTeam || []), ...(m.blueTeam || [])].some(p => p.id === playerId)
+    )
+    .sort((a, b) => getMs(b.date) - getMs(a.date));
+
+  if (playerMatches.length === 0) return null;
+
+  const getOutcome = m => {
+    const inRed = (m.redTeam || []).some(p => p.id === playerId);
+    const my = inRed ? m.redScore : m.blueScore;
+    const their = inRed ? m.blueScore : m.redScore;
+    return my > their ? 'win' : my < their ? 'loss' : 'draw';
+  };
+
+  const firstType = getOutcome(playerMatches[0]);
+  let count = 0;
+  for (const m of playerMatches) {
+    if (getOutcome(m) === firstType) count++;
+    else break;
+  }
+  return { type: firstType, count };
+}
+
 export function computeRecentForm(allMatches, playerId) {
   const getMs = d => d?.toMillis ? d.toMillis() : d ? new Date(d).getTime() : 0;
   const playerMatches = allMatches

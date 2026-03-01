@@ -325,19 +325,20 @@ export default function PlayersPage() {
           >
             <div className="flex items-center gap-3">
               <span style={{
-                fontSize: '1rem', minWidth: '28px', fontWeight: 700,
+                fontSize: '1rem', minWidth: '24px', fontWeight: 700, textAlign: 'center',
                 color: i === 0 ? '#F6E05E' : i === 1 ? '#A0AEC0' : i === 2 ? '#C05621' : '#718096',
               }}>
                 {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`}
               </span>
-              <span style={{ fontSize: '1.3rem' }}>{getRoleIcon(p.primaryRole)}</span>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <PlayerAvatar name={p.name} size={36} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
                   {p.name}
                   {hasHistory && <span style={{ fontSize: '0.65rem', color: '#F6E05E' }}>📚</span>}
+                  <StreakBadge streak={p.streak} />
                 </div>
                 <div className="text-xs text-muted">
-                  {p.primaryRole || 'N/D'} · {totalMatches} partite
+                  {getRoleIcon(p.primaryRole)} {p.primaryRole || 'N/D'} · {totalMatches} partite
                 </div>
               </div>
               <div style={{ textAlign: 'right' }}>
@@ -503,4 +504,43 @@ function PiArc({ value, size = 120 }) {
 function getRoleIcon(role) {
   const icons = { 'Portiere': '🧤', 'Difensore': '🛡️', 'Centrocampista': '⚙️', 'Attaccante': '⚡' };
   return icons[role] || '⚽';
+}
+
+const AVATAR_COLORS = ['#4FD1C5', '#63B3ED', '#F6E05E', '#FC8181', '#68D391', '#B794F4', '#F6AD55'];
+
+function PlayerAvatar({ name, size = 36 }) {
+  const idx = name ? name.charCodeAt(0) % AVATAR_COLORS.length : 0;
+  const color = AVATAR_COLORS[idx];
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: '50%',
+      background: color + '22',
+      border: `2px solid ${color}`,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      flexShrink: 0,
+      fontWeight: 800, fontSize: size * 0.42,
+      color,
+    }}>
+      {(name || '?')[0].toUpperCase()}
+    </div>
+  );
+}
+
+function StreakBadge({ streak }) {
+  if (!streak || streak.count < 2) return null;
+  const isWin = streak.type === 'win';
+  const isLoss = streak.type === 'loss';
+  if (!isWin && !isLoss) return null;
+  return (
+    <span style={{
+      fontSize: '0.62rem', fontWeight: 700, padding: '0.1rem 0.35rem',
+      borderRadius: '999px',
+      background: isWin ? 'rgba(104,211,145,0.15)' : 'rgba(252,129,129,0.15)',
+      color: isWin ? '#68D391' : '#FC8181',
+      border: `1px solid ${isWin ? 'rgba(104,211,145,0.4)' : 'rgba(252,129,129,0.4)'}`,
+      whiteSpace: 'nowrap',
+    }}>
+      {isWin ? '🔥' : '📉'}{streak.count}
+    </span>
+  );
 }

@@ -18,6 +18,7 @@ export default function MatchSetupPage() {
   const [preview, setPreview] = useState('');
   const [loading, setLoading] = useState(false);
   const [weather, setWeather] = useState({ condition: 'cloudy', temp: '', description: '' });
+  const [swapPick, setSwapPick] = useState(null); // { id, team } of first-selected player
 
   const togglePlayer = (id) => {
     setSelectedIds(prev =>
@@ -64,6 +65,40 @@ export default function MatchSetupPage() {
     navigator.clipboard.writeText(preview).then(() => toast.success('Preview copiata!'));
   };
 
+  const handlePlayerTap = (playerId, team) => {
+    if (!swapPick) {
+      // First tap: select this player
+      setSwapPick({ id: playerId, team });
+      return;
+    }
+    if (swapPick.id === playerId) {
+      // Tap same player: deselect
+      setSwapPick(null);
+      return;
+    }
+    if (swapPick.team === team) {
+      // Same team: change selection
+      setSwapPick({ id: playerId, team });
+      return;
+    }
+    // Different team: perform swap
+    const newRed = teams.red.map(p => {
+      if (swapPick.team === 'red' && p.id === swapPick.id) return teams.blue.find(b => b.id === playerId);
+      if (swapPick.team === 'blue' && p.id === playerId) return teams.red.find(r => r.id === swapPick.id);
+      return p;
+    });
+    const newBlue = teams.blue.map(p => {
+      if (swapPick.team === 'blue' && p.id === swapPick.id) return teams.red.find(r => r.id === playerId);
+      if (swapPick.team === 'red' && p.id === playerId) return teams.blue.find(b => b.id === swapPick.id);
+      return p;
+    });
+    const newTeams = { red: newRed, blue: newBlue };
+    setTeams(newTeams);
+    setSwapPick(null);
+    setPreview(generateMatchPreview({ redTeam: newTeams.red, blueTeam: newTeams.blue, weather, date: new Date() }));
+    toast.success('Giocatori scambiati');
+  };
+
   if (step === 'preview') {
     return (
       <div className="page-content">
@@ -77,30 +112,63 @@ export default function MatchSetupPage() {
         </div>
 
         {/* Teams */}
+        {swapPick && (
+          <div style={{ textAlign: 'center', marginBottom: '0.5rem', fontSize: '0.78rem', color: '#F6E05E' }}>
+            ↔️ Tocca un giocatore dell'altra squadra per scambiarlo
+          </div>
+        )}
         <div className="grid-2 mb-4">
           <div className="card team-red-bg">
             <h3 className="team-red-text mb-2">🔴 Squadra Rossa</h3>
-            {teams.red.map(p => (
-              <div key={p.id} className="flex items-center gap-2" style={{ padding: '0.3rem 0' }}>
-                <span style={{ fontSize: '0.85rem' }}>{getRoleIcon(p.primaryRole)}</span>
-                <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>{p.name}</span>
-                <span className="text-xs text-muted" style={{ marginLeft: 'auto' }}>
-                  {p.powerIndex?.toFixed(0) || 50}
-                </span>
-              </div>
-            ))}
+            {teams.red.map(p => {
+              const isPicked = swapPick?.id === p.id && swapPick?.team === 'red';
+              const isTarget = swapPick && swapPick.team === 'blue';
+              return (
+                <div
+                  key={p.id}
+                  onClick={() => handlePlayerTap(p.id, 'red')}
+                  className="flex items-center gap-2"
+                  style={{
+                    padding: '0.3rem 0.4rem', borderRadius: '6px', cursor: 'pointer',
+                    background: isPicked ? 'rgba(246,224,94,0.2)' : isTarget ? 'rgba(252,129,129,0.1)' : 'transparent',
+                    border: isPicked ? '1px solid #F6E05E' : '1px solid transparent',
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  <span style={{ fontSize: '0.85rem' }}>{getRoleIcon(p.primaryRole)}</span>
+                  <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>{p.name}</span>
+                  <span className="text-xs text-muted" style={{ marginLeft: 'auto' }}>
+                    {p.powerIndex?.toFixed(0) || 50}
+                  </span>
+                </div>
+              );
+            })}
           </div>
           <div className="card team-blue-bg">
             <h3 className="team-blue-text mb-2">🔵 Squadra Blu</h3>
-            {teams.blue.map(p => (
-              <div key={p.id} className="flex items-center gap-2" style={{ padding: '0.3rem 0' }}>
-                <span style={{ fontSize: '0.85rem' }}>{getRoleIcon(p.primaryRole)}</span>
-                <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>{p.name}</span>
-                <span className="text-xs text-muted" style={{ marginLeft: 'auto' }}>
-                  {p.powerIndex?.toFixed(0) || 50}
-                </span>
-              </div>
-            ))}
+            {teams.blue.map(p => {
+              const isPicked = swapPick?.id === p.id && swapPick?.team === 'blue';
+              const isTarget = swapPick && swapPick.team === 'red';
+              return (
+                <div
+                  key={p.id}
+                  onClick={() => handlePlayerTap(p.id, 'blue')}
+                  className="flex items-center gap-2"
+                  style={{
+                    padding: '0.3rem 0.4rem', borderRadius: '6px', cursor: 'pointer',
+                    background: isPicked ? 'rgba(246,224,94,0.2)' : isTarget ? 'rgba(99,179,237,0.1)' : 'transparent',
+                    border: isPicked ? '1px solid #F6E05E' : '1px solid transparent',
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  <span style={{ fontSize: '0.85rem' }}>{getRoleIcon(p.primaryRole)}</span>
+                  <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>{p.name}</span>
+                  <span className="text-xs text-muted" style={{ marginLeft: 'auto' }}>
+                    {p.powerIndex?.toFixed(0) || 50}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
 

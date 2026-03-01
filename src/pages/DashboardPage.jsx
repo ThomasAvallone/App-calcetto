@@ -101,7 +101,7 @@ export default function DashboardPage() {
       {role === 'admin' && (
         <div className="card mb-4">
           <h3 className="mb-3">⚡ Azioni Rapide</h3>
-          <div className="flex gap-3">
+          <div className="flex gap-3 mb-2">
             <button
               className="btn btn-teal"
               style={{ flex: 1 }}
@@ -117,6 +117,13 @@ export default function DashboardPage() {
               ⚙️ Admin
             </button>
           </div>
+          <button
+            className="btn btn-ghost"
+            style={{ width: '100%', fontSize: '0.85rem' }}
+            onClick={() => navigate('/stagioni')}
+          >
+            📚 Annali Storici
+          </button>
         </div>
       )}
 
