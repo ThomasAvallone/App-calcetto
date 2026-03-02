@@ -184,7 +184,7 @@ export default function PlayersPage() {
                 {rf.avg.toFixed(1)}<span style={{ fontSize: '0.85rem', color: '#718096' }}>/10</span>
               </div>
               <div style={{ fontSize: '0.68rem', color: '#718096', marginTop: '0.2rem' }}>
-                {rf.ratedMatches}/{rf.totalMatches} partite valutate (ultimi 5)
+                {rf.ratedMatches}/{rf.totalMatches} partite valutate (ultimi 15)
               </div>
             </div>
           )}

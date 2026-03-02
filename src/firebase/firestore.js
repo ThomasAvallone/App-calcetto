@@ -91,7 +91,9 @@ export function subscribeToMatches(callback) {
 const RECENT_MATCHES_WINDOW = 20; // last N matches for recent PI
 
 export async function recalculatePlayerStats(playerIds) {
-  const allMatches = await getMatches();
+  const [allMatches, allPlayers] = await Promise.all([getMatches(), getPlayers()]);
+  // Map playerId → historicalStats to recover assists not tracked in imported match events
+  const playerHistoricalMap = new Map(allPlayers.map(p => [p.id, p.historicalStats]));
   const batch = writeBatch(db);
   const getMs = d => d?.toMillis ? d.toMillis() : d ? new Date(d).getTime() : 0;
   const now = Date.now();
@@ -135,8 +137,15 @@ export async function recalculatePlayerStats(playerIds) {
       })
       .sort((a, b) => getMs(b.date) - getMs(a.date));
 
-    // All-time stats (NO more historicalStats doubling — matches are all in Firestore now)
+    // All-time stats from Firestore match events
     const stats = calcStatsForPlayer(playerMatches, pid);
+
+    // Historical matches were imported WITHOUT assistId in events (only scorerId).
+    // Add assists from the player's historicalStats field, which was computed from
+    // historicalData.js (the original Excel stats). Goals are already counted from
+    // events so we only recover the missing assists here.
+    const historicalStats = playerHistoricalMap.get(pid);
+    stats.assists += historicalStats?.assists || 0;
 
     // Recent stats (last 20 matches)
     const recentStats = calcStatsForPlayer(playerMatches.slice(0, RECENT_MATCHES_WINDOW), pid);
