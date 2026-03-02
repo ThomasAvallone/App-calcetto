@@ -23,6 +23,7 @@ export function computeGkRotation(teamPlayers) {
 }
 
 export function getCurrentGkTurn(rotationTurns, elapsedSeconds) {
+  if (!rotationTurns || rotationTurns.length === 0) return null;
   const turnIndex = Math.floor(elapsedSeconds / GK_TURN_DURATION);
   return rotationTurns[Math.min(turnIndex, rotationTurns.length - 1)] || null;
 }

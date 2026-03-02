@@ -241,7 +241,7 @@ export default function StatsPage() {
     assists: { accent: '#63B3ED', getVal: p => p.totalAssists, getLabel: () => 'assist', getSub: p => `${p.totalMatches} partite` },
     winrate: { accent: '#F6E05E', getVal: p => `${Math.round((p.totalWins + p.totalDraws * 0.5) / p.totalMatches * 100)}`, getLabel: () => '%', getSub: p => `${p.totalWins}V · ${p.totalDraws}P · ${p.totalMatches - p.totalWins - p.totalDraws}S su ${p.totalMatches} partite` },
     matches: { accent: '#A0AEC0', getVal: p => p.totalMatches, getLabel: () => 'pt', getSub: p => `${p.totalWins}V · ${p.totalDraws}P · ${p.totalMatches - p.totalWins - p.totalDraws}S` },
-    gk:      { accent: '#68D391', getVal: p => (p.gkGoalsConceded / p.gkMatches).toFixed(1), getLabel: () => 'gol/match', getSub: p => `${p.gkGoalsConceded} gol subiti in ${p.gkMatches} turni da GK` },
+    gk:      { accent: '#68D391', getVal: p => p.gkMatches > 0 ? (p.gkGoalsConceded / p.gkMatches).toFixed(1) : '-', getLabel: () => 'gol/match', getSub: p => `${p.gkGoalsConceded} gol subiti in ${p.gkMatches} turni da GK` },
   };
 
   const cfg = tabConfig[tab];

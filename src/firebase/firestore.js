@@ -190,6 +190,7 @@ export async function recalculatePlayerStats(playerIds) {
 }
 
 export function computePowerIndex(stats) {
+  if (!stats) return 50;
   const { goals = 0, assists = 0, autogoals = 0, gkGoalsConceded = 0, gkMatches = 0, wins = 0, draws = 0, matches = 0 } = stats;
   if (matches === 0) return 50;
   const winRate = (wins + draws * 0.5) / matches;
@@ -301,7 +302,8 @@ export function computeCombinedPowerIndex(stats, historicalStats) {
     goals: (stats?.goals || 0) + (historicalStats?.goals || 0),
     assists: (stats?.assists || 0) + (historicalStats?.assists || 0),
     autogoals: (stats?.autogoals || 0) + (historicalStats?.autogoals || 0),
-    gkGoalsConceded: stats?.gkGoalsConceded || 0,
+    gkGoalsConceded: (stats?.gkGoalsConceded || 0) + (historicalStats?.gkGoalsConceded || 0),
+    gkMatches: (stats?.gkMatches || 0) + (historicalStats?.gkMatches || 0),
     wins: (stats?.wins || 0) + (historicalStats?.wins || 0),
     draws: (stats?.draws || 0) + (historicalStats?.draws || 0),
     matches: (stats?.matches || 0) + (historicalStats?.matches || 0),
