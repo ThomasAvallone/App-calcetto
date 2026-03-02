@@ -64,11 +64,18 @@ function MatchCard({ match: m, onClick }) {
   const goals = (m.events || []).filter(e => e.type === 'goal');
   const autogoals = (m.events || []).filter(e => e.type === 'autogoal');
 
+  // Lookup nome giocatore per le partite storiche (che hanno solo scorerId, non scorerName)
+  const playerById = Object.fromEntries(
+    [...(m.redTeam || []), ...(m.blueTeam || [])].filter(p => p.id).map(p => [p.id, p.name])
+  );
+
   // Conteggio gol per marcatore e assist
   const scorerMap = {};
   const assistMap = {};
   for (const ev of goals) {
-    scorerMap[ev.scorerName] = (scorerMap[ev.scorerName] || 0) + 1;
+    const name = ev.scorerName || playerById[ev.scorerId];
+    if (!name) continue;
+    scorerMap[name] = (scorerMap[name] || 0) + 1;
     if (ev.assistName && ev.assistName !== 'Nessuno') {
       assistMap[ev.assistName] = (assistMap[ev.assistName] || 0) + 1;
     }

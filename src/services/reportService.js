@@ -82,6 +82,10 @@ Preparate i fazzoletti. O i cori. Dipende da che parte state.
 }
 
 export function generateMatchReport(match, players) {
+  // Lookup by id per le partite storiche (che hanno solo scorerId, non scorerName)
+  const playerById = Object.fromEntries(players.filter(p => p.id).map(p => [p.id, p.name]));
+  const resolveName = (ev) => ev.scorerName || playerById[ev.scorerId] || '?';
+
   const goals = (match.events || []).filter(e => e.type === 'goal');
   const autogoals = (match.events || []).filter(e => e.type === 'autogoal');
 
@@ -92,11 +96,12 @@ export function generateMatchReport(match, players) {
   // MVP: player with best score (goal=3, assist=2, autogoal=-2)
   const playerScores = {};
   for (const ev of (match.events || [])) {
+    const sid = ev.scorerId;
     if (ev.type === 'goal') {
-      playerScores[ev.scorerId] = (playerScores[ev.scorerId] || 0) + 3;
+      if (sid) playerScores[sid] = (playerScores[sid] || 0) + 3;
       if (ev.assistId) playerScores[ev.assistId] = (playerScores[ev.assistId] || 0) + 2;
     }
-    if (ev.type === 'autogoal') playerScores[ev.scorerId] = (playerScores[ev.scorerId] || 0) - 2;
+    if (ev.type === 'autogoal' && sid) playerScores[sid] = (playerScores[sid] || 0) - 2;
   }
 
   const mvpEntry = Object.entries(playerScores).sort((a, b) => b[1] - a[1])[0];
@@ -122,8 +127,8 @@ export function generateMatchReport(match, players) {
     tinAwards.push(`🤦 Amico degli Avversari: ${p?.name || '?'} (${topAutogoalEntry[1]} autogol)`);
   }
 
-  // Scorers timeline
-  const timeline = [...goals, ...autogoals].sort((a, b) => a.minute - b.minute);
+  // Scorers timeline (le partite storiche non hanno minute, le mettiamo in coda)
+  const timeline = [...goals, ...autogoals].sort((a, b) => (a.minute ?? 999) - (b.minute ?? 999));
 
   const dateStr = match.date
     ? new Date(match.date?.toDate ? match.date.toDate() : match.date)
@@ -142,13 +147,13 @@ ${winner}
 
 📋 CRONACA GOL
 ${timeline.length === 0 ? '  Nessun gol (un capolavoro di inutilità)' : timeline.map(ev => {
+    const min = ev.minute != null ? `${String(ev.minute).padStart(2, '0')}'` : '  ';
+    const team = ev.team === 'red' ? '🔴' : '🔵';
     if (ev.type === 'goal') {
-      const assist = ev.assistName ? ` (assist: ${ev.assistName})` : '';
-      const team = ev.team === 'red' ? '🔴' : '🔵';
-      return `  ${String(ev.minute).padStart(2, '0')}' ${team} ⚽ ${ev.scorerName}${assist}`;
+      const assist = ev.assistName && ev.assistName !== 'Nessuno' ? ` (assist: ${ev.assistName})` : '';
+      return `  ${min} ${team} ⚽ ${resolveName(ev)}${assist}`;
     } else {
-      const team = ev.team === 'red' ? '🔴' : '🔵';
-      return `  ${String(ev.minute).padStart(2, '0')}' ${team} 🤦 AUTOGOL ${ev.scorerName}`;
+      return `  ${min} ${team} 🤦 AUTOGOL ${resolveName(ev)}`;
     }
   }).join('\n')}
 
