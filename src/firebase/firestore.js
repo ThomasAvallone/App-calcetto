@@ -93,7 +93,7 @@ const RECENT_MATCHES_WINDOW = 20; // last N matches for recent PI
 
 export async function recalculatePlayerStats(playerIds) {
   const [allMatches, allPlayers] = await Promise.all([getMatches(), getPlayers()]);
-  // Map playerId → historicalStats to recover assists not tracked in imported match events
+  // Map playerId → historicalStats (authoritative source for all historical data)
   const playerHistoricalMap = new Map(allPlayers.map(p => [p.id, p.historicalStats]));
   const batch = writeBatch(db);
   const getMs = d => d?.toMillis ? d.toMillis() : d ? new Date(d).getTime() : 0;
@@ -138,18 +138,28 @@ export async function recalculatePlayerStats(playerIds) {
       })
       .sort((a, b) => getMs(b.date) - getMs(a.date));
 
-    // All-time stats from Firestore match events
-    const stats = calcStatsForPlayer(playerMatches, pid);
+    // App-only stats (exclude historical matches – those come from historicalStats
+    // below). This avoids double-counting for players linked at import time AND
+    // correctly adds stats for aliases linked after the import (e.g. Boro, Santi).
+    const appMatches = playerMatches.filter(m => !m.isHistorical);
+    const stats = calcStatsForPlayer(appMatches, pid);
 
-    // Historical matches were imported WITHOUT assistId in events (only scorerId).
-    // Add assists from the player's historicalStats field, which was computed from
-    // historicalData.js (the original Excel stats). Goals are already counted from
-    // events so we only recover the missing assists here.
+    // Add full historicalStats (goals, assists, autogoals, record, matches).
+    // historicalStats is the authoritative source computed from the original Excel
+    // season data (historicalData.js via computeCumulativeStats).
     const historicalStats = playerHistoricalMap.get(pid);
-    stats.assists += historicalStats?.assists || 0;
+    if (historicalStats) {
+      stats.goals += historicalStats.goals || 0;
+      stats.assists += historicalStats.assists || 0;
+      stats.autogoals += historicalStats.autogoals || 0;
+      stats.wins += historicalStats.wins || 0;
+      stats.losses += historicalStats.losses || 0;
+      stats.draws += historicalStats.draws || 0;
+      stats.matches += historicalStats.matches || 0;
+    }
 
-    // Recent stats (last 20 matches)
-    const recentStats = calcStatsForPlayer(playerMatches.slice(0, RECENT_MATCHES_WINDOW), pid);
+    // Recent stats (last 20 app matches – historical are too old to affect recent form)
+    const recentStats = calcStatsForPlayer(appMatches.slice(0, RECENT_MATCHES_WINDOW), pid);
 
     // Calculate both PIs
     const overallPI = computePowerIndex(stats);
