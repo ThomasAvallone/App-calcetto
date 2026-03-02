@@ -19,7 +19,7 @@ const usePlayersStore = create((set, get) => ({
   },
 
   async addPlayer(data) {
-    await createPlayer(data);
+    return await createPlayer(data);
   },
 
   async updatePlayer(id, data) {

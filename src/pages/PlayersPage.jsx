@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import usePlayersStore from '../store/playersStore';
 import useAuthStore from '../store/authStore';
-import { computeCombinedPowerIndex, subscribeToMatches } from '../firebase/firestore';
+import { computeCombinedPowerIndex, subscribeToMatches, recalculatePlayerStats } from '../firebase/firestore';
 import { suggestHistoricalNames, computeCumulativeStats, getUnlinkedNames } from '../data/historicalData';
 import { computeBadges } from '../utils/badges';
 import { format } from 'date-fns';
@@ -21,6 +21,7 @@ export default function PlayersPage() {
   const [form, setForm] = useState(defaultForm);
   const [editId, setEditId] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [recalcLoading, setRecalcLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [selectedPlayer, setSelectedPlayer] = useState(null);
 
@@ -102,10 +103,15 @@ export default function PlayersPage() {
         const currentPlayer = players.find(p => p.id === editId);
         const pi = computeCombinedPowerIndex(currentPlayer?.stats, historicalStats);
         await editPlayer(editId, { ...playerData, powerIndex: pi });
+        // Recalculate p.stats so all-time leaderboard picks up the new historicalStats
+        await recalculatePlayerStats([editId]);
         toast.success('Giocatore aggiornato');
       } else {
-        // createPlayer already computes PI from historicalStats on creation
-        await addPlayer(playerData);
+        const newRef = await addPlayer(playerData);
+        // If aliases were linked, sync p.stats immediately
+        if (linkedNames.length > 0 && newRef?.id) {
+          await recalculatePlayerStats([newRef.id]);
+        }
         toast.success(linkedNames.length > 0
           ? `Giocatore aggiunto con storico (${linkedNames.length} alias)!`
           : 'Giocatore aggiunto!');
@@ -115,6 +121,20 @@ export default function PlayersPage() {
       toast.error(e.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRecalcAll = async () => {
+    const ids = players.filter(p => (p.historicalNames || []).length > 0).map(p => p.id);
+    if (ids.length === 0) { toast('Nessun giocatore con storico collegato'); return; }
+    setRecalcLoading(true);
+    try {
+      await recalculatePlayerStats(ids);
+      toast.success(`Stats aggiornate per ${ids.length} giocator${ids.length === 1 ? 'e' : 'i'}`);
+    } catch (e) {
+      toast.error('Errore ricalcolo: ' + e.message);
+    } finally {
+      setRecalcLoading(false);
     }
   };
 
@@ -256,9 +276,20 @@ export default function PlayersPage() {
       <div className="flex items-center justify-between mb-4" style={{ paddingTop: '0.5rem' }}>
         <h2>👥 Giocatori</h2>
         {isAdmin && (
-          <button className="btn btn-teal" style={{ padding: '0.5rem 1rem' }} onClick={() => openForm()}>
-            + Aggiungi
-          </button>
+          <div className="flex gap-2">
+            <button
+              className="btn btn-ghost"
+              style={{ padding: '0.5rem 0.75rem', fontSize: '0.8rem' }}
+              onClick={handleRecalcAll}
+              disabled={recalcLoading}
+              title="Ricalcola stats storiche per tutti i giocatori con alias"
+            >
+              {recalcLoading ? '⏳' : '🔄'} Storico
+            </button>
+            <button className="btn btn-teal" style={{ padding: '0.5rem 1rem' }} onClick={() => openForm()}>
+              + Aggiungi
+            </button>
+          </div>
         )}
       </div>
 
