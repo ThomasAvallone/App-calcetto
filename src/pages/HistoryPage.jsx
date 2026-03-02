@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { subscribeToMatches } from '../firebase/firestore';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
+import { generateMatchReport } from '../services/reportService';
+import toast from 'react-hot-toast';
 
 function safeDate(val) {
   if (!val) return null;
@@ -60,7 +62,32 @@ export default function HistoryPage() {
 function MatchCard({ match: m, onClick }) {
   const d = safeDate(m.date);
   const goals = (m.events || []).filter(e => e.type === 'goal');
-  const scorers = [...new Set(goals.map(e => e.scorerName))].slice(0, 3);
+  const autogoals = (m.events || []).filter(e => e.type === 'autogoal');
+
+  // Conteggio gol per marcatore e assist
+  const scorerMap = {};
+  const assistMap = {};
+  for (const ev of goals) {
+    scorerMap[ev.scorerName] = (scorerMap[ev.scorerName] || 0) + 1;
+    if (ev.assistName && ev.assistName !== 'Nessuno') {
+      assistMap[ev.assistName] = (assistMap[ev.assistName] || 0) + 1;
+    }
+  }
+  const scorerEntries = Object.entries(scorerMap).sort((a, b) => b[1] - a[1]);
+  const assistEntries = Object.entries(assistMap).sort((a, b) => b[1] - a[1]);
+
+  const handleShare = (e) => {
+    e.stopPropagation();
+    const players = [...(m.redTeam || []), ...(m.blueTeam || [])];
+    const report = generateMatchReport(m, players);
+    if (navigator.share) {
+      navigator.share({ text: report }).catch(() => {
+        navigator.clipboard.writeText(report).then(() => toast.success('Tabellino copiato!'));
+      });
+    } else {
+      navigator.clipboard.writeText(report).then(() => toast.success('Tabellino copiato!'));
+    }
+  };
 
   return (
     <div className="card mb-3" style={{ cursor: 'pointer' }} onClick={onClick}>
@@ -77,13 +104,37 @@ function MatchCard({ match: m, onClick }) {
             {d ? format(d, 'dd MMMM yyyy · HH:mm', { locale: it }) : '–'}
           </div>
         </div>
+        {m.status === 'finished' && (
+          <button
+            onClick={handleShare}
+            title="Condividi tabellino"
+            style={{
+              background: 'none',
+              border: '1px solid #4A5568',
+              borderRadius: '6px',
+              padding: '4px 10px',
+              cursor: 'pointer',
+              color: '#A0AEC0',
+              fontSize: '0.85rem',
+              lineHeight: 1,
+            }}
+          >
+            📋
+          </button>
+        )}
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#718096" strokeWidth={2}>
           <path d="M9 18l6-6-6-6"/>
         </svg>
       </div>
-      {scorers.length > 0 && (
-        <div className="text-xs text-secondary">
-          ⚽ {scorers.join(', ')}{goals.length > 3 ? ` +${goals.length - 3}` : ''}
+      {scorerEntries.length > 0 && (
+        <div className="text-xs text-secondary" style={{ marginBottom: '2px' }}>
+          ⚽ {scorerEntries.map(([name, count]) => count > 1 ? `${name} x${count}` : name).join(', ')}
+          {autogoals.length > 0 && ` · 🤦 ${[...new Set(autogoals.map(e => e.scorerName))].join(', ')}`}
+        </div>
+      )}
+      {assistEntries.length > 0 && (
+        <div className="text-xs" style={{ color: '#718096', marginBottom: '2px' }}>
+          🎯 {assistEntries.map(([name, count]) => count > 1 ? `${name} x${count}` : name).join(', ')}
         </div>
       )}
       <div className="text-xs text-muted mt-1">
