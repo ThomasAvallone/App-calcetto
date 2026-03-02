@@ -109,6 +109,7 @@ export default function MatchDetailPage() {
   const [saving, setSaving] = useState(false);
   const [reportText, setReportText] = useState('');
   const [showReport, setShowReport] = useState(false);
+  const [addForm, setAddForm] = useState({ type: 'goal', team: 'red', scorerId: '', assistId: '', gkId: '', minute: '' });
 
   useEffect(() => {
     getMatch(id).then(m => { setMatch(m); setLoading(false); }).catch(() => setLoading(false));
@@ -154,6 +155,50 @@ export default function MatchDetailPage() {
       toast.success('Evento aggiornato');
     } catch (e) {
       toast.error(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleAddEvent = async () => {
+    if (!addForm.scorerId) return toast.error('Seleziona il marcatore');
+    if (addForm.minute === '') return toast.error('Inserisci il minuto');
+    const teamPlayers = addForm.team === 'red' ? (match.redTeam || []) : (match.blueTeam || []);
+    const oppPlayers = addForm.team === 'red' ? (match.blueTeam || []) : (match.redTeam || []);
+    const scorer = teamPlayers.find(p => p.id === addForm.scorerId);
+    const assist = addForm.assistId ? teamPlayers.find(p => p.id === addForm.assistId) : null;
+    const gk = addForm.gkId ? oppPlayers.find(p => p.id === addForm.gkId) : null;
+    const newEvent = {
+      id: crypto.randomUUID(),
+      type: addForm.type,
+      team: addForm.team,
+      scorerId: scorer.id,
+      scorerName: scorer.name,
+      minute: parseInt(addForm.minute, 10),
+      timestamp: Date.now(),
+      assistId: assist?.id || null,
+      assistName: assist?.name || null,
+      gkConcededId: gk?.id || null,
+      gkConcededName: gk?.name || null,
+    };
+    const newEvents = [...events, newEvent];
+    let redScore = 0, blueScore = 0;
+    for (const ev of newEvents) {
+      if (ev.type === 'goal') { if (ev.team === 'red') redScore++; else blueScore++; }
+      else if (ev.type === 'autogoal') { if (ev.team === 'red') blueScore++; else redScore++; }
+    }
+    const updated = { ...match, events: newEvents, redScore, blueScore };
+    setMatch(updated);
+    setSaving(true);
+    try {
+      await updateMatch(id, { events: newEvents, redScore, blueScore });
+      const allIds = [...(match.redTeam || []), ...(match.blueTeam || [])].map(p => p.id);
+      await recalculatePlayerStats(allIds);
+      toast.success('Evento aggiunto e statistiche ricalcolate');
+      setAddForm({ type: 'goal', team: 'red', scorerId: '', assistId: '', gkId: '', minute: '' });
+    } catch (e) {
+      toast.error(e.message);
+      setMatch(match);
     } finally {
       setSaving(false);
     }
@@ -271,7 +316,7 @@ export default function MatchDetailPage() {
       )}
 
       {/* Events */}
-      <div className="card">
+      <div className="card" style={{ marginBottom: '1rem' }}>
         <h3 className="mb-3">📋 Cronaca ({goals.length} eventi)</h3>
         {goals.length === 0 ? (
           <p className="text-muted text-sm text-center" style={{ padding: '1rem' }}>Nessun evento</p>
@@ -280,29 +325,66 @@ export default function MatchDetailPage() {
             display: 'flex', alignItems: 'flex-start', gap: '0.75rem',
             padding: '0.75rem 0', borderBottom: '1px solid #2D3748',
           }}>
-            <span style={{ fontSize: '0.8rem', color: '#718096', minWidth: '28px', paddingTop: '2px' }}>{ev.minute}'</span>
+            {isAdmin ? (
+              <input
+                type="number" min="0" max="120"
+                className="input"
+                style={{ width: '46px', padding: '0.3rem 0.4rem', fontSize: '0.8rem', textAlign: 'center' }}
+                defaultValue={ev.minute}
+                onBlur={e => {
+                  const v = parseInt(e.target.value, 10);
+                  if (!isNaN(v) && v !== ev.minute) handleEditScorer(ev.id, 'minute', v);
+                }}
+              />
+            ) : (
+              <span style={{ fontSize: '0.8rem', color: '#718096', minWidth: '28px', paddingTop: '2px' }}>{ev.minute}'</span>
+            )}
             <span style={{ fontSize: '1.1rem' }}>
               {ev.type === 'goal' ? (ev.team === 'red' ? '🔴⚽' : '🔵⚽') : '🤦'}
             </span>
             <div style={{ flex: 1 }}>
               {isAdmin ? (
-                <input
-                  className="input"
-                  style={{ marginBottom: '0.25rem', padding: '0.4rem 0.6rem', fontSize: '0.875rem' }}
-                  defaultValue={ev.scorerName}
-                  onBlur={e => {
-                    if (e.target.value !== ev.scorerName)
-                      handleEditScorer(ev.id, 'scorerName', e.target.value);
-                  }}
-                />
+                <>
+                  <input
+                    className="input"
+                    style={{ marginBottom: '0.25rem', padding: '0.4rem 0.6rem', fontSize: '0.875rem' }}
+                    defaultValue={ev.scorerName}
+                    onBlur={e => {
+                      if (e.target.value !== ev.scorerName)
+                        handleEditScorer(ev.id, 'scorerName', e.target.value);
+                    }}
+                  />
+                  <input
+                    className="input"
+                    style={{ marginBottom: '0.25rem', padding: '0.3rem 0.6rem', fontSize: '0.78rem', color: '#A0AEC0' }}
+                    defaultValue={ev.assistName && ev.assistName !== 'Nessuno' ? ev.assistName : ''}
+                    placeholder="🎯 Assist (opzionale)"
+                    onBlur={e => {
+                      const v = e.target.value.trim() || null;
+                      if (v !== (ev.assistName || null)) handleEditScorer(ev.id, 'assistName', v);
+                    }}
+                  />
+                  <input
+                    className="input"
+                    style={{ padding: '0.3rem 0.6rem', fontSize: '0.78rem', color: '#A0AEC0' }}
+                    defaultValue={ev.gkConcededName || ''}
+                    placeholder="🧤 GK subito (opzionale)"
+                    onBlur={e => {
+                      const v = e.target.value.trim() || null;
+                      if (v !== (ev.gkConcededName || null)) handleEditScorer(ev.id, 'gkConcededName', v);
+                    }}
+                  />
+                </>
               ) : (
-                <div style={{ fontWeight: 500 }}>{ev.scorerName}</div>
-              )}
-              {ev.assistName && ev.assistName !== 'Nessuno' && (
-                <div style={{ fontSize: '0.75rem', color: '#718096' }}>🎯 assist: {ev.assistName}</div>
-              )}
-              {ev.gkConcededName && (
-                <div style={{ fontSize: '0.75rem', color: '#718096' }}>🧤 GK: {ev.gkConcededName}</div>
+                <>
+                  <div style={{ fontWeight: 500 }}>{ev.scorerName}</div>
+                  {ev.assistName && ev.assistName !== 'Nessuno' && (
+                    <div style={{ fontSize: '0.75rem', color: '#718096' }}>🎯 assist: {ev.assistName}</div>
+                  )}
+                  {ev.gkConcededName && (
+                    <div style={{ fontSize: '0.75rem', color: '#718096' }}>🧤 GK: {ev.gkConcededName}</div>
+                  )}
+                </>
               )}
             </div>
             {isAdmin && (
@@ -316,6 +398,81 @@ export default function MatchDetailPage() {
           </div>
         ))}
       </div>
+
+      {/* Add event form – admin only */}
+      {isAdmin && (
+        <div className="card" style={{ border: '1px solid rgba(79,209,197,0.25)' }}>
+          <h3 className="mb-3" style={{ fontSize: '0.95rem' }}>➕ Aggiungi Evento</h3>
+
+          {/* Type */}
+          <div className="flex gap-2 mb-3">
+            {['goal', 'autogoal'].map(t => (
+              <button key={t} onClick={() => setAddForm(f => ({ ...f, type: t }))}
+                className="btn" style={{ flex: 1,
+                  background: addForm.type === t ? (t === 'goal' ? 'rgba(79,209,197,0.2)' : 'rgba(246,224,94,0.15)') : 'transparent',
+                  border: `1px solid ${addForm.type === t ? (t === 'goal' ? '#4FD1C5' : '#F6E05E') : '#2D3748'}`,
+                  color: addForm.type === t ? (t === 'goal' ? '#4FD1C5' : '#F6E05E') : '#718096',
+                }}>
+                {t === 'goal' ? '⚽ Goal' : '🤦 Autogoal'}
+              </button>
+            ))}
+          </div>
+
+          {/* Team */}
+          <div className="flex gap-2 mb-3">
+            {[['red', '🔴 Rossi'], ['blue', '🔵 Blu']].map(([val, label]) => (
+              <button key={val} onClick={() => setAddForm(f => ({ ...f, team: val, scorerId: '', assistId: '', gkId: '' }))}
+                className="btn" style={{ flex: 1,
+                  background: addForm.team === val ? (val === 'red' ? 'rgba(252,129,129,0.15)' : 'rgba(99,179,237,0.15)') : 'transparent',
+                  border: `1px solid ${addForm.team === val ? (val === 'red' ? '#FC8181' : '#63B3ED') : '#2D3748'}`,
+                  color: addForm.team === val ? (val === 'red' ? '#FC8181' : '#63B3ED') : '#718096',
+                }}>
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Scorer */}
+          <label className="text-xs text-muted" style={{ display: 'block', marginBottom: '0.3rem' }}>Marcatore *</label>
+          <select className="input mb-3" value={addForm.scorerId}
+            onChange={e => setAddForm(f => ({ ...f, scorerId: e.target.value }))}>
+            <option value="">– Seleziona –</option>
+            {(addForm.team === 'red' ? (match.redTeam || []) : (match.blueTeam || [])).map(p => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+
+          {/* Assist */}
+          <label className="text-xs text-muted" style={{ display: 'block', marginBottom: '0.3rem' }}>Assist (opzionale)</label>
+          <select className="input mb-3" value={addForm.assistId}
+            onChange={e => setAddForm(f => ({ ...f, assistId: e.target.value }))}>
+            <option value="">– Nessuno –</option>
+            {(addForm.team === 'red' ? (match.redTeam || []) : (match.blueTeam || []))
+              .filter(p => p.id !== addForm.scorerId).map(p => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+
+          {/* GK conceded */}
+          <label className="text-xs text-muted" style={{ display: 'block', marginBottom: '0.3rem' }}>Portiere subito (opzionale)</label>
+          <select className="input mb-3" value={addForm.gkId}
+            onChange={e => setAddForm(f => ({ ...f, gkId: e.target.value }))}>
+            <option value="">– Nessuno –</option>
+            {(addForm.team === 'red' ? (match.blueTeam || []) : (match.redTeam || [])).map(p => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+
+          {/* Minute */}
+          <label className="text-xs text-muted" style={{ display: 'block', marginBottom: '0.3rem' }}>Minuto *</label>
+          <input type="number" className="input mb-3" min="0" max="120" placeholder="es. 23"
+            value={addForm.minute} onChange={e => setAddForm(f => ({ ...f, minute: e.target.value }))} />
+
+          <button className="btn btn-teal btn-full" onClick={handleAddEvent} disabled={saving}>
+            {saving ? '⏳ Salvataggio...' : '✅ Aggiungi Evento'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
