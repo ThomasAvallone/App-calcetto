@@ -11,6 +11,33 @@ import toast from 'react-hot-toast';
 const GK_INTERVAL = 6 * 60; // 6 minutes in seconds
 const TOTAL_SECONDS = 60 * 60;
 
+function playGkAlarm() {
+  // Vibration on mobile (3 short pulses)
+  if (navigator.vibrate) navigator.vibrate([300, 120, 300, 120, 300]);
+
+  // Web Audio API — 3 beep sequence
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const times = [0, 0.35, 0.70];
+    times.forEach(t => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.value = 880; // A5 — tono acuto e udibile
+      gain.gain.setValueAtTime(0, ctx.currentTime + t);
+      gain.gain.linearRampToValueAtTime(0.9, ctx.currentTime + t + 0.02);
+      gain.gain.setValueAtTime(0.9, ctx.currentTime + t + 0.20);
+      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + t + 0.28);
+      osc.start(ctx.currentTime + t);
+      osc.stop(ctx.currentTime + t + 0.30);
+    });
+    // Close context after last beep
+    setTimeout(() => ctx.close(), 1200);
+  } catch (_) { /* browser senza AudioContext */ }
+}
+
 function pad(n) { return String(Math.floor(n)).padStart(2, '0'); }
 function formatTime(secs) { return `${pad(secs / 60)}:${pad(secs % 60)}`; }
 
@@ -76,6 +103,7 @@ export default function MatchPage() {
           (currentTurnIndex !== prevBlue && blueTurn)
         ) {
           if (elapsed > 0 && elapsed % GK_INTERVAL < 3) {
+            playGkAlarm();
             setGkAlert({ red: redTurn, blue: blueTurn });
           }
         }
