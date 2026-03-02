@@ -3,6 +3,7 @@ import usePlayersStore from '../store/playersStore';
 import useAuthStore from '../store/authStore';
 import { computeCombinedPowerIndex, subscribeToMatches } from '../firebase/firestore';
 import { suggestHistoricalNames, computeCumulativeStats, getUnlinkedNames } from '../data/historicalData';
+import { computeBadges } from '../utils/badges';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import toast from 'react-hot-toast';
@@ -221,6 +222,8 @@ export default function PlayersPage() {
             </div>
           ))}
         </div>
+
+        <PlayerBadges player={p} />
 
         {hasHistory && (
           <div className="card mb-4" style={{ background: 'rgba(246,224,94,0.05)', border: '1px solid rgba(246,224,94,0.2)' }}>
@@ -588,6 +591,38 @@ function PlayerMatchHistory({ matches, playerId }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function PlayerBadges({ player }) {
+  const badges = computeBadges(player);
+  if (badges.length === 0) return null;
+  return (
+    <div className="card mb-4">
+      <h3 className="mb-3" style={{ fontSize: '0.95rem' }}>🏅 Badge</h3>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+        {badges.map(b => (
+          <div key={b.id} title={b.desc} style={{
+            display: 'flex', alignItems: 'center', gap: '0.35rem',
+            padding: '0.3rem 0.7rem', borderRadius: '999px', fontSize: '0.8rem', fontWeight: 600,
+            background: b.positive ? 'rgba(104,211,145,0.12)' : 'rgba(252,129,129,0.12)',
+            color: b.positive ? '#68D391' : '#FC8181',
+            border: `1px solid ${b.positive ? 'rgba(104,211,145,0.35)' : 'rgba(252,129,129,0.35)'}`,
+            cursor: 'default',
+          }}>
+            <span>{b.icon}</span>
+            <span>{b.label}</span>
+          </div>
+        ))}
+      </div>
+      <div style={{ marginTop: '0.6rem', display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+        {badges.map(b => (
+          <div key={b.id} style={{ fontSize: '0.68rem', color: '#718096' }}>
+            {b.icon} <strong style={{ color: b.positive ? '#68D391' : '#FC8181' }}>{b.label}</strong> — {b.desc}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
