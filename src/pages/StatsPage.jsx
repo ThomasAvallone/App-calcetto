@@ -204,7 +204,7 @@ export default function StatsPage() {
       }
     }
     return Object.values(pairs)
-      .filter(p => p.matches >= 3)
+      .filter(p => p.matches >= 10)
       .sort((a, b) => {
         const ra = (a.wins + a.draws * 0.5) / a.matches;
         const rb = (b.wins + b.draws * 0.5) / b.matches;
@@ -375,11 +375,11 @@ export default function StatsPage() {
           {duoStats.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '3rem 1rem', color: '#718096' }}>
               <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>👥</div>
-              <p>Nessuna coppia con 3+ partite insieme</p>
+              <p>Nessuna coppia con 10+ partite insieme</p>
             </div>
           ) : (
             <div className="card">
-              <p className="text-xs text-muted mb-3">Coppie con più vittorie insieme (min 3 partite)</p>
+              <p className="text-xs text-muted mb-3">Coppie con più vittorie insieme (min 10 partite)</p>
               {duoStats.map((duo, i) => {
                 const wr = Math.round((duo.wins + duo.draws * 0.5) / duo.matches * 100);
                 return (
