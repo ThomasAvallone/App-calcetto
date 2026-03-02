@@ -110,6 +110,8 @@ export default function MatchDetailPage() {
   const [reportText, setReportText] = useState('');
   const [showReport, setShowReport] = useState(false);
   const [addForm, setAddForm] = useState({ type: 'goal', team: 'red', scorerId: '', assistId: '', gkId: '', minute: '' });
+  const [editingEventId, setEditingEventId] = useState(null);
+  const [editForm, setEditForm] = useState({});
 
   useEffect(() => {
     getMatch(id).then(m => { setMatch(m); setLoading(false); }).catch(() => setLoading(false));
@@ -205,6 +207,42 @@ export default function MatchDetailPage() {
     } catch (e) {
       toast.error(e.message);
       setMatch(match);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleStartEdit = (ev) => {
+    setEditingEventId(ev.id);
+    setEditForm({
+      minute: ev.minute ?? '',
+      scorerName: resolveName(ev),
+      assistName: ev.assistName && ev.assistName !== 'Nessuno' ? ev.assistName : '',
+      gkConcededName: ev.gkConcededName || '',
+    });
+  };
+
+  const handleSaveEvent = async () => {
+    const ev = events.find(e => e.id === editingEventId);
+    if (!ev) return;
+    const minute = editForm.minute !== '' ? parseInt(editForm.minute, 10) : null;
+    const updates = {
+      ...(editForm.minute !== '' && !isNaN(minute) ? { minute } : {}),
+      scorerName: editForm.scorerName,
+      assistName: editForm.assistName.trim() || null,
+      gkConcededName: editForm.gkConcededName.trim() || null,
+    };
+    const newEvents = events.map(e => e.id === editingEventId ? { ...e, ...updates } : e);
+    setMatch(m => ({ ...m, events: newEvents }));
+    setEditingEventId(null);
+    setSaving(true);
+    try {
+      await updateMatch(id, { events: newEvents });
+      const allIds = [...(match.redTeam || []), ...(match.blueTeam || [])].map(p => p.id);
+      await recalculatePlayerStats(allIds);
+      toast.success('Evento aggiornato');
+    } catch (e) {
+      toast.error(e.message);
     } finally {
       setSaving(false);
     }
@@ -326,83 +364,90 @@ export default function MatchDetailPage() {
         <h3 className="mb-3">📋 Cronaca ({goals.length} eventi)</h3>
         {goals.length === 0 ? (
           <p className="text-muted text-sm text-center" style={{ padding: '1rem' }}>Nessun evento</p>
-        ) : [...goals].sort((a, b) => a.minute - b.minute).map(ev => (
-          <div key={ev.id} style={{
-            display: 'flex', alignItems: 'flex-start', gap: '0.75rem',
-            padding: '0.75rem 0', borderBottom: '1px solid #2D3748',
-          }}>
-            {isAdmin ? (
-              <input
-                type="number" min="0" max="120"
-                className="input"
-                style={{ width: '46px', padding: '0.3rem 0.4rem', fontSize: '0.8rem', textAlign: 'center' }}
-                defaultValue={ev.minute}
-                onBlur={e => {
-                  const v = parseInt(e.target.value, 10);
-                  if (!isNaN(v) && v !== ev.minute) handleEditScorer(ev.id, 'minute', v);
-                }}
-              />
-            ) : (
-              <span style={{ fontSize: '0.8rem', color: '#718096', minWidth: '28px', paddingTop: '2px' }}>{ev.minute}'</span>
-            )}
-            <span style={{ fontSize: '1.1rem' }}>
-              {ev.type === 'goal' ? (ev.team === 'red' ? '🔴⚽' : '🔵⚽') : '🤦'}
-            </span>
-            <div style={{ flex: 1 }}>
-              {isAdmin ? (
-                <>
+        ) : [...goals].sort((a, b) => (a.minute ?? 999) - (b.minute ?? 999)).map(ev => {
+          const isEditing = isAdmin && editingEventId === ev.id;
+          return (
+            <div key={ev.id} style={{ borderBottom: '1px solid #2D3748' }}>
+              {isEditing ? (
+                <div style={{ padding: '0.75rem 0' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                    <span style={{ fontSize: '1rem', flexShrink: 0 }}>
+                      {ev.type === 'goal' ? (ev.team === 'red' ? '🔴⚽' : '🔵⚽') : '🤦'}
+                    </span>
+                    <input
+                      type="number" min="0" max="120" className="input"
+                      style={{ width: '60px', padding: '0.35rem 0.4rem', fontSize: '0.85rem', textAlign: 'center' }}
+                      placeholder="min"
+                      value={editForm.minute}
+                      onChange={e => setEditForm(f => ({ ...f, minute: e.target.value }))}
+                    />
+                    <input
+                      className="input"
+                      style={{ flex: 1, padding: '0.35rem 0.5rem', fontSize: '0.875rem' }}
+                      placeholder="Marcatore"
+                      value={editForm.scorerName}
+                      onChange={e => setEditForm(f => ({ ...f, scorerName: e.target.value }))}
+                    />
+                  </div>
                   <input
                     className="input"
-                    style={{ marginBottom: '0.25rem', padding: '0.4rem 0.6rem', fontSize: '0.875rem' }}
-                    defaultValue={resolveName(ev)}
-                    onBlur={e => {
-                      if (e.target.value !== resolveName(ev))
-                        handleEditScorer(ev.id, 'scorerName', e.target.value);
-                    }}
-                  />
-                  <input
-                    className="input"
-                    style={{ marginBottom: '0.25rem', padding: '0.3rem 0.6rem', fontSize: '0.78rem', color: '#A0AEC0' }}
-                    defaultValue={ev.assistName && ev.assistName !== 'Nessuno' ? ev.assistName : ''}
+                    style={{ width: '100%', marginBottom: '0.4rem', padding: '0.3rem 0.5rem', fontSize: '0.8rem' }}
                     placeholder="🎯 Assist (opzionale)"
-                    onBlur={e => {
-                      const v = e.target.value.trim() || null;
-                      if (v !== (ev.assistName || null)) handleEditScorer(ev.id, 'assistName', v);
-                    }}
+                    value={editForm.assistName}
+                    onChange={e => setEditForm(f => ({ ...f, assistName: e.target.value }))}
                   />
                   <input
                     className="input"
-                    style={{ padding: '0.3rem 0.6rem', fontSize: '0.78rem', color: '#A0AEC0' }}
-                    defaultValue={ev.gkConcededName || ''}
+                    style={{ width: '100%', marginBottom: '0.5rem', padding: '0.3rem 0.5rem', fontSize: '0.8rem' }}
                     placeholder="🧤 GK subito (opzionale)"
-                    onBlur={e => {
-                      const v = e.target.value.trim() || null;
-                      if (v !== (ev.gkConcededName || null)) handleEditScorer(ev.id, 'gkConcededName', v);
-                    }}
+                    value={editForm.gkConcededName}
+                    onChange={e => setEditForm(f => ({ ...f, gkConcededName: e.target.value }))}
                   />
-                </>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button className="btn btn-teal" style={{ flex: 1, padding: '0.4rem', fontSize: '0.85rem' }}
+                      onClick={handleSaveEvent} disabled={saving}>
+                      ✓ Salva
+                    </button>
+                    <button className="btn btn-ghost" style={{ flex: 1, padding: '0.4rem', fontSize: '0.85rem' }}
+                      onClick={() => setEditingEventId(null)}>
+                      Annulla
+                    </button>
+                  </div>
+                </div>
               ) : (
-                <>
-                  <div style={{ fontWeight: 500 }}>{resolveName(ev)}</div>
-                  {ev.assistName && ev.assistName !== 'Nessuno' && (
-                    <div style={{ fontSize: '0.75rem', color: '#718096' }}>🎯 assist: {ev.assistName}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.6rem 0' }}>
+                  <span style={{ fontSize: '0.8rem', color: '#718096', minWidth: '28px', flexShrink: 0 }}>
+                    {ev.minute != null ? `${ev.minute}'` : '—'}
+                  </span>
+                  <span style={{ fontSize: '1rem', flexShrink: 0 }}>
+                    {ev.type === 'goal' ? (ev.team === 'red' ? '🔴⚽' : '🔵⚽') : '🤦'}
+                  </span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 500, fontSize: '0.9rem' }}>{resolveName(ev)}</div>
+                    {ev.assistName && ev.assistName !== 'Nessuno' && (
+                      <div style={{ fontSize: '0.75rem', color: '#718096' }}>🎯 {ev.assistName}</div>
+                    )}
+                    {ev.gkConcededName && (
+                      <div style={{ fontSize: '0.75rem', color: '#718096' }}>🧤 {ev.gkConcededName}</div>
+                    )}
+                  </div>
+                  {isAdmin && (
+                    <div style={{ display: 'flex', gap: '2px', flexShrink: 0 }}>
+                      <button
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#A0AEC0', padding: '4px 6px', fontSize: '0.9rem' }}
+                        onClick={() => handleStartEdit(ev)}
+                      >✏️</button>
+                      <button
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#FC8181', padding: '4px 6px', fontSize: '0.9rem' }}
+                        onClick={() => handleDeleteEvent(ev.id)}
+                      >✕</button>
+                    </div>
                   )}
-                  {ev.gkConcededName && (
-                    <div style={{ fontSize: '0.75rem', color: '#718096' }}>🧤 GK: {ev.gkConcededName}</div>
-                  )}
-                </>
+                </div>
               )}
             </div>
-            {isAdmin && (
-              <button
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#FC8181', padding: '4px', marginTop: '2px' }}
-                onClick={() => handleDeleteEvent(ev.id)}
-              >
-                ✕
-              </button>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Add event form – admin only */}
