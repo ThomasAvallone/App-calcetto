@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import usePlayersStore from '../store/playersStore';
 import { subscribeToMatches } from '../firebase/firestore';
+import { HISTORICAL_SEASONS } from '../data/historicalData';
 
 const LEADERBOARD_TABS = [
   { key: 'goals',   label: '⚽ Gol' },
@@ -72,9 +73,34 @@ function LeaderboardRow({ rank, player, primary, secondary, primaryLabel, accent
 
 const getMs = d => d?.toMillis ? d.toMillis() : d ? new Date(d).getTime() : 0;
 
+// Map seasonId → { PLAYERNAME_UPPER → { presenze, assist } }
+const SEASON_PLAYER_MAP = {};
+for (const season of HISTORICAL_SEASONS) {
+  SEASON_PLAYER_MAP[season.id] = {};
+  for (const sp of season.players) {
+    SEASON_PLAYER_MAP[season.id][sp.name.toUpperCase()] = {
+      presenze: sp.presenze || 0,
+      assist: sp.assist || 0,
+    };
+  }
+}
+
+// Returns season id (e.g. '2024-25') for a Firestore date value
+function getSeasonId(dateVal) {
+  const d = dateVal?.toMillis ? new Date(dateVal.toMillis()) : new Date(dateVal);
+  const year = d.getFullYear();
+  const month = d.getMonth() + 1;
+  return month >= 8
+    ? `${year}-${String(year + 1).slice(2)}`
+    : `${year - 1}-${String(year).slice(2)}`;
+}
+
 function computeStatsFromMatches(players, matches) {
   return players.map(p => {
     const s = { goals: 0, assists: 0, wins: 0, draws: 0, losses: 0, matches: 0, gkMatches: 0, gkGoalsConceded: 0 };
+    // historicalMatches per season → count of games played (for assist prorating)
+    const histBySeason = {};
+
     for (const m of matches) {
       const inRed = (m.redTeam || []).some(pl => pl.id === p.id);
       const inBlue = (m.blueTeam || []).some(pl => pl.id === p.id);
@@ -88,14 +114,33 @@ function computeStatsFromMatches(players, matches) {
       for (const ev of (m.events || [])) {
         if (ev.type === 'goal') {
           if (ev.scorerId === p.id) s.goals++;
-          if (ev.assistId === p.id) s.assists++;
+          if (ev.assistId === p.id) s.assists++; // counted for real matches
         }
         if (ev.type === 'gk_turn' && ev.playerId === p.id) {
           s.gkMatches++;
           s.gkGoalsConceded += ev.goalsConceded || 0;
         }
       }
+      // Track historical matches by season for assist prorating
+      if (m.isHistorical) {
+        const sid = getSeasonId(m.date);
+        histBySeason[sid] = (histBySeason[sid] || 0) + 1;
+      }
     }
+
+    // Prorate historical assists: season_assists × (games_in_period / season_total_games)
+    const histNames = (p.historicalNames || []).map(n => n.toUpperCase());
+    for (const [sid, countInPeriod] of Object.entries(histBySeason)) {
+      const seasonData = SEASON_PLAYER_MAP[sid];
+      if (!seasonData) continue;
+      let pData = null;
+      for (const name of histNames) {
+        if (seasonData[name]) { pData = seasonData[name]; break; }
+      }
+      if (!pData || !pData.presenze || !pData.assist) continue;
+      s.assists += Math.round(pData.assist * (countInPeriod / pData.presenze));
+    }
+
     return { ...p, totalGoals: s.goals, totalAssists: s.assists, totalMatches: s.matches, totalWins: s.wins, totalDraws: s.draws, gkMatches: s.gkMatches, gkGoalsConceded: s.gkGoalsConceded };
   });
 }
