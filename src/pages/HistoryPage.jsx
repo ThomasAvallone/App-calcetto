@@ -69,19 +69,17 @@ function MatchCard({ match: m, onClick }) {
     [...(m.redTeam || []), ...(m.blueTeam || [])].filter(p => p.id).map(p => [p.id, p.name])
   );
 
-  // Conteggio gol per marcatore e assist
-  const scorerMap = {};
-  const assistMap = {};
+  // Gol divisi per squadra
+  const redMap = {};
+  const blueMap = {};
   for (const ev of goals) {
     const name = ev.scorerName || playerById[ev.scorerId];
     if (!name) continue;
-    scorerMap[name] = (scorerMap[name] || 0) + 1;
-    if (ev.assistName && ev.assistName !== 'Nessuno') {
-      assistMap[ev.assistName] = (assistMap[ev.assistName] || 0) + 1;
-    }
+    if (ev.team === 'red') redMap[name] = (redMap[name] || 0) + 1;
+    else blueMap[name] = (blueMap[name] || 0) + 1;
   }
-  const scorerEntries = Object.entries(scorerMap).sort((a, b) => b[1] - a[1]);
-  const assistEntries = Object.entries(assistMap).sort((a, b) => b[1] - a[1]);
+  const fmt = map => Object.entries(map).sort((a, b) => b[1] - a[1])
+    .map(([n, c]) => c > 1 ? `${n} x${c}` : n).join(', ');
 
   const handleShare = (e) => {
     e.stopPropagation();
@@ -133,22 +131,13 @@ function MatchCard({ match: m, onClick }) {
           <path d="M9 18l6-6-6-6"/>
         </svg>
       </div>
-      {scorerEntries.length > 0 && (
-        <div className="text-xs text-secondary" style={{ marginBottom: '2px' }}>
-          ⚽ {scorerEntries.map(([name, count]) => count > 1 ? `${name} x${count}` : name).join(', ')}
-          {autogoals.length > 0 && ` · 🤦 ${[...new Set(autogoals.map(e => e.scorerName))].join(', ')}`}
+      {(Object.keys(redMap).length > 0 || Object.keys(blueMap).length > 0) && (
+        <div className="text-xs text-secondary">
+          {Object.keys(redMap).length > 0 && <span>🔴 {fmt(redMap)}</span>}
+          {Object.keys(redMap).length > 0 && Object.keys(blueMap).length > 0 && <span style={{ color: '#4A5568' }}> · </span>}
+          {Object.keys(blueMap).length > 0 && <span>🔵 {fmt(blueMap)}</span>}
         </div>
       )}
-      {assistEntries.length > 0 && (
-        <div className="text-xs" style={{ color: '#718096', marginBottom: '2px' }}>
-          🎯 {assistEntries.map(([name, count]) => count > 1 ? `${name} x${count}` : name).join(', ')}
-        </div>
-      )}
-      <div className="text-xs text-muted mt-1">
-        🔴 {(m.redTeam || []).map(p => p.name).slice(0, 3).join(', ') || '–'}
-        {' · '}
-        🔵 {(m.blueTeam || []).map(p => p.name).slice(0, 3).join(', ') || '–'}
-      </div>
     </div>
   );
 }
