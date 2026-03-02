@@ -122,6 +122,12 @@ export default function MatchDetailPage() {
   const events = match.events || [];
   const goals = events.filter(e => e.type === 'goal' || e.type === 'autogoal');
 
+  // Fallback per partite storiche che hanno solo scorerId (senza scorerName)
+  const playerById = Object.fromEntries(
+    [...(match.redTeam || []), ...(match.blueTeam || [])].filter(p => p.id).map(p => [p.id, p.name])
+  );
+  const resolveName = (ev) => ev.scorerName || playerById[ev.scorerId] || '?';
+
   const handleDeleteEvent = async (evId) => {
     const newEvents = events.filter(e => e.id !== evId);
     let redScore = 0, blueScore = 0;
@@ -348,9 +354,9 @@ export default function MatchDetailPage() {
                   <input
                     className="input"
                     style={{ marginBottom: '0.25rem', padding: '0.4rem 0.6rem', fontSize: '0.875rem' }}
-                    defaultValue={ev.scorerName}
+                    defaultValue={resolveName(ev)}
                     onBlur={e => {
-                      if (e.target.value !== ev.scorerName)
+                      if (e.target.value !== resolveName(ev))
                         handleEditScorer(ev.id, 'scorerName', e.target.value);
                     }}
                   />
@@ -377,7 +383,7 @@ export default function MatchDetailPage() {
                 </>
               ) : (
                 <>
-                  <div style={{ fontWeight: 500 }}>{ev.scorerName}</div>
+                  <div style={{ fontWeight: 500 }}>{resolveName(ev)}</div>
                   {ev.assistName && ev.assistName !== 'Nessuno' && (
                     <div style={{ fontSize: '0.75rem', color: '#718096' }}>🎯 assist: {ev.assistName}</div>
                   )}
