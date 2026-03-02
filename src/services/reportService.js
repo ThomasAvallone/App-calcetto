@@ -48,16 +48,37 @@ export function generateMatchPreview({ redTeam, blueTeam, weather, date }) {
   const redTopPlayer = [...redTeam].sort((a, b) => (b.powerIndex || 50) - (a.powerIndex || 50))[0];
   const blueTopPlayer = [...blueTeam].sort((a, b) => (b.powerIndex || 50) - (a.powerIndex || 50))[0];
 
+  // Build potential objectives
+  const GOAL_MS = [5, 10, 15, 20, 25, 30, 40, 50, 75, 100, 150, 200];
+  const ASSIST_MS = [5, 10, 15, 20, 25, 30, 50, 75, 100];
+  const MATCH_MS = [10, 25, 50, 75, 100, 150, 200];
+  const objectives = [];
+  for (const p of [...redTeam, ...blueTeam]) {
+    const g = p.stats?.goals || 0;
+    const a = (p.stats?.assists || 0) + (p.historicalStats?.assists || 0);
+    const m = p.stats?.matches || 0;
+    const nextG = GOAL_MS.find(x => x > g);
+    if (nextG && nextG - g <= 3) objectives.push(`⚽ ${p.name} a ${nextG - g} gol dai ${nextG} totali`);
+    const nextA = ASSIST_MS.find(x => x > a);
+    if (nextA && nextA - a <= 2) objectives.push(`🎯 ${p.name} a ${nextA - a} assist dai ${nextA} totali`);
+    if (MATCH_MS.find(x => x === m + 1)) objectives.push(`🏟️ ${p.name} raggiunge le ${m + 1} presenze!`);
+    if (p.streak?.type === 'win' && p.streak.count >= 3) objectives.push(`🔥 ${p.name}: ${p.streak.count} vittorie di fila`);
+  }
+
+  const objectivesBlock = objectives.length > 0
+    ? objectives.join('\n')
+    : 'Nessun traguardo imminente — si scrive la storia oggi!';
+
   return `⚽ CALCETTO ANALYTICS — MATCH PREVIEW
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📅 ${dateStr}
 
-🎙️ INTRO CARESSA
-"${getCaressaIntro()}"
-
-🌤️ METEO (quasi reale, comunque ironico)
+🌤️ METEO
 ${getWeatherComment(weather?.condition)}
 ${weather?.temp ? `🌡️ ${weather.temp}°C — ${weather.description || ''}` : ''}
+
+🎯 OBIETTIVI DEL MATCH
+${objectivesBlock}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🔴 SQUADRA ROSSA (PI: ${redPI.toFixed(1)})

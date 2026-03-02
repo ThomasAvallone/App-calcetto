@@ -56,12 +56,13 @@ export async function getMatch(id) {
 
 export async function createMatch(data) {
   const ref = await addDoc(collection(db, 'matches'), {
-    ...data,
-    status: 'pending',
-    date: serverTimestamp(),
     events: [],
     redScore: 0,
     blueScore: 0,
+    status: 'pending',
+    date: serverTimestamp(),
+    ...data,
+    createdAt: serverTimestamp(),
   });
   return ref.id;
 }

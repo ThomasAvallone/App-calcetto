@@ -5,9 +5,7 @@ import usePlayersStore from '../store/playersStore';
 import useMatchStore from '../store/matchStore';
 import {
   subscribeToMatches,
-  subscribeToScheduledMatch,
-  setScheduledMatch,
-  clearScheduledMatch,
+  updateMatch,
 } from '../firebase/firestore';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -36,28 +34,31 @@ function getCountdown(dateStr) {
 export default function DashboardPage() {
   const { user, role, logout } = useAuthStore();
   const { players, getRanking } = usePlayersStore();
-  const { activeMatchId } = useMatchStore();
+  const { activeMatchId, loadMatch } = useMatchStore();
   const navigate = useNavigate();
   const isAdmin = role === 'admin';
 
   const [allMatches, setAllMatches] = useState([]);
-  const [scheduledMatch, setScheduledMatchState] = useState(null);
-  const [showScheduleForm, setShowScheduleForm] = useState(false);
-  const [scheduleForm, setScheduleForm] = useState({ date: '', note: '' });
-  const [savingSchedule, setSavingSchedule] = useState(false);
+  const [showStartPicker, setShowStartPicker] = useState(false);
 
   useEffect(() => {
     const unsub = subscribeToMatches(setAllMatches);
     return unsub;
   }, []);
 
-  useEffect(() => {
-    const unsub = subscribeToScheduledMatch(setScheduledMatchState);
-    return unsub;
-  }, []);
-
-  const recentMatches = allMatches.slice(0, 5);
+  const recentMatches = allMatches.filter(m => m.status !== 'scheduled').slice(0, 5);
   const finishedMatches = allMatches.filter(m => m.status === 'finished');
+  const scheduledMatches = allMatches
+    .filter(m => m.status === 'scheduled')
+    .sort((a, b) => {
+      const aD = safeDate(a.date)?.getTime() || 0;
+      const bD = safeDate(b.date)?.getTime() || 0;
+      return aD - bD;
+    });
+  const nearestScheduled = scheduledMatches.find(m => {
+    const d = safeDate(m.date);
+    return d && d.getTime() > Date.now();
+  });
   const totalGoals = finishedMatches.reduce((s, m) => s + (m.redScore || 0) + (m.blueScore || 0), 0);
 
   const ranking = getRanking().slice(0, 5);
@@ -98,28 +99,18 @@ export default function DashboardPage() {
     return { topScorer, topAssist, topAutogoal, worstGk, matchCount: monthly.length };
   }, [finishedMatches]);
 
-  const handleSaveSchedule = async () => {
-    if (!scheduleForm.date) { toast.error('Seleziona data e ora'); return; }
-    setSavingSchedule(true);
+  const handleStartScheduled = async (matchId) => {
     try {
-      await setScheduledMatch(scheduleForm.date, scheduleForm.note);
-      toast.success('Prossima partita salvata!');
-      setShowScheduleForm(false);
+      await updateMatch(matchId, { status: 'active' });
+      await loadMatch(matchId);
+      navigate(`/match/${matchId}`);
     } catch (e) {
       toast.error('Errore: ' + e.message);
-    } finally {
-      setSavingSchedule(false);
     }
   };
 
-  const handleClearSchedule = async () => {
-    await clearScheduledMatch();
-    toast.success('Partita rimossa dal calendario');
-  };
-
-  const scheduledDate = scheduledMatch?.date ? new Date(scheduledMatch.date) : null;
-  const countdown = scheduledMatch?.date ? getCountdown(scheduledMatch.date) : null;
-  const isScheduledFuture = countdown !== null;
+  const nearestDate = nearestScheduled ? safeDate(nearestScheduled.date) : null;
+  const nearestCountdown = nearestDate ? getCountdown(nearestDate.toISOString()) : null;
 
   return (
     <div className="page-content">
@@ -187,41 +178,29 @@ export default function DashboardPage() {
       )}
 
       {/* Scheduled match countdown */}
-      {scheduledMatch && scheduledDate && (
+      {nearestScheduled && nearestDate && nearestCountdown && (
         <div className="card mb-4" style={{
-          background: isScheduledFuture
-            ? 'linear-gradient(135deg, rgba(246,224,94,0.1) 0%, rgba(246,173,85,0.05) 100%)'
-            : 'rgba(74,85,104,0.3)',
-          border: `1px solid ${isScheduledFuture ? 'rgba(246,224,94,0.4)' : 'rgba(74,85,104,0.5)'}`,
+          background: 'linear-gradient(135deg, rgba(246,224,94,0.1) 0%, rgba(246,173,85,0.05) 100%)',
+          border: '1px solid rgba(246,224,94,0.4)',
         }}>
           <div className="flex items-center gap-3">
             <div style={{ fontSize: '1.5rem' }}>📅</div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 700, color: isScheduledFuture ? '#F6E05E' : '#A0AEC0', fontSize: '0.95rem' }}>
+              <div style={{ fontWeight: 700, color: '#F6E05E', fontSize: '0.95rem' }}>
                 Prossima partita
               </div>
               <div className="text-sm" style={{ color: '#A0AEC0' }}>
-                {format(scheduledDate, "EEE d MMM 'alle' HH:mm", { locale: it })}
-                {scheduledMatch.note && <span> · {scheduledMatch.note}</span>}
+                {format(nearestDate, "EEE d MMM 'alle' HH:mm", { locale: it })}
               </div>
-              {isScheduledFuture && (
-                <div style={{ fontSize: '0.78rem', color: '#F6E05E', marginTop: '0.15rem' }}>
-                  {countdown}
-                </div>
-              )}
-              {!isScheduledFuture && (
-                <div style={{ fontSize: '0.75rem', color: '#718096' }}>Data passata</div>
-              )}
+              <div style={{ fontSize: '0.78rem', color: '#F6E05E', marginTop: '0.15rem' }}>
+                {nearestCountdown}
+              </div>
+              <div className="text-xs text-muted" style={{ marginTop: '0.25rem' }}>
+                🔴 {(nearestScheduled.redTeam || []).map(p => p.name).join(', ')}
+                {' · '}
+                🔵 {(nearestScheduled.blueTeam || []).map(p => p.name).join(', ')}
+              </div>
             </div>
-            {isAdmin && (
-              <button
-                onClick={handleClearSchedule}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#718096', fontSize: '1.1rem', padding: '0.25rem' }}
-                title="Rimuovi"
-              >
-                ✕
-              </button>
-            )}
           </div>
         </div>
       )}
@@ -240,11 +219,26 @@ export default function DashboardPage() {
           </div>
           <div className="flex gap-3 mb-2">
             <button
-              className="btn btn-ghost"
-              style={{ flex: 1, fontSize: '0.85rem' }}
-              onClick={() => { setShowScheduleForm(v => !v); setScheduleForm({ date: '', note: '' }); }}
+              className="btn btn-teal"
+              style={{
+                flex: 1, fontSize: '1rem', fontWeight: 700,
+                padding: '0.7rem 1rem',
+                background: scheduledMatches.length > 0
+                  ? 'linear-gradient(135deg, #38B2AC 0%, #4FD1C5 100%)'
+                  : undefined,
+              }}
+              onClick={() => setShowStartPicker(v => !v)}
             >
-              📅 {scheduledMatch ? 'Riprogramma' : 'Programma Partita'}
+              ▶️ Inizia Partita
+              {scheduledMatches.length > 0 && (
+                <span style={{
+                  marginLeft: '0.5rem', fontSize: '0.75rem',
+                  background: 'rgba(0,0,0,0.25)', padding: '2px 8px',
+                  borderRadius: '10px',
+                }}>
+                  {scheduledMatches.length}
+                </span>
+              )}
             </button>
             <button
               className="btn btn-ghost"
@@ -255,41 +249,51 @@ export default function DashboardPage() {
             </button>
           </div>
 
-          {showScheduleForm && (
+          {showStartPicker && (
             <div style={{
               marginTop: '0.75rem', padding: '0.75rem', borderRadius: '8px',
-              background: 'rgba(246,224,94,0.06)', border: '1px solid rgba(246,224,94,0.2)',
+              background: 'rgba(79,209,197,0.06)', border: '1px solid rgba(79,209,197,0.2)',
             }}>
-              <p style={{ fontSize: '0.8rem', color: '#F6E05E', marginBottom: '0.6rem', fontWeight: 600 }}>
-                📅 Prossima Partita
+              <p style={{ fontSize: '0.8rem', color: '#4FD1C5', marginBottom: '0.6rem', fontWeight: 600 }}>
+                Partite programmate
               </p>
-              <input
-                type="datetime-local"
-                className="input"
-                value={scheduleForm.date}
-                onChange={e => setScheduleForm(f => ({ ...f, date: e.target.value }))}
-                style={{ marginBottom: '0.5rem' }}
-              />
-              <input
-                className="input"
-                placeholder="Nota (opzionale, es. Campo Centrale)"
-                value={scheduleForm.note}
-                onChange={e => setScheduleForm(f => ({ ...f, note: e.target.value }))}
-                style={{ marginBottom: '0.6rem' }}
-              />
-              <div className="flex gap-2">
-                <button className="btn btn-ghost" style={{ flex: 1, fontSize: '0.85rem' }} onClick={() => setShowScheduleForm(false)}>
-                  Annulla
-                </button>
-                <button
-                  className="btn btn-teal"
-                  style={{ flex: 1, fontSize: '0.85rem' }}
-                  onClick={handleSaveSchedule}
-                  disabled={savingSchedule}
-                >
-                  {savingSchedule ? '...' : 'Salva'}
-                </button>
-              </div>
+              {scheduledMatches.length === 0 ? (
+                <p className="text-sm text-muted" style={{ textAlign: 'center', padding: '0.5rem' }}>
+                  Nessuna partita programmata.
+                  <br/>
+                  <span style={{ fontSize: '0.75rem' }}>Crea una partita e salvala per dopo.</span>
+                </p>
+              ) : scheduledMatches.map(m => {
+                const d = safeDate(m.date);
+                return (
+                  <div
+                    key={m.id}
+                    onClick={() => handleStartScheduled(m.id)}
+                    style={{
+                      padding: '0.6rem', borderRadius: '8px', cursor: 'pointer',
+                      background: 'rgba(79,209,197,0.08)', marginBottom: '0.5rem',
+                      border: '1px solid rgba(79,209,197,0.15)',
+                      transition: 'all 0.15s',
+                    }}
+                  >
+                    <div style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.2rem' }}>
+                      📅 {d ? format(d, "EEE d MMM · HH:mm", { locale: it }) : '–'}
+                    </div>
+                    <div className="text-xs text-muted">
+                      🔴 {(m.redTeam || []).map(p => p.name).join(', ')}
+                      {' · '}
+                      🔵 {(m.blueTeam || []).map(p => p.name).join(', ')}
+                    </div>
+                    <div style={{ textAlign: 'right', marginTop: '0.3rem' }}>
+                      <span style={{
+                        fontSize: '0.75rem', fontWeight: 600, color: '#4FD1C5',
+                      }}>
+                        ▶️ Avvia
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

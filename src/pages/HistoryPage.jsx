@@ -23,8 +23,9 @@ export default function HistoryPage() {
     return unsub;
   }, []);
 
+  const scheduled = matches.filter(m => m.status === 'scheduled');
+  const active = matches.filter(m => m.status !== 'finished' && m.status !== 'scheduled');
   const finished = matches.filter(m => m.status === 'finished');
-  const active = matches.filter(m => m.status !== 'finished');
 
   return (
     <div className="page-content">
@@ -34,6 +35,14 @@ export default function HistoryPage() {
         <div style={{ textAlign: 'center', padding: '2rem', color: '#718096' }}>
           Caricamento...
         </div>
+      )}
+
+      {scheduled.length > 0 && (
+        <>
+          <h3 className="text-sm text-muted mb-2">DA GIOCARE ({scheduled.length})</h3>
+          {scheduled.map(m => <ScheduledCard key={m.id} match={m} />)}
+          <div style={{ height: '0.5rem' }} />
+        </>
       )}
 
       {active.length > 0 && (
@@ -138,6 +147,38 @@ function MatchCard({ match: m, onClick }) {
           {Object.keys(blueMap).length > 0 && <span>🔵 {fmt(blueMap)}</span>}
         </div>
       )}
+    </div>
+  );
+}
+
+function ScheduledCard({ match: m }) {
+  const d = safeDate(m.date);
+  return (
+    <div className="card mb-3" style={{
+      border: '1px solid rgba(246,224,94,0.4)',
+      background: 'rgba(246,224,94,0.06)',
+    }}>
+      <div className="flex items-center gap-3 mb-2">
+        <div style={{ fontSize: '1.2rem' }}>📅</div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 700, color: '#F6E05E', fontSize: '1rem' }}>
+            {d ? format(d, "EEEE d MMMM · HH:mm", { locale: it }) : '–'}
+          </div>
+          <span className="badge" style={{
+            fontSize: '0.65rem', padding: '2px 8px',
+            background: 'rgba(246,224,94,0.15)', color: '#F6E05E',
+            border: '1px solid rgba(246,224,94,0.3)', borderRadius: '4px',
+            marginTop: '4px', display: 'inline-block',
+          }}>
+            DA GIOCARE
+          </span>
+        </div>
+      </div>
+      <div className="text-xs text-muted">
+        🔴 {(m.redTeam || []).map(p => p.name).join(', ') || '–'}
+        {' · '}
+        🔵 {(m.blueTeam || []).map(p => p.name).join(', ') || '–'}
+      </div>
     </div>
   );
 }

@@ -253,6 +253,12 @@ const useMatchStore = create(
         const id = await createMatch(matchData);
         return id;
       },
+
+      async startScheduledMatch(matchId) {
+        await updateMatch(matchId, { status: 'active' });
+        await get().loadMatch(matchId);
+        return matchId;
+      },
     }),
     {
       name: 'calcetto-match-store',

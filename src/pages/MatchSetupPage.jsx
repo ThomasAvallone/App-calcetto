@@ -19,6 +19,8 @@ export default function MatchSetupPage() {
   const [loading, setLoading] = useState(false);
   const [weather, setWeather] = useState({ condition: 'cloudy', temp: '', description: '' });
   const [swapPick, setSwapPick] = useState(null); // { id, team } of first-selected player
+  const [matchDate, setMatchDate] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const togglePlayer = (id) => {
     setSelectedIds(prev =>
@@ -34,7 +36,7 @@ export default function MatchSetupPage() {
       redTeam: balanced.red,
       blueTeam: balanced.blue,
       weather,
-      date: new Date(),
+      date: matchDate ? new Date(matchDate) : new Date(),
     });
     setPreview(prev);
     setStep('preview');
@@ -43,6 +45,7 @@ export default function MatchSetupPage() {
   const handleStartMatch = async () => {
     setLoading(true);
     try {
+      const date = matchDate ? new Date(matchDate) : new Date();
       const matchId = await createNewMatch({
         redTeam: teams.red.map(p => ({ id: p.id, name: p.name, primaryRole: p.primaryRole || '' })),
         blueTeam: teams.blue.map(p => ({ id: p.id, name: p.name, primaryRole: p.primaryRole || '' })),
@@ -50,12 +53,36 @@ export default function MatchSetupPage() {
         redScore: 0,
         blueScore: 0,
         status: 'active',
+        date,
         events: [],
       });
       await loadMatch(matchId);
       navigate(`/match/${matchId}`);
     } catch (e) {
       toast.error('Errore creazione partita: ' + e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveMatch = async () => {
+    setLoading(true);
+    try {
+      const date = matchDate ? new Date(matchDate) : new Date();
+      await createNewMatch({
+        redTeam: teams.red.map(p => ({ id: p.id, name: p.name, primaryRole: p.primaryRole || '' })),
+        blueTeam: teams.blue.map(p => ({ id: p.id, name: p.name, primaryRole: p.primaryRole || '' })),
+        weather,
+        redScore: 0,
+        blueScore: 0,
+        status: 'scheduled',
+        date,
+        events: [],
+      });
+      toast.success('Partita salvata! La trovi nello storico.');
+      navigate('/history');
+    } catch (e) {
+      toast.error('Errore: ' + e.message);
     } finally {
       setLoading(false);
     }
@@ -99,7 +126,7 @@ export default function MatchSetupPage() {
     const newTeams = { red: newRed, blue: newBlue };
     setTeams(newTeams);
     setSwapPick(null);
-    setPreview(generateMatchPreview({ redTeam: newTeams.red, blueTeam: newTeams.blue, weather, date: new Date() }));
+    setPreview(generateMatchPreview({ redTeam: newTeams.red, blueTeam: newTeams.blue, weather, date: matchDate ? new Date(matchDate) : new Date() }));
     toast.success('Giocatori scambiati');
   };
 
@@ -197,22 +224,36 @@ export default function MatchSetupPage() {
           </pre>
         </div>
 
-        <button
-          className="btn btn-teal btn-lg btn-full"
-          onClick={handleStartMatch}
-          disabled={loading}
-        >
-          {loading ? '⏳ Avvio...' : '🚀 Inizia la Partita!'}
-        </button>
+        <div className="flex gap-3">
+          <button
+            className="btn btn-ghost btn-lg"
+            style={{ flex: 1 }}
+            onClick={handleSaveMatch}
+            disabled={loading}
+          >
+            💾 Salva
+          </button>
+          <button
+            className="btn btn-teal btn-lg"
+            style={{ flex: 1 }}
+            onClick={handleStartMatch}
+            disabled={loading}
+          >
+            {loading ? '⏳...' : '🚀 Inizia!'}
+          </button>
+        </div>
       </div>
     );
   }
 
+  const filtered = searchQuery
+    ? players.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    : players;
   const byRole = ROLES.reduce((acc, r) => {
-    acc[r] = players.filter(p => p.primaryRole === r);
+    acc[r] = filtered.filter(p => p.primaryRole === r);
     return acc;
   }, {});
-  const others = players.filter(p => !ROLES.includes(p.primaryRole));
+  const others = filtered.filter(p => !ROLES.includes(p.primaryRole));
 
   return (
     <div className="page-content">
@@ -229,6 +270,18 @@ export default function MatchSetupPage() {
         <div className="badge badge-teal" style={{ marginLeft: 'auto' }}>
           {selectedIds.length}/10
         </div>
+      </div>
+
+      {/* Date & Time */}
+      <div className="card mb-4">
+        <h3 className="mb-3">📅 Data e Ora</h3>
+        <input
+          type="datetime-local"
+          className="input"
+          value={matchDate}
+          onChange={e => setMatchDate(e.target.value)}
+          style={{ width: '100%' }}
+        />
       </div>
 
       {/* Weather */}
@@ -249,6 +302,17 @@ export default function MatchSetupPage() {
             onChange={e => setWeather(w => ({ ...w, temp: e.target.value }))}
           />
         </div>
+      </div>
+
+      {/* Search */}
+      <div style={{ marginBottom: '1rem' }}>
+        <input
+          className="input"
+          placeholder="Cerca giocatore..."
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+          style={{ width: '100%' }}
+        />
       </div>
 
       {/* Player Selection */}
