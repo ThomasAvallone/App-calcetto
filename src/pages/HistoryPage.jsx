@@ -152,12 +152,18 @@ function MatchCard({ match: m, onClick }) {
 }
 
 function ScheduledCard({ match: m }) {
+  const navigate = useNavigate();
   const d = safeDate(m.date);
   return (
-    <div className="card mb-3" style={{
-      border: '1px solid rgba(246,224,94,0.4)',
-      background: 'rgba(246,224,94,0.06)',
-    }}>
+    <div
+      className="card mb-3"
+      style={{
+        border: '1px solid rgba(246,224,94,0.4)',
+        background: 'rgba(246,224,94,0.06)',
+        cursor: 'pointer',
+      }}
+      onClick={() => navigate(`/history/scheduled/${m.id}`)}
+    >
       <div className="flex items-center gap-3 mb-2">
         <div style={{ fontSize: '1.2rem' }}>📅</div>
         <div style={{ flex: 1 }}>
@@ -173,6 +179,9 @@ function ScheduledCard({ match: m }) {
             DA GIOCARE
           </span>
         </div>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F6E05E" strokeWidth={2}>
+          <path d="M9 18l6-6-6-6"/>
+        </svg>
       </div>
       <div className="text-xs text-muted">
         🔴 {(m.redTeam || []).map(p => p.name).join(', ') || '–'}

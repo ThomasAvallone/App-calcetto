@@ -9,6 +9,7 @@ import MatchSetupPage from './pages/MatchSetupPage';
 import MatchPage from './pages/MatchPage';
 import HistoryPage from './pages/HistoryPage';
 import MatchDetailPage from './pages/MatchDetailPage';
+import ScheduledMatchDetailPage from './pages/ScheduledMatchDetailPage';
 import PlayersPage from './pages/PlayersPage';
 import AdminPage from './pages/AdminPage';
 import StagioniPage from './pages/StagioniPage';
@@ -73,6 +74,7 @@ export default function App() {
           <Route path="match/setup" element={<MatchSetupPage />} />
           <Route path="match/:id" element={<MatchPage />} />
           <Route path="history" element={<HistoryPage />} />
+          <Route path="history/scheduled/:id" element={<ScheduledMatchDetailPage />} />
           <Route path="history/:id" element={<MatchDetailPage />} />
           <Route path="players" element={<PlayersPage />} />
           <Route path="stagioni" element={<StagioniPage />} />
