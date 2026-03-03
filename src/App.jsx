@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
-import useAuthStore from './store/authStore';
+import useAuthStore, { selectIsAdmin, selectIsSuperAdmin } from './store/authStore';
 import usePlayersStore from './store/playersStore';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
@@ -26,8 +26,8 @@ function ProtectedRoute({ children }) {
 
 function AdminRoute({ children }) {
   const { user, loading } = useAuthStore();
-  const isAdmin = useAuthStore(s => s.isAdmin);
-  const isSuperAdmin = useAuthStore(s => s.isSuperAdmin);
+  const isAdmin = useAuthStore(selectIsAdmin);
+  const isSuperAdmin = useAuthStore(selectIsSuperAdmin);
   if (loading) return <Spinner fullPage />;
   if (!user) return <Navigate to="/login" replace />;
   if (!isAdmin && !isSuperAdmin) return <Navigate to="/" replace />;

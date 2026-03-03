@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import useMatchStore, { GK_TURN_DURATION } from '../store/matchStore';
 import usePlayersStore from '../store/playersStore';
-import useAuthStore from '../store/authStore';
+import useAuthStore, { selectIsAdmin } from '../store/authStore';
 import { generateMatchReport } from '../services/reportService';
 import { exportMatchToSheets } from '../services/sheetsService';
 import { recalculatePlayerStats } from '../firebase/firestore';
@@ -46,7 +46,7 @@ export default function MatchPage() {
   const navigate = useNavigate();
   const { role } = useAuthStore();
   const { players } = usePlayersStore();
-  const isAdmin = role === 'admin';
+  const isAdmin = useAuthStore(selectIsAdmin);
 
   const {
     match, activeMatchId, timerState, gkRotation, currentGk,

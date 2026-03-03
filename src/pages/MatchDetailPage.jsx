@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getMatch, updateMatch, deleteMatch, recalculatePlayerStats, rateMatch, recalculateRecentFormForPlayers } from '../firebase/firestore';
-import useAuthStore from '../store/authStore';
+import useAuthStore, { selectIsAdmin } from '../store/authStore';
 import usePlayersStore from '../store/playersStore';
 import { generateMatchReport } from '../services/reportService';
 import { format } from 'date-fns';
@@ -102,7 +102,7 @@ export default function MatchDetailPage() {
   const navigate = useNavigate();
   const { role, user } = useAuthStore();
   const { players } = usePlayersStore();
-  const isAdmin = role === 'admin';
+  const isAdmin = useAuthStore(selectIsAdmin);
 
   const [match, setMatch] = useState(null);
   const [loading, setLoading] = useState(true);

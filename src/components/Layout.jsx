@@ -1,6 +1,6 @@
 import React from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import useAuthStore from '../store/authStore';
+import useAuthStore, { selectIsAdmin, selectIsSuperAdmin } from '../store/authStore';
 import useMatchStore from '../store/matchStore';
 
 const IconHome = () => (
@@ -56,8 +56,8 @@ const IconStats = () => (
 
 export default function Layout() {
   const { role } = useAuthStore();
-  const isAdmin = useAuthStore(s => s.isAdmin);
-  const isSuperAdmin = useAuthStore(s => s.isSuperAdmin);
+  const isAdmin = useAuthStore(selectIsAdmin);
+  const isSuperAdmin = useAuthStore(selectIsSuperAdmin);
   const showAdmin = isAdmin || isSuperAdmin;
   const { activeMatchId } = useMatchStore();
   const navigate = useNavigate();

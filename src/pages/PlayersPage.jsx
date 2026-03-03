@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import usePlayersStore from '../store/playersStore';
-import useAuthStore from '../store/authStore';
+import useAuthStore, { selectIsAdmin } from '../store/authStore';
 import { computeCombinedPowerIndex, subscribeToMatches, recalculatePlayerStats } from '../firebase/firestore';
 import { HISTORICAL_SEASONS, suggestHistoricalNames, computeCumulativeStats, getUnlinkedNames } from '../data/historicalData';
 import { computeBadges } from '../utils/badges';
@@ -55,7 +55,7 @@ const defaultForm = { name: '', primaryRole: 'Centrocampista', secondaryRole: ''
 export default function PlayersPage() {
   const { players, addPlayer, updatePlayer: editPlayer, removePlayer } = usePlayersStore();
   const { role } = useAuthStore();
-  const isAdmin = role === 'admin';
+  const isAdmin = useAuthStore(selectIsAdmin);
 
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(defaultForm);

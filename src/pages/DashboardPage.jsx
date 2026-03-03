@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import useAuthStore from '../store/authStore';
+import useAuthStore, { selectIsAdmin } from '../store/authStore';
 import usePlayersStore from '../store/playersStore';
 import useMatchStore from '../store/matchStore';
 import {
@@ -36,7 +36,7 @@ export default function DashboardPage() {
   const { players, getRanking } = usePlayersStore();
   const { activeMatchId, loadMatch } = useMatchStore();
   const navigate = useNavigate();
-  const isAdmin = role === 'admin';
+  const isAdmin = useAuthStore(selectIsAdmin);
 
   const [allMatches, setAllMatches] = useState([]);
   const [showStartPicker, setShowStartPicker] = useState(false);

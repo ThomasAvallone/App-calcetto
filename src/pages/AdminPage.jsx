@@ -5,11 +5,11 @@ import { downloadExcel } from '../services/excelService';
 import { doc, getDocs, collection, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { HISTORICAL_SEASONS, getCurrentRosterPlayers, computeCumulativeStats } from '../data/historicalData';
-import useAuthStore from '../store/authStore';
+import useAuthStore, { selectIsSuperAdmin } from '../store/authStore';
 import toast from 'react-hot-toast';
 
 export default function AdminPage() {
-  const currentIsSuperAdmin = useAuthStore(s => s.isSuperAdmin);
+  const currentIsSuperAdmin = useAuthStore(selectIsSuperAdmin);
   const currentUser = useAuthStore(s => s.user);
   const [players, setPlayers] = useState([]);
   const [matches, setMatches] = useState([]);

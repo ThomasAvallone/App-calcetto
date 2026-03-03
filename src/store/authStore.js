@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { subscribeToAuth, getUserRole, loginWithGoogle, logout } from '../firebase/auth';
 
+const SUPER_ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL || '';
+
 const useAuthStore = create((set, get) => ({
   user: null,
   role: null,
@@ -33,16 +35,11 @@ const useAuthStore = create((set, get) => ({
     await logout();
     set({ user: null, role: null });
   },
-
-  get isAdmin() {
-    const role = get().role;
-    return role === 'admin' || role === 'superadmin';
-  },
-
-  get isSuperAdmin() {
-    const superAdminEmail = import.meta.env.VITE_ADMIN_EMAIL || '';
-    return superAdminEmail !== '' && get().user?.email === superAdminEmail;
-  },
 }));
+
+// Selectors — funzionano sempre, perché leggono dallo state corrente
+export const selectIsAdmin = (s) => s.role === 'admin' || s.role === 'superadmin';
+export const selectIsSuperAdmin = (s) =>
+  SUPER_ADMIN_EMAIL !== '' && s.user?.email === SUPER_ADMIN_EMAIL;
 
 export default useAuthStore;
