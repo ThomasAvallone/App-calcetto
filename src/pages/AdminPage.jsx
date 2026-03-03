@@ -5,11 +5,11 @@ import { downloadExcel } from '../services/excelService';
 import { doc, getDocs, collection, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { HISTORICAL_SEASONS, getCurrentRosterPlayers, computeCumulativeStats } from '../data/historicalData';
-import useAuthStore, { selectIsSuperAdmin } from '../store/authStore';
+import useAuthStore, { selectIsAdmin } from '../store/authStore';
 import toast from 'react-hot-toast';
 
 export default function AdminPage() {
-  const currentIsSuperAdmin = useAuthStore(s => selectIsSuperAdmin(s) || s.role === 'superadmin');
+  const currentIsAdmin = useAuthStore(selectIsAdmin);
   const currentUser = useAuthStore(s => s.user);
   const [players, setPlayers] = useState([]);
   const [matches, setMatches] = useState([]);
@@ -152,7 +152,7 @@ export default function AdminPage() {
   };
 
   const handleSetRole = async (uid, newRole) => {
-    if (!currentIsSuperAdmin) return;
+    if (!currentIsAdmin) return;
     try {
       await updateDoc(doc(db, 'users', uid), { role: newRole });
       setUsers(u => u.map(user => user.id === uid ? { ...user, role: newRole } : user));
@@ -298,8 +298,8 @@ export default function AdminPage() {
         </button>
       </div>
 
-      {/* User Management – solo superadmin */}
-      {currentIsSuperAdmin && (
+      {/* User Management */}
+      {currentIsAdmin && (
         <div className="card mb-4">
           <h3 className="mb-3">👥 Gestione Utenti</h3>
           {users.length === 0 ? (
