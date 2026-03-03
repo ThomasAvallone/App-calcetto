@@ -43,6 +43,9 @@ export default function PlayersPage() {
   const [recalcLoading, setRecalcLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [selectedPlayer, setSelectedPlayer] = useState(null);
+  const [statView, setStatView] = useState('season');
+
+  useEffect(() => { setStatView('season'); }, [selectedPlayer]);
 
   // Historical linking state
   const [linkedNames, setLinkedNames] = useState([]);
@@ -251,6 +254,8 @@ export default function PlayersPage() {
     const pForm = playerFormMap[p.id];
     const rf = p.recentForm;
     const formColor = rf ? (rf.avg >= 7 ? '#68D391' : rf.avg >= 5 ? '#F6E05E' : '#FC8181') : null;
+    const seasonSt = playerSeasonStats[p.id] || {};
+    const displaySt = statView === 'season' ? seasonSt : total;
 
     return (
       <div className="page-content">
@@ -336,12 +341,31 @@ export default function PlayersPage() {
           )}
         </div>
 
+        {/* Stat view toggle */}
+        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+          {[{ key: 'season', label: '📅 Stagione' }, { key: 'alltime', label: '📊 All-time' }].map(t => (
+            <button
+              key={t.key}
+              onClick={() => setStatView(t.key)}
+              style={{
+                flex: 1, padding: '0.5rem 0', border: 'none', borderRadius: '8px',
+                fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer',
+                background: statView === t.key ? '#4FD1C5' : 'rgba(74,85,104,0.35)',
+                color: statView === t.key ? '#1A202C' : '#A0AEC0',
+                transition: 'background 0.15s',
+              }}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
         <div className="grid-2 mb-4">
           {[
-            { label: 'Gol', value: total.goals, icon: '⚽', color: '#4FD1C5' },
-            { label: 'Assist', value: total.assists, icon: '🎯', color: '#63B3ED' },
-            { label: 'Autogol', value: total.autogoals, icon: '🤦', color: '#FC8181' },
-            { label: 'Partite', value: total.matches, icon: '🏟️', color: '#A0AEC0' },
+            { label: 'Gol', value: displaySt.goals || 0, icon: '⚽', color: '#4FD1C5' },
+            { label: 'Assist', value: displaySt.assists || 0, icon: '🎯', color: '#63B3ED' },
+            { label: 'Autogol', value: displaySt.autogoals || 0, icon: '🤦', color: '#FC8181' },
+            { label: 'Partite', value: displaySt.matches || 0, icon: '🏟️', color: '#A0AEC0' },
           ].map(s => (
             <div key={s.label} className="card" style={{ textAlign: 'center', padding: '1rem' }}>
               <div style={{ fontSize: '1.3rem' }}>{s.icon}</div>
@@ -352,13 +376,13 @@ export default function PlayersPage() {
         </div>
 
         <div className="card mb-4">
-          <h3 className="mb-3">📊 Record Completo</h3>
+          <h3 className="mb-3">📊 Record {statView === 'season' ? 'Stagione' : 'All-time'}</h3>
           {[
-            { label: 'Vittorie', value: total.wins, icon: '✅' },
-            { label: 'Pareggi', value: total.draws, icon: '🤝' },
-            { label: 'Sconfitte', value: total.losses, icon: '❌' },
-            { label: 'Partite GK', value: total.gkMatches, icon: '🧤' },
-            { label: 'Gol Subiti (GK)', value: total.gkGoalsConceded, icon: '🚀' },
+            { label: 'Vittorie', value: displaySt.wins || 0, icon: '✅' },
+            { label: 'Pareggi', value: displaySt.draws || 0, icon: '🤝' },
+            { label: 'Sconfitte', value: displaySt.losses || 0, icon: '❌' },
+            { label: 'Partite GK', value: displaySt.gkMatches || 0, icon: '🧤' },
+            { label: 'Gol Subiti (GK)', value: displaySt.gkGoalsConceded || 0, icon: '🚀' },
           ].map(s => (
             <div key={s.label} className="flex items-center justify-between"
               style={{ padding: '0.5rem 0', borderBottom: '1px solid #2D3748' }}>
