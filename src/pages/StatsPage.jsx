@@ -272,28 +272,11 @@ export default function StatsPage() {
           for (let j = i + 1; j < team.length; j++) {
             const [p1, p2] = team[i].id < team[j].id ? [team[i], team[j]] : [team[j], team[i]];
             const key = `${p1.id}|${p2.id}`;
-            if (!pairs[key]) pairs[key] = { name1: p1.name, name2: p2.name, wins: 0, draws: 0, losses: 0, matches: 0, mutualAssists: 0 };
+            if (!pairs[key]) pairs[key] = { name1: p1.name, name2: p2.name, wins: 0, draws: 0, losses: 0, matches: 0 };
             pairs[key].matches++;
             pairs[key][result]++;
           }
         }
-      }
-      // Assist reciproci: A ha assistito B o viceversa nello stesso match
-      // Fallback su assistName quando assistId non è salvato (eventi modificati manualmente)
-      const nameToId = {};
-      for (const pl of [...(m.redTeam || []), ...(m.blueTeam || [])]) {
-        if (pl.name) nameToId[pl.name.toUpperCase()] = pl.id;
-      }
-      for (const ev of (m.events || [])) {
-        if (ev.type !== 'goal' || !ev.scorerId) continue;
-        const assistId = ev.assistId || (ev.assistName ? nameToId[ev.assistName.trim().toUpperCase()] : null);
-        if (!assistId || ev.scorerId === assistId) continue;
-        const [id1, id2] = [ev.scorerId, assistId].sort();
-        const key = `${id1}|${id2}`;
-        if (!pairs[key]) continue;
-        const sameRed = (m.redTeam || []).some(p => p.id === id1) && (m.redTeam || []).some(p => p.id === id2);
-        const sameBlue = (m.blueTeam || []).some(p => p.id === id1) && (m.blueTeam || []).some(p => p.id === id2);
-        if (sameRed || sameBlue) pairs[key].mutualAssists++;
       }
     }
     return Object.values(pairs)
@@ -337,7 +320,7 @@ export default function StatsPage() {
     if (!h2hP1 || !h2hP2 || h2hP1 === h2hP2) return null;
     const p1name = players.find(p => p.id === h2hP1)?.name || '?';
     const p2name = players.find(p => p.id === h2hP2)?.name || '?';
-    let together = { wins: 0, draws: 0, losses: 0, matches: 0 };
+    let together = { wins: 0, draws: 0, losses: 0, matches: 0, mutualAssists: 0 };
     let against  = { p1wins: 0, p2wins: 0, draws: 0, matches: 0 };
     let p1Goals = 0, p2Goals = 0;
     for (const m of finishedMatches) {
@@ -361,6 +344,20 @@ export default function StatsPage() {
         if (p1s > p2s) against.p1wins++;
         else if (p1s < p2s) against.p2wins++;
         else against.draws++;
+      }
+      // Assist reciproci (solo quando insieme): p1 assiste p2 o viceversa
+      if (sameTeam) {
+        const nameToId = {};
+        for (const pl of [...(m.redTeam || []), ...(m.blueTeam || [])]) {
+          if (pl.name) nameToId[pl.name.toUpperCase()] = pl.id;
+        }
+        for (const ev of (m.events || [])) {
+          if (ev.type !== 'goal' || !ev.scorerId) continue;
+          const assistId = ev.assistId || (ev.assistName ? nameToId[ev.assistName.trim().toUpperCase()] : null);
+          if (!assistId) continue;
+          const pair = new Set([ev.scorerId, assistId]);
+          if (pair.has(h2hP1) && pair.has(h2hP2)) together.mutualAssists++;
+        }
       }
       for (const ev of (m.events || [])) {
         if (ev.type === 'goal') {
@@ -565,9 +562,6 @@ export default function StatsPage() {
                       <div className="text-xs text-muted">
                         {duo.wins}V · {duo.draws}P · {duo.losses}S su {duo.matches} partite
                       </div>
-                      {duo.mutualAssists > 0 && (
-                        <div className="text-xs" style={{ color: '#63B3ED' }}>🎯 {duo.mutualAssists} assist reciproci</div>
-                      )}
                     </div>
                     <div style={{ fontWeight: 800, fontSize: '1.15rem', color: '#B794F4' }}>
                       {wr}<span style={{ fontSize: '0.7rem', color: '#718096', marginLeft: '2px' }}>%</span>
@@ -627,6 +621,11 @@ export default function StatsPage() {
                         {Math.round((h2hStats.together.wins + h2hStats.together.draws * 0.5) / h2hStats.together.matches * 100)}%
                       </strong> su {h2hStats.together.matches} partite
                     </div>
+                    {h2hStats.together.mutualAssists > 0 && (
+                      <div style={{ textAlign: 'center', fontSize: '0.8rem', color: '#63B3ED', marginTop: '0.5rem' }}>
+                        🎯 {h2hStats.together.mutualAssists} assist reciproci
+                      </div>
+                    )}
                   </>
                 )}
               </div>
