@@ -21,7 +21,11 @@ const useAuthStore = create((set, get) => ({
   async login() {
     set({ error: null });
     try {
-      await loginWithGoogle();
+      const user = await loginWithGoogle();
+      // loginWithGoogle può aver scritto/migrato il ruolo su Firestore *dopo*
+      // che onAuthStateChanged ha già letto il valore vecchio: ri-leggiamo.
+      const role = await getUserRole(user.uid);
+      set(s => ({ ...s, role }));
     } catch (e) {
       set({ error: e.message });
     }
