@@ -47,7 +47,44 @@ function MedalIcon({ rank }) {
   );
 }
 
-function LeaderboardRow({ rank, player, primary, secondary, primaryLabel, accentColor }) {
+function FormDots({ results }) {
+  const colors = { W: '#68D391', D: '#F6E05E', L: '#FC8181' };
+  return (
+    <div style={{ display: 'flex', gap: '3px', alignItems: 'center', marginTop: '3px' }}>
+      {results.map((r, i) => (
+        <div key={i} title={r === 'W' ? 'Vittoria' : r === 'D' ? 'Pareggio' : 'Sconfitta'} style={{
+          width: 7, height: 7, borderRadius: '50%',
+          background: colors[r],
+          opacity: 1 - i * 0.1,
+          flexShrink: 0,
+        }} />
+      ))}
+      {results.length === 0 && (
+        <span style={{ fontSize: '0.6rem', color: '#4A5568' }}>–</span>
+      )}
+    </div>
+  );
+}
+
+function StreakBadge({ streak }) {
+  if (!streak || streak.count < 2) return null;
+  const color = streak.type === 'W' ? '#68D391' : streak.type === 'L' ? '#FC8181' : '#F6E05E';
+  const label = streak.type === 'W' ? 'V' : streak.type === 'L' ? 'S' : 'P';
+  return (
+    <span style={{
+      fontSize: '0.62rem', fontWeight: 700, color,
+      border: `1px solid ${color}55`,
+      borderRadius: '4px', padding: '1px 4px',
+      background: color + '18',
+      lineHeight: 1.2,
+      flexShrink: 0,
+    }}>
+      {streak.count}{label}
+    </span>
+  );
+}
+
+function LeaderboardRow({ rank, player, primary, secondary, primaryLabel, accentColor, form }) {
   return (
     <div className="flex items-center gap-3"
       style={{ padding: '0.6rem 0', borderBottom: '1px solid rgba(74,85,104,0.4)' }}>
@@ -56,12 +93,16 @@ function LeaderboardRow({ rank, player, primary, secondary, primaryLabel, accent
       </div>
       <Avatar name={player.name} size={32} />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 600, fontSize: '0.92rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {player.name}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+          <span style={{ fontWeight: 600, fontSize: '0.92rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {player.name}
+          </span>
+          {form && <StreakBadge streak={form.streak} />}
         </div>
         {secondary != null && (
           <div className="text-xs text-muted">{secondary}</div>
         )}
+        {form && <FormDots results={form.lastFive} />}
       </div>
       <div style={{ fontWeight: 800, fontSize: '1.15rem', color: accentColor || '#4FD1C5' }}>
         {primary}
@@ -213,6 +254,32 @@ export default function StatsPage() {
       .slice(0, 10);
   }, [finishedMatches]);
 
+  // Recent form (last 5 W/D/L) per player – always from most recent matches
+  const playerForms = useMemo(() => {
+    const forms = {};
+    for (const p of players) {
+      const pMatches = finishedMatches
+        .filter(m => [...(m.redTeam || []), ...(m.blueTeam || [])].some(pl => pl.id === p.id))
+        .sort((a, b) => getMs(b.date) - getMs(a.date))
+        .slice(0, 5);
+      const lastFive = pMatches.map(m => {
+        const inRed = (m.redTeam || []).some(pl => pl.id === p.id);
+        const my = inRed ? (m.redScore ?? 0) : (m.blueScore ?? 0);
+        const their = inRed ? (m.blueScore ?? 0) : (m.redScore ?? 0);
+        return my > their ? 'W' : my < their ? 'L' : 'D';
+      });
+      let streak = null;
+      if (lastFive.length >= 2) {
+        const type = lastFive[0];
+        let count = 0;
+        for (const r of lastFive) { if (r === type) count++; else break; }
+        if (count >= 2) streak = { type, count };
+      }
+      forms[p.id] = { lastFive, streak };
+    }
+    return forms;
+  }, [players, finishedMatches]);
+
   // H2H stats
   const h2hStats = useMemo(() => {
     if (!h2hP1 || !h2hP2 || h2hP1 === h2hP2) return null;
@@ -363,6 +430,7 @@ export default function StatsPage() {
                 primaryLabel={cfg.getLabel(p)}
                 secondary={cfg.getSub(p)}
                 accentColor={cfg.accent}
+                form={playerForms[p.id]}
               />
             ))}
           </div>
