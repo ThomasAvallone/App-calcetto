@@ -431,6 +431,8 @@ export default function PlayersPage() {
           ))}
         </div>
 
+        <PlayerRecords allMatches={allMatches} player={p} />
+
         <PlayerBadges player={p} seasonStats={playerSeasonStats[p.id]} />
 
         {hasHistory && (
@@ -811,6 +813,64 @@ function PlayerMatchHistory({ matches, playerId }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function PlayerRecords({ allMatches, player }) {
+  const pid = player.id;
+  const playerMatches = allMatches
+    .filter(m =>
+      m.status === 'finished' &&
+      [...(m.redTeam || []), ...(m.blueTeam || [])].some(p => p.id === pid)
+    )
+    .sort((a, b) => getMs(a.date) - getMs(b.date)); // oldest first
+
+  if (playerMatches.length === 0) return null;
+
+  let maxWinStreak = 0, maxLossStreak = 0, curWin = 0, curLoss = 0;
+  let bestGoals = 0, bestGoalsDate = null;
+
+  for (const m of playerMatches) {
+    const inRed = (m.redTeam || []).some(p => p.id === pid);
+    const my = inRed ? (m.redScore ?? 0) : (m.blueScore ?? 0);
+    const their = inRed ? (m.blueScore ?? 0) : (m.redScore ?? 0);
+    if (my > their) { curWin++; curLoss = 0; }
+    else if (my < their) { curLoss++; curWin = 0; }
+    else { curWin = 0; curLoss = 0; }
+    maxWinStreak = Math.max(maxWinStreak, curWin);
+    maxLossStreak = Math.max(maxLossStreak, curLoss);
+    const goals = (m.events || []).filter(e => e.type === 'goal' && e.scorerId === pid).length;
+    if (goals > bestGoals) { bestGoals = goals; bestGoalsDate = m.date; }
+  }
+
+  const firstDate = (() => {
+    const d = playerMatches[0]?.date;
+    return d?.toDate ? d.toDate() : d ? new Date(d) : null;
+  })();
+  const bestGoalMatchDate = (() => {
+    if (!bestGoalsDate) return null;
+    return bestGoalsDate?.toDate ? bestGoalsDate.toDate() : new Date(bestGoalsDate);
+  })();
+
+  const items = [
+    { icon: '🏟️', label: 'Partite totali', value: playerMatches.length },
+    maxWinStreak >= 2 && { icon: '🔥', label: 'Miglior serie V', value: `${maxWinStreak} di fila` },
+    maxLossStreak >= 2 && { icon: '📉', label: 'Peggior serie S', value: `${maxLossStreak} di fila` },
+    bestGoals >= 2 && { icon: '🎩', label: 'Record gol in 1 partita', value: `${bestGoals} gol${bestGoalMatchDate ? ` (${format(bestGoalMatchDate, 'dd/MM/yy', { locale: it })})` : ''}` },
+    firstDate && { icon: '📅', label: 'Prima partita', value: format(firstDate, 'dd MMM yyyy', { locale: it }) },
+  ].filter(Boolean);
+
+  return (
+    <div className="card mb-4">
+      <h3 className="mb-3" style={{ fontSize: '0.95rem' }}>📊 Record Personali</h3>
+      {items.map(item => (
+        <div key={item.label} className="flex items-center justify-between"
+          style={{ padding: '0.5rem 0', borderBottom: '1px solid #2D3748' }}>
+          <span className="text-secondary">{item.icon} {item.label}</span>
+          <span style={{ fontWeight: 600 }}>{item.value}</span>
+        </div>
+      ))}
     </div>
   );
 }

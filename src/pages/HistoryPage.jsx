@@ -43,6 +43,7 @@ export default function HistoryPage() {
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const [viewMode, setViewMode] = useState('list');
 
   // Filter state
   const [showFilters, setShowFilters] = useState(false);
@@ -127,13 +128,36 @@ export default function HistoryPage() {
 
   return (
     <div className="page-content">
-      <h2 style={{ paddingTop: '0.5rem', marginBottom: '1.5rem' }}>📋 Storico Partite</h2>
+      <div className="flex items-center justify-between" style={{ paddingTop: '0.5rem', marginBottom: '1.25rem' }}>
+        <h2>📋 Storico Partite</h2>
+        <div className="flex gap-1">
+          {[{ key: 'list', label: '☰' }, { key: 'calendar', label: '📅' }].map(v => (
+            <button
+              key={v.key}
+              onClick={() => setViewMode(v.key)}
+              style={{
+                padding: '0.3rem 0.65rem', borderRadius: '6px', border: 'none',
+                background: viewMode === v.key ? 'rgba(79,209,197,0.2)' : 'rgba(74,85,104,0.4)',
+                color: viewMode === v.key ? '#4FD1C5' : '#A0AEC0',
+                cursor: 'pointer', fontSize: '0.9rem', fontWeight: 600,
+              }}
+            >
+              {v.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {loading && (
         <div style={{ textAlign: 'center', padding: '2rem', color: '#718096' }}>
           Caricamento...
         </div>
       )}
+
+      {viewMode === 'calendar' ? (
+        <CalendarView matches={matches} onNavigate={navigate} />
+      ) : (
+      <>
 
       {scheduled.length > 0 && (
         <>
@@ -268,6 +292,142 @@ export default function HistoryPage() {
         <div style={{ textAlign: 'center', padding: '3rem 1rem', color: '#718096' }}>
           <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📭</div>
           <p>Nessuna partita nell'archivio</p>
+        </div>
+      )}
+
+      </>
+      )}
+    </div>
+  );
+}
+
+const MONTH_NAMES = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+
+function CalendarView({ matches, onNavigate }) {
+  const now = new Date();
+  const [year, setYear] = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth());
+  const [selectedDay, setSelectedDay] = useState(null);
+
+  const matchesByDay = useMemo(() => {
+    const map = {};
+    for (const m of matches) {
+      const d = m.date?.toDate ? m.date.toDate() : m.date ? new Date(m.date) : null;
+      if (!d || isNaN(d)) continue;
+      if (d.getFullYear() === year && d.getMonth() === month) {
+        const day = d.getDate();
+        if (!map[day]) map[day] = [];
+        map[day].push(m);
+      }
+    }
+    return map;
+  }, [matches, year, month]);
+
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const firstDow = (new Date(year, month, 1).getDay() + 6) % 7; // 0=Lun
+
+  const cells = [];
+  for (let i = 0; i < firstDow; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+  while (cells.length % 7 !== 0) cells.push(null);
+  const weeks = [];
+  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+
+  const today = new Date();
+  const isToday = d => d && today.getFullYear() === year && today.getMonth() === month && today.getDate() === d;
+
+  const prevMonth = () => { setSelectedDay(null); if (month === 0) { setYear(y => y - 1); setMonth(11); } else setMonth(m => m - 1); };
+  const nextMonth = () => { setSelectedDay(null); if (month === 11) { setYear(y => y + 1); setMonth(0); } else setMonth(m => m + 1); };
+
+  const selectedMatches = selectedDay ? (matchesByDay[selectedDay] || []) : [];
+
+  return (
+    <div className="card">
+      {/* Navigation */}
+      <div className="flex items-center justify-between mb-3">
+        <button onClick={prevMonth} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#A0AEC0', fontSize: '1.3rem', padding: '0.2rem 0.5rem', lineHeight: 1 }}>‹</button>
+        <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>{MONTH_NAMES[month]} {year}</span>
+        <button onClick={nextMonth} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#A0AEC0', fontSize: '1.3rem', padding: '0.2rem 0.5rem', lineHeight: 1 }}>›</button>
+      </div>
+
+      {/* Day-of-week headers */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', marginBottom: '4px' }}>
+        {['L','M','M','G','V','S','D'].map((d, i) => (
+          <div key={i} style={{ textAlign: 'center', fontSize: '0.65rem', fontWeight: 700, color: '#718096', padding: '0.15rem 0' }}>{d}</div>
+        ))}
+      </div>
+
+      {/* Calendar grid */}
+      {weeks.map((week, wi) => (
+        <div key={wi} style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '2px', marginBottom: '2px' }}>
+          {week.map((day, di) => {
+            const dayMs = matchesByDay[day] || [];
+            const hasMatch = dayMs.length > 0;
+            const hasFinished = dayMs.some(m => m.status === 'finished');
+            const hasScheduled = dayMs.some(m => m.status === 'scheduled');
+            const hasActive = dayMs.some(m => m.status !== 'finished' && m.status !== 'scheduled');
+            const isSelected = day === selectedDay;
+            return (
+              <div
+                key={di}
+                onClick={() => day && hasMatch && setSelectedDay(isSelected ? null : day)}
+                style={{
+                  minHeight: '42px', borderRadius: '6px', padding: '0.25rem 0',
+                  background: isSelected ? 'rgba(79,209,197,0.18)' : hasMatch ? 'rgba(79,209,197,0.06)' : 'transparent',
+                  border: isToday(day) ? '1px solid rgba(79,209,197,0.6)' : isSelected ? '1px solid rgba(79,209,197,0.4)' : '1px solid transparent',
+                  cursor: hasMatch ? 'pointer' : 'default',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center',
+                }}
+              >
+                {day && (
+                  <>
+                    <span style={{ fontSize: '0.78rem', fontWeight: isToday(day) ? 700 : 400, color: isToday(day) ? '#4FD1C5' : '#F7FAFC', marginBottom: '3px' }}>{day}</span>
+                    <div style={{ display: 'flex', gap: '2px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                      {hasFinished && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#4FD1C5' }} />}
+                      {hasScheduled && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#F6E05E' }} />}
+                      {hasActive && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#68D391' }} />}
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ))}
+
+      {/* Legend */}
+      <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', marginTop: '0.75rem', marginBottom: selectedMatches.length ? '0.75rem' : 0 }}>
+        {[['#4FD1C5','Conclusa'],['#F6E05E','Programmata'],['#68D391','In corso']].map(([c, l]) => (
+          <span key={l} style={{ fontSize: '0.65rem', color: '#718096', display: 'flex', alignItems: 'center', gap: '3px' }}>
+            <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: c }} />{l}
+          </span>
+        ))}
+      </div>
+
+      {/* Selected day panel */}
+      {selectedMatches.length > 0 && (
+        <div style={{ borderTop: '1px solid #2D3748', paddingTop: '0.75rem', marginTop: '0.25rem' }}>
+          <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#4FD1C5', marginBottom: '0.5rem' }}>
+            📅 {selectedDay} {MONTH_NAMES[month]} {year}
+          </div>
+          {selectedMatches.map(m => {
+            const isFinished = m.status === 'finished';
+            const isScheduled = m.status === 'scheduled';
+            const path = isFinished ? `/history/${m.id}` : isScheduled ? `/history/scheduled/${m.id}` : `/match/${m.id}`;
+            return (
+              <div
+                key={m.id}
+                onClick={() => onNavigate(path)}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.45rem 0', cursor: 'pointer', borderBottom: '1px solid rgba(74,85,104,0.3)' }}
+              >
+                <div style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, background: isFinished ? '#4FD1C5' : isScheduled ? '#F6E05E' : '#68D391' }} />
+                <span style={{ fontSize: '0.88rem', fontWeight: 600, flex: 1 }}>
+                  {isFinished ? `🔴 ${m.redScore ?? 0} — ${m.blueScore ?? 0} 🔵` : isScheduled ? 'Da giocare' : 'In corso'}
+                </span>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#718096" strokeWidth={2}><path d="M9 18l6-6-6-6"/></svg>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

@@ -9,6 +9,7 @@ const LEADERBOARD_TABS = [
   { key: 'winrate', label: '🏆 Win %' },
   { key: 'matches', label: '🏟️ Presenze' },
   { key: 'gk',      label: '🧤 GK' },
+  { key: 'classifica', label: '📋 Classifica' },
   { key: 'duo',     label: '👥 Duo' },
   { key: 'h2h',     label: '⚔️ H2H' },
 ];
@@ -232,6 +233,32 @@ export default function StatsPage() {
     return computeStatsFromMatches(players, filtered);
   }, [period, players, finishedMatches]);
 
+  // Classifica: computed from matches (GF/GS not in p.stats)
+  const standingsStats = useMemo(() => {
+    const cutoff = period === '30d'
+      ? Date.now() - 30 * 24 * 60 * 60 * 1000
+      : period === 'season' ? getSeasonStartMs() : 0;
+    const filtered = cutoff === 0 ? finishedMatches : finishedMatches.filter(m => getMs(m.date) >= cutoff);
+    return players
+      .map(p => {
+        let v = 0, x = 0, s = 0, gf = 0, gs = 0;
+        for (const m of filtered) {
+          const inRed = (m.redTeam || []).some(pl => pl.id === p.id);
+          const inBlue = (m.blueTeam || []).some(pl => pl.id === p.id);
+          if (!inRed && !inBlue) continue;
+          const my = inRed ? (m.redScore ?? 0) : (m.blueScore ?? 0);
+          const their = inRed ? (m.blueScore ?? 0) : (m.redScore ?? 0);
+          gf += my; gs += their;
+          if (my > their) v++;
+          else if (my < their) s++;
+          else x++;
+        }
+        return { ...p, pt: v * 3 + x, p: v + x + s, v, x, s, gf, gs, dr: gf - gs };
+      })
+      .filter(row => row.p > 0)
+      .sort((a, b) => b.pt - a.pt || b.dr - a.dr || b.gf - a.gf);
+  }, [players, finishedMatches, period]);
+
   // Duo stats – always all finished matches
   const duoStats = useMemo(() => {
     const pairs = {};
@@ -245,11 +272,21 @@ export default function StatsPage() {
           for (let j = i + 1; j < team.length; j++) {
             const [p1, p2] = team[i].id < team[j].id ? [team[i], team[j]] : [team[j], team[i]];
             const key = `${p1.id}|${p2.id}`;
-            if (!pairs[key]) pairs[key] = { name1: p1.name, name2: p2.name, wins: 0, draws: 0, losses: 0, matches: 0 };
+            if (!pairs[key]) pairs[key] = { name1: p1.name, name2: p2.name, wins: 0, draws: 0, losses: 0, matches: 0, mutualAssists: 0 };
             pairs[key].matches++;
             pairs[key][result]++;
           }
         }
+      }
+      // Assist reciproci: A ha assistito B o viceversa nello stesso match
+      for (const ev of (m.events || [])) {
+        if (ev.type !== 'goal' || !ev.scorerId || !ev.assistId || ev.scorerId === ev.assistId) continue;
+        const [id1, id2] = [ev.scorerId, ev.assistId].sort();
+        const key = `${id1}|${id2}`;
+        if (!pairs[key]) continue;
+        const sameRed = (m.redTeam || []).some(p => p.id === id1) && (m.redTeam || []).some(p => p.id === id2);
+        const sameBlue = (m.blueTeam || []).some(p => p.id === id1) && (m.blueTeam || []).some(p => p.id === id2);
+        if (sameRed || sameBlue) pairs[key].mutualAssists++;
       }
     }
     return Object.values(pairs)
@@ -377,7 +414,7 @@ export default function StatsPage() {
       <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '1rem', overflowX: 'auto', paddingBottom: '0.25rem' }}>
         {LEADERBOARD_TABS.map(t => {
           const isActive = tab === t.key;
-          const accent = t.key === 'duo' ? '#B794F4' : t.key === 'h2h' ? '#F6AD55' : tabConfig[t.key]?.accent || '#4FD1C5';
+          const accent = t.key === 'duo' ? '#B794F4' : t.key === 'h2h' ? '#F6AD55' : t.key === 'classifica' ? '#F6E05E' : tabConfig[t.key]?.accent || '#4FD1C5';
           return (
             <button
               key={t.key}
@@ -419,7 +456,7 @@ export default function StatsPage() {
       )}
 
       {/* Leaderboard */}
-      {!isSpecialTab && (
+      {!isSpecialTab && tab !== 'classifica' && (
         list.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '3rem 1rem', color: '#718096' }}>
             <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>📭</div>
@@ -441,6 +478,56 @@ export default function StatsPage() {
                 form={playerForms[p.id]}
               />
             ))}
+          </div>
+        )
+      )}
+
+      {/* Classifica tab */}
+      {tab === 'classifica' && (
+        standingsStats.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '3rem 1rem', color: '#718096' }}>
+            <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>📭</div>
+            <p>Nessuna partita nel periodo selezionato</p>
+          </div>
+        ) : (
+          <div className="card" style={{ padding: '0.5rem', overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid #4A5568', color: '#718096' }}>
+                  <th style={{ textAlign: 'left', padding: '0.5rem 0.3rem', fontWeight: 600 }}>#</th>
+                  <th style={{ textAlign: 'left', padding: '0.5rem 0.3rem', fontWeight: 600 }}>Nome</th>
+                  <th style={{ textAlign: 'center', padding: '0.5rem 0.25rem', fontWeight: 700, color: '#F6E05E' }}>Pt</th>
+                  <th style={{ textAlign: 'center', padding: '0.5rem 0.25rem', fontWeight: 600 }}>P</th>
+                  <th style={{ textAlign: 'center', padding: '0.5rem 0.25rem', fontWeight: 600, color: '#68D391' }}>V</th>
+                  <th style={{ textAlign: 'center', padding: '0.5rem 0.25rem', fontWeight: 600, color: '#F6E05E' }}>X</th>
+                  <th style={{ textAlign: 'center', padding: '0.5rem 0.25rem', fontWeight: 600, color: '#FC8181' }}>S</th>
+                  <th style={{ textAlign: 'center', padding: '0.5rem 0.25rem', fontWeight: 600 }}>GF</th>
+                  <th style={{ textAlign: 'center', padding: '0.5rem 0.25rem', fontWeight: 600 }}>GS</th>
+                  <th style={{ textAlign: 'center', padding: '0.5rem 0.25rem', fontWeight: 600 }}>DR</th>
+                </tr>
+              </thead>
+              <tbody>
+                {standingsStats.map((row, i) => (
+                  <tr key={row.id} style={{ borderBottom: '1px solid #2D3748' }}>
+                    <td style={{ padding: '0.45rem 0.3rem', color: i < 3 ? '#F6E05E' : '#718096', fontWeight: i < 3 ? 700 : 400 }}>{i + 1}</td>
+                    <td style={{ padding: '0.45rem 0.3rem', fontWeight: 600, maxWidth: '90px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.name}</td>
+                    <td style={{ textAlign: 'center', padding: '0.45rem 0.25rem', fontWeight: 800, color: '#F6E05E', fontSize: '0.9rem' }}>{row.pt}</td>
+                    <td style={{ textAlign: 'center', padding: '0.45rem 0.25rem', color: '#A0AEC0' }}>{row.p}</td>
+                    <td style={{ textAlign: 'center', padding: '0.45rem 0.25rem', color: '#68D391' }}>{row.v}</td>
+                    <td style={{ textAlign: 'center', padding: '0.45rem 0.25rem', color: '#F6E05E' }}>{row.x}</td>
+                    <td style={{ textAlign: 'center', padding: '0.45rem 0.25rem', color: '#FC8181' }}>{row.s}</td>
+                    <td style={{ textAlign: 'center', padding: '0.45rem 0.25rem' }}>{row.gf}</td>
+                    <td style={{ textAlign: 'center', padding: '0.45rem 0.25rem', color: '#718096' }}>{row.gs}</td>
+                    <td style={{ textAlign: 'center', padding: '0.45rem 0.25rem', fontWeight: 600, color: row.dr > 0 ? '#68D391' : row.dr < 0 ? '#FC8181' : '#A0AEC0' }}>
+                      {row.dr > 0 ? '+' : ''}{row.dr}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="text-xs text-muted mt-2" style={{ textAlign: 'center' }}>
+              3 pt per vittoria · 1 pt per pareggio · Ordine: Pt, DR, GF
+            </p>
           </div>
         )
       )}
@@ -471,6 +558,9 @@ export default function StatsPage() {
                       <div className="text-xs text-muted">
                         {duo.wins}V · {duo.draws}P · {duo.losses}S su {duo.matches} partite
                       </div>
+                      {duo.mutualAssists > 0 && (
+                        <div className="text-xs" style={{ color: '#63B3ED' }}>🎯 {duo.mutualAssists} assist reciproci</div>
+                      )}
                     </div>
                     <div style={{ fontWeight: 800, fontSize: '1.15rem', color: '#B794F4' }}>
                       {wr}<span style={{ fontSize: '0.7rem', color: '#718096', marginLeft: '2px' }}>%</span>
