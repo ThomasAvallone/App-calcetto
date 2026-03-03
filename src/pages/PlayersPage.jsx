@@ -57,6 +57,46 @@ export default function PlayersPage() {
 
   const finishedMatches = useMemo(() => allMatches.filter(m => m.status === 'finished'), [allMatches]);
 
+  // Current season start: September 1st of the current football season
+  const seasonStartMs = useMemo(() => {
+    const now = new Date();
+    const year = now.getMonth() >= 8 ? now.getFullYear() : now.getFullYear() - 1;
+    return new Date(year, 8, 1).getTime();
+  }, []);
+
+  // Season stats per player (goals/assists/etc. from current-season matches only)
+  const playerSeasonStats = useMemo(() => {
+    const seasonMatches = finishedMatches.filter(m => getMs(m.date) >= seasonStartMs);
+    const stats = {};
+    for (const p of players) {
+      const s = { goals: 0, assists: 0, autogoals: 0, matches: 0, wins: 0, draws: 0, losses: 0, gkMatches: 0, gkGoalsConceded: 0 };
+      for (const m of seasonMatches) {
+        const inRed = (m.redTeam || []).some(pl => pl.id === p.id);
+        const inBlue = (m.blueTeam || []).some(pl => pl.id === p.id);
+        if (!inRed && !inBlue) continue;
+        s.matches++;
+        const my = inRed ? (m.redScore ?? 0) : (m.blueScore ?? 0);
+        const their = inRed ? (m.blueScore ?? 0) : (m.redScore ?? 0);
+        if (my > their) s.wins++;
+        else if (my < their) s.losses++;
+        else s.draws++;
+        for (const ev of m.events || []) {
+          if (ev.type === 'goal') {
+            if (ev.scorerId === p.id) s.goals++;
+            if (ev.assistId === p.id) s.assists++;
+          }
+          if (ev.type === 'autogoal' && ev.scorerId === p.id) s.autogoals++;
+          if (ev.type === 'gk_turn' && ev.playerId === p.id) {
+            s.gkMatches++;
+            s.gkGoalsConceded += ev.goalsConceded || 0;
+          }
+        }
+      }
+      stats[p.id] = s;
+    }
+    return stats;
+  }, [players, finishedMatches, seasonStartMs]);
+
   const playerFormMap = useMemo(() => {
     const forms = {};
     for (const p of players) {
@@ -328,7 +368,7 @@ export default function PlayersPage() {
           ))}
         </div>
 
-        <PlayerBadges player={p} />
+        <PlayerBadges player={p} seasonStats={playerSeasonStats[p.id]} />
 
         {hasHistory && (
           <div className="card mb-4" style={{ background: 'rgba(246,224,94,0.05)', border: '1px solid rgba(246,224,94,0.2)' }}>
@@ -712,8 +752,8 @@ function PlayerMatchHistory({ matches, playerId }) {
   );
 }
 
-function PlayerBadges({ player }) {
-  const badges = computeBadges(player);
+function PlayerBadges({ player, seasonStats }) {
+  const badges = computeBadges(player, seasonStats);
   if (badges.length === 0) return null;
   return (
     <div className="card mb-4">

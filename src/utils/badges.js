@@ -1,47 +1,50 @@
+// Each badge definition uses:
+//   s  → season stats (goals, assists, autogoals, matches, wins, draws, losses, gkMatches, gkGoalsConceded)
+//   p  → full player object (for powerIndex and streak, which are not season-scoped)
 export const BADGE_DEFS = [
   // ── POSITIVI ──────────────────────────────────────────────────────────────
   {
     id: 'bomber',
     icon: '⚽',
     label: 'Bomber',
-    desc: '10+ gol segnati',
+    desc: '10+ gol in stagione',
     positive: true,
-    check: p => (p.stats?.goals || 0) >= 10,
+    check: (s) => (s.goals || 0) >= 10,
   },
   {
     id: 'assistman',
     icon: '🎯',
     label: 'Assistman',
-    desc: '10+ assist',
+    desc: '10+ assist in stagione',
     positive: true,
-    check: p => (p.stats?.assists || 0) >= 10,
+    check: (s) => (s.assists || 0) >= 10,
   },
   {
     id: 'cecchino',
     icon: '💥',
     label: 'Cecchino',
-    desc: '>0.5 gol/partita (min 5 partite)',
+    desc: '>0.5 gol/partita in stagione (min 5 partite)',
     positive: true,
-    check: p => (p.stats?.matches || 0) >= 5 && (p.stats?.goals || 0) / (p.stats?.matches || 1) > 0.5,
+    check: (s) => (s.matches || 0) >= 5 && (s.goals || 0) / (s.matches || 1) > 0.5,
   },
   {
     id: 'campione',
     icon: '🏆',
     label: 'Campione',
-    desc: '10+ vittorie',
+    desc: '10+ vittorie in stagione',
     positive: true,
-    check: p => (p.stats?.wins || 0) >= 10,
+    check: (s) => (s.wins || 0) >= 10,
   },
   {
     id: 'jolly',
     icon: '🌟',
     label: 'Jolly',
-    desc: '5+ gol, 5+ assist e 5+ vittorie',
+    desc: '5+ gol, 5+ assist e 5+ vittorie in stagione',
     positive: true,
-    check: p =>
-      (p.stats?.goals || 0) >= 5 &&
-      (p.stats?.assists || 0) >= 5 &&
-      (p.stats?.wins || 0) >= 5,
+    check: (s) =>
+      (s.goals || 0) >= 5 &&
+      (s.assists || 0) >= 5 &&
+      (s.wins || 0) >= 5,
   },
   {
     id: 'fenomeno',
@@ -49,7 +52,7 @@ export const BADGE_DEFS = [
     label: 'Fenomeno',
     desc: 'Power Index > 75',
     positive: true,
-    check: p => (p.powerIndex || 0) > 75,
+    check: (_s, p) => (p.powerIndex || 0) > 75,
   },
   {
     id: 'on_fire',
@@ -57,17 +60,17 @@ export const BADGE_DEFS = [
     label: 'On Fire',
     desc: '4+ vittorie consecutive',
     positive: true,
-    check: p => p.streak?.type === 'win' && (p.streak?.count || 0) >= 4,
+    check: (_s, p) => p.streak?.type === 'win' && (p.streak?.count || 0) >= 4,
   },
   {
     id: 'muro',
     icon: '🧱',
     label: 'Muro',
-    desc: 'Media GK < 1.5 gol/turno (min 5 turni)',
+    desc: 'Media GK < 1.5 gol/turno in stagione (min 5 turni)',
     positive: true,
-    check: p =>
-      (p.stats?.gkMatches || 0) >= 5 &&
-      (p.stats?.gkGoalsConceded || 0) / (p.stats?.gkMatches || 1) < 1.5,
+    check: (s) =>
+      (s.gkMatches || 0) >= 5 &&
+      (s.gkGoalsConceded || 0) / (s.gkMatches || 1) < 1.5,
   },
 
   // ── NEGATIVI / GOLIARDICI ─────────────────────────────────────────────────
@@ -75,9 +78,9 @@ export const BADGE_DEFS = [
     id: 'autogolista',
     icon: '🤦',
     label: 'Autogolista',
-    desc: '3+ autogol',
+    desc: '3+ autogol in stagione',
     positive: false,
-    check: p => (p.stats?.autogoals || 0) >= 3,
+    check: (s) => (s.autogoals || 0) >= 3,
   },
   {
     id: 'crisi',
@@ -85,20 +88,23 @@ export const BADGE_DEFS = [
     label: 'Crisi Nera',
     desc: '4+ sconfitte consecutive',
     positive: false,
-    check: p => p.streak?.type === 'loss' && (p.streak?.count || 0) >= 4,
+    check: (_s, p) => p.streak?.type === 'loss' && (p.streak?.count || 0) >= 4,
   },
   {
     id: 'colabrodo',
     icon: '🪣',
     label: 'Colabrodo',
-    desc: 'Media GK > 3 gol/turno (min 5 turni)',
+    desc: 'Media GK > 3 gol/turno in stagione (min 5 turni)',
     positive: false,
-    check: p =>
-      (p.stats?.gkMatches || 0) >= 5 &&
-      (p.stats?.gkGoalsConceded || 0) / (p.stats?.gkMatches || 1) > 3,
+    check: (s) =>
+      (s.gkMatches || 0) >= 5 &&
+      (s.gkGoalsConceded || 0) / (s.gkMatches || 1) > 3,
   },
 ];
 
-export function computeBadges(player) {
-  return BADGE_DEFS.filter(b => b.check(player));
+// seasonStats: stats computed from current-season matches only (goals, assists, etc.)
+// player: full player object (for powerIndex, streak)
+export function computeBadges(player, seasonStats) {
+  const s = seasonStats || player.stats || {};
+  return BADGE_DEFS.filter(b => b.check(s, player));
 }
