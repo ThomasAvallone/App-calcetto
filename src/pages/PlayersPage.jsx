@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import usePlayersStore from '../store/playersStore';
 import useAuthStore from '../store/authStore';
 import { computeCombinedPowerIndex, subscribeToMatches, recalculatePlayerStats } from '../firebase/firestore';
-import { suggestHistoricalNames, computeCumulativeStats, getUnlinkedNames } from '../data/historicalData';
+import { HISTORICAL_SEASONS, suggestHistoricalNames, computeCumulativeStats, getUnlinkedNames } from '../data/historicalData';
 import { computeBadges } from '../utils/badges';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -11,6 +11,27 @@ import toast from 'react-hot-toast';
 const ROLES = ['Portiere', 'Difensore', 'Centrocampista', 'Attaccante'];
 
 const getMs = d => d?.toMillis ? d.toMillis() : d ? new Date(d).getTime() : 0;
+
+// Map seasonId → { PLAYERNAME_UPPER → { presenze, assist } }
+const SEASON_PLAYER_MAP = {};
+for (const season of HISTORICAL_SEASONS) {
+  SEASON_PLAYER_MAP[season.id] = {};
+  for (const sp of season.players) {
+    SEASON_PLAYER_MAP[season.id][sp.name.toUpperCase()] = {
+      presenze: sp.presenze || 0,
+      assist: sp.assist || 0,
+    };
+  }
+}
+
+function getSeasonId(dateVal) {
+  const d = dateVal?.toMillis ? new Date(dateVal.toMillis()) : new Date(dateVal);
+  const year = d.getFullYear();
+  const month = d.getMonth() + 1;
+  return month >= 8
+    ? `${year}-${String(year + 1).slice(2)}`
+    : `${year - 1}-${String(year).slice(2)}`;
+}
 
 function FormDots({ results, size = 9 }) {
   const colors = { W: '#68D391', D: '#F6E05E', L: '#FC8181' };
@@ -73,6 +94,7 @@ export default function PlayersPage() {
     const stats = {};
     for (const p of players) {
       const s = { goals: 0, assists: 0, autogoals: 0, matches: 0, wins: 0, draws: 0, losses: 0, gkMatches: 0, gkGoalsConceded: 0 };
+      const histBySeason = {};
       for (const m of seasonMatches) {
         const inRed = (m.redTeam || []).some(pl => pl.id === p.id);
         const inBlue = (m.blueTeam || []).some(pl => pl.id === p.id);
@@ -94,6 +116,23 @@ export default function PlayersPage() {
             s.gkGoalsConceded += ev.goalsConceded || 0;
           }
         }
+        // Track historical matches by season for assist proration
+        if (m.isHistorical) {
+          const sid = getSeasonId(m.date);
+          histBySeason[sid] = (histBySeason[sid] || 0) + 1;
+        }
+      }
+      // Prorate historical assists (historical events lack assistId)
+      const histNames = (p.historicalNames || []).map(n => n.toUpperCase());
+      for (const [sid, countInPeriod] of Object.entries(histBySeason)) {
+        const seasonData = SEASON_PLAYER_MAP[sid];
+        if (!seasonData) continue;
+        let pData = null;
+        for (const name of histNames) {
+          if (seasonData[name]) { pData = seasonData[name]; break; }
+        }
+        if (!pData || !pData.presenze || !pData.assist) continue;
+        s.assists += Math.round(pData.assist * (countInPeriod / pData.presenze));
       }
       stats[p.id] = s;
     }
