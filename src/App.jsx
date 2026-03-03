@@ -25,10 +25,12 @@ function ProtectedRoute({ children }) {
 }
 
 function AdminRoute({ children }) {
-  const { user, role, loading } = useAuthStore();
+  const { user, loading } = useAuthStore();
+  const isAdmin = useAuthStore(s => s.isAdmin);
+  const isSuperAdmin = useAuthStore(s => s.isSuperAdmin);
   if (loading) return <Spinner fullPage />;
   if (!user) return <Navigate to="/login" replace />;
-  if (role !== 'admin' && role !== 'superadmin') return <Navigate to="/" replace />;
+  if (!isAdmin && !isSuperAdmin) return <Navigate to="/" replace />;
   return children;
 }
 

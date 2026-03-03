@@ -56,6 +56,9 @@ const IconStats = () => (
 
 export default function Layout() {
   const { role } = useAuthStore();
+  const isAdmin = useAuthStore(s => s.isAdmin);
+  const isSuperAdmin = useAuthStore(s => s.isSuperAdmin);
+  const showAdmin = isAdmin || isSuperAdmin;
   const { activeMatchId } = useMatchStore();
   const navigate = useNavigate();
 
@@ -95,14 +98,14 @@ export default function Layout() {
           </NavLink>
         )}
 
-        {!activeMatchId && role !== 'admin' && role !== 'superadmin' && (
+        {!activeMatchId && !showAdmin && (
           <NavLink to="/stagioni" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
             <IconBook />
             <span>Annali</span>
           </NavLink>
         )}
 
-        {(role === 'admin' || role === 'superadmin') && (
+        {showAdmin && (
           <NavLink to="/admin" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
             <IconAdmin />
             <span>Admin</span>

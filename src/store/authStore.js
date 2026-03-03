@@ -22,8 +22,6 @@ const useAuthStore = create((set, get) => ({
     set({ error: null });
     try {
       const user = await loginWithGoogle();
-      // loginWithGoogle può aver scritto/migrato il ruolo su Firestore *dopo*
-      // che onAuthStateChanged ha già letto il valore vecchio: ri-leggiamo.
       const role = await getUserRole(user.uid);
       set(s => ({ ...s, role }));
     } catch (e) {
@@ -37,14 +35,13 @@ const useAuthStore = create((set, get) => ({
   },
 
   get isAdmin() {
-    return get().role === 'admin' || get().role === 'superadmin';
+    const role = get().role;
+    return role === 'admin' || role === 'superadmin';
   },
 
   get isSuperAdmin() {
-    // Controlla il ruolo su Firestore OPPURE l'email (fallback durante la migrazione)
     const superAdminEmail = import.meta.env.VITE_ADMIN_EMAIL || '';
-    return get().role === 'superadmin' ||
-      (superAdminEmail !== '' && get().user?.email === superAdminEmail);
+    return superAdminEmail !== '' && get().user?.email === superAdminEmail;
   },
 }));
 
