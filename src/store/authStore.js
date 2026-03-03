@@ -41,7 +41,10 @@ const useAuthStore = create((set, get) => ({
   },
 
   get isSuperAdmin() {
-    return get().role === 'superadmin';
+    // Controlla il ruolo su Firestore OPPURE l'email (fallback durante la migrazione)
+    const superAdminEmail = import.meta.env.VITE_ADMIN_EMAIL || '';
+    return get().role === 'superadmin' ||
+      (superAdminEmail !== '' && get().user?.email === superAdminEmail);
   },
 }));
 

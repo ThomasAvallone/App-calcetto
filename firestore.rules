@@ -29,9 +29,15 @@ service cloud.firestore {
       allow create: if isAuth() && request.auth.uid == userId;
 
       // Il superadmin può modificare qualsiasi utente.
+      // Un admin può auto-promuoversi a superadmin solo sul proprio documento
+      // (migrazione one-time per l'owner dell'app) e solo cambiando il campo role.
       // Un admin normale può modificare solo i viewer (non altri admin né superadmin)
       // e non può promuovere nessuno a superadmin.
       allow update: if isSuperAdmin() ||
+                       (isAuth() && request.auth.uid == userId &&
+                        resource.data.role == 'admin' &&
+                        request.resource.data.role == 'superadmin' &&
+                        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role'])) ||
                        (isAdmin() &&
                         resource.data.role != 'superadmin' &&
                         resource.data.role != 'admin' &&
