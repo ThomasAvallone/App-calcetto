@@ -14,9 +14,9 @@ const LEADERBOARD_TABS = [
 ];
 
 const PERIODS = [
-  { key: 'all',  label: 'All-time' },
-  { key: '365d', label: 'Stagione' },
-  { key: '30d',  label: '30gg' },
+  { key: 'all',    label: 'All-time' },
+  { key: 'season', label: 'Stagione' },
+  { key: '30d',    label: '30gg' },
 ];
 
 const AVATAR_COLORS = ['#4FD1C5', '#63B3ED', '#F6E05E', '#FC8181', '#68D391', '#B794F4', '#F6AD55'];
@@ -113,6 +113,13 @@ function LeaderboardRow({ rank, player, primary, secondary, primaryLabel, accent
 }
 
 const getMs = d => d?.toMillis ? d.toMillis() : d ? new Date(d).getTime() : 0;
+
+// Returns the timestamp of September 1st of the current football season
+function getSeasonStartMs() {
+  const now = new Date();
+  const year = now.getMonth() >= 8 ? now.getFullYear() : now.getFullYear() - 1;
+  return new Date(year, 8, 1).getTime();
+}
 
 // Map seasonId → { PLAYERNAME_UPPER → { presenze, assist } }
 const SEASON_PLAYER_MAP = {};
@@ -218,9 +225,10 @@ export default function StatsPage() {
         };
       });
     }
-    const now = Date.now();
-    const cutoffMs = period === '30d' ? 30 * 24 * 60 * 60 * 1000 : 365 * 24 * 60 * 60 * 1000;
-    const filtered = finishedMatches.filter(m => now - getMs(m.date) <= cutoffMs);
+    const cutoff = period === '30d'
+      ? Date.now() - 30 * 24 * 60 * 60 * 1000
+      : getSeasonStartMs();
+    const filtered = finishedMatches.filter(m => getMs(m.date) >= cutoff);
     return computeStatsFromMatches(players, filtered);
   }, [period, players, finishedMatches]);
 

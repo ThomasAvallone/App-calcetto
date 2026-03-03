@@ -10,6 +10,25 @@ import toast from 'react-hot-toast';
 
 const ROLES = ['Portiere', 'Difensore', 'Centrocampista', 'Attaccante'];
 
+const getMs = d => d?.toMillis ? d.toMillis() : d ? new Date(d).getTime() : 0;
+
+function FormDots({ results, size = 9 }) {
+  const colors = { W: '#68D391', D: '#F6E05E', L: '#FC8181' };
+  if (!results || results.length === 0) return null;
+  return (
+    <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+      {results.map((r, i) => (
+        <div key={i} title={r === 'W' ? 'Vittoria' : r === 'D' ? 'Pareggio' : 'Sconfitta'} style={{
+          width: size, height: size, borderRadius: '50%',
+          background: colors[r],
+          opacity: 1 - i * 0.1,
+          flexShrink: 0,
+        }} />
+      ))}
+    </div>
+  );
+}
+
 const defaultForm = { name: '', primaryRole: 'Centrocampista', secondaryRole: '' };
 
 export default function PlayersPage() {
@@ -35,6 +54,33 @@ export default function PlayersPage() {
     const unsub = subscribeToMatches(setAllMatches);
     return unsub;
   }, []);
+
+  const finishedMatches = useMemo(() => allMatches.filter(m => m.status === 'finished'), [allMatches]);
+
+  const playerFormMap = useMemo(() => {
+    const forms = {};
+    for (const p of players) {
+      const pMatches = finishedMatches
+        .filter(m => [...(m.redTeam || []), ...(m.blueTeam || [])].some(pl => pl.id === p.id))
+        .sort((a, b) => getMs(b.date) - getMs(a.date))
+        .slice(0, 5);
+      const lastFive = pMatches.map(m => {
+        const inRed = (m.redTeam || []).some(pl => pl.id === p.id);
+        const my = inRed ? (m.redScore ?? 0) : (m.blueScore ?? 0);
+        const their = inRed ? (m.blueScore ?? 0) : (m.redScore ?? 0);
+        return my > their ? 'W' : my < their ? 'L' : 'D';
+      });
+      let formStreak = null;
+      if (lastFive.length >= 2) {
+        const type = lastFive[0];
+        let count = 0;
+        for (const r of lastFive) { if (r === type) count++; else break; }
+        if (count >= 2) formStreak = { type, count };
+      }
+      forms[p.id] = { lastFive, streak: formStreak };
+    }
+    return forms;
+  }, [players, finishedMatches]);
 
   const filtered = players.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
   const ranking = [...filtered].sort((a, b) => (b.powerIndex || 50) - (a.powerIndex || 50));
@@ -162,8 +208,7 @@ export default function PlayersPage() {
       gkGoalsConceded: as.gkGoalsConceded || 0,
     };
     const hasHistory = (p.historicalNames || []).length > 0;
-    const rf = p.recentForm;
-    const formColor = rf ? (rf.avg >= 7 ? '#68D391' : rf.avg >= 5 ? '#F6E05E' : '#FC8181') : null;
+    const pForm = playerFormMap[p.id];
 
     return (
       <div className="page-content">
@@ -198,15 +243,31 @@ export default function PlayersPage() {
             {p.secondaryRole && <span className="badge badge-gray">{p.secondaryRole}</span>}
             {hasHistory && <span className="badge" style={{ background: 'rgba(246,224,94,0.15)', color: '#F6E05E', border: '1px solid rgba(246,224,94,0.3)', fontSize: '0.65rem' }}>📚 Storico</span>}
           </div>
-          {rf && (
+          {pForm && pForm.lastFive.length > 0 && (
             <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid #2D3748' }}>
-              <div style={{ fontSize: '0.62rem', color: '#718096', letterSpacing: '0.06em', marginBottom: '0.2rem' }}>⭐ FORMA RECENTE</div>
-              <div style={{ fontSize: '1.75rem', fontWeight: 800, lineHeight: 1, color: formColor }}>
-                {rf.avg.toFixed(1)}<span style={{ fontSize: '0.85rem', color: '#718096' }}>/10</span>
+              <div style={{ fontSize: '0.62rem', color: '#718096', letterSpacing: '0.06em', marginBottom: '0.6rem' }}>FORMA RECENTE (ultime {pForm.lastFive.length})</div>
+              <div style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}>
+                {pForm.lastFive.map((r, i) => {
+                  const colors = { W: '#68D391', D: '#F6E05E', L: '#FC8181' };
+                  const label = { W: 'V', D: 'P', L: 'S' };
+                  return (
+                    <div key={i} title={r === 'W' ? 'Vittoria' : r === 'D' ? 'Pareggio' : 'Sconfitta'} style={{
+                      width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
+                      background: colors[r] + '22', border: `2px solid ${colors[r]}`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontWeight: 800, fontSize: '0.82rem', color: colors[r],
+                      opacity: 1 - i * 0.1,
+                    }}>
+                      {label[r]}
+                    </div>
+                  );
+                })}
               </div>
-              <div style={{ fontSize: '0.68rem', color: '#718096', marginTop: '0.2rem' }}>
-                {rf.ratedMatches}/{rf.totalMatches} partite valutate (ultimi 15)
-              </div>
+              {pForm.streak && pForm.streak.count >= 2 && (
+                <div style={{ marginTop: '0.5rem', fontSize: '0.72rem', color: pForm.streak.type === 'W' ? '#68D391' : pForm.streak.type === 'L' ? '#FC8181' : '#F6E05E' }}>
+                  {pForm.streak.count} {pForm.streak.type === 'W' ? 'vittorie' : pForm.streak.type === 'L' ? 'sconfitte' : 'pareggi'} di fila
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -382,14 +443,10 @@ export default function PlayersPage() {
                 <div className="text-xs text-muted">
                   {getRoleIcon(p.primaryRole)} {p.primaryRole || 'N/D'} · {totalMatches} partite
                 </div>
+                {playerFormMap[p.id] && <FormDots results={playerFormMap[p.id].lastFive} size={7} />}
               </div>
               <div style={{ textAlign: 'right' }}>
                 <div style={{ fontWeight: 700, color: '#4FD1C5' }}>{(p.powerIndex || 50).toFixed(1)}</div>
-                {p.recentForm && (
-                  <div className="text-xs" style={{ fontWeight: 600, color: p.recentForm.avg >= 7 ? '#68D391' : p.recentForm.avg >= 5 ? '#F6E05E' : '#FC8181' }}>
-                    ⭐ {p.recentForm.avg.toFixed(1)}
-                  </div>
-                )}
                 <div className="text-xs text-muted">
                   {totalGoals}⚽ {totalAssists}🎯
                 </div>
