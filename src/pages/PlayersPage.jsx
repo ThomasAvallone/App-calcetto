@@ -21,7 +21,7 @@ function FormDots({ results, size = 9 }) {
         <div key={i} title={r === 'W' ? 'Vittoria' : r === 'D' ? 'Pareggio' : 'Sconfitta'} style={{
           width: size, height: size, borderRadius: '50%',
           background: colors[r],
-          opacity: 1 - i * 0.1,
+          opacity: 0.4 + (i / Math.max(results.length - 1, 1)) * 0.6,
           flexShrink: 0,
         }} />
       ))}
@@ -64,20 +64,20 @@ export default function PlayersPage() {
         .filter(m => [...(m.redTeam || []), ...(m.blueTeam || [])].some(pl => pl.id === p.id))
         .sort((a, b) => getMs(b.date) - getMs(a.date))
         .slice(0, 5);
-      const lastFive = pMatches.map(m => {
+      const newestFirst = pMatches.map(m => {
         const inRed = (m.redTeam || []).some(pl => pl.id === p.id);
         const my = inRed ? (m.redScore ?? 0) : (m.blueScore ?? 0);
         const their = inRed ? (m.blueScore ?? 0) : (m.redScore ?? 0);
         return my > their ? 'W' : my < their ? 'L' : 'D';
       });
       let formStreak = null;
-      if (lastFive.length >= 2) {
-        const type = lastFive[0];
+      if (newestFirst.length >= 2) {
+        const type = newestFirst[0];
         let count = 0;
-        for (const r of lastFive) { if (r === type) count++; else break; }
+        for (const r of newestFirst) { if (r === type) count++; else break; }
         if (count >= 2) formStreak = { type, count };
       }
-      forms[p.id] = { lastFive, streak: formStreak };
+      forms[p.id] = { lastFive: [...newestFirst].reverse(), streak: formStreak };
     }
     return forms;
   }, [players, finishedMatches]);
@@ -258,7 +258,7 @@ export default function PlayersPage() {
                       background: colors[r] + '22', border: `2px solid ${colors[r]}`,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       fontWeight: 800, fontSize: '0.82rem', color: colors[r],
-                      opacity: 1 - i * 0.1,
+                      opacity: 0.4 + (i / Math.max(pForm.lastFive.length - 1, 1)) * 0.6,
                     }}>
                       {label[r]}
                     </div>
