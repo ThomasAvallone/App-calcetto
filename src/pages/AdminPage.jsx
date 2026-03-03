@@ -9,8 +9,8 @@ import useAuthStore from '../store/authStore';
 import toast from 'react-hot-toast';
 
 export default function AdminPage() {
-  const { role: currentRole, user: currentUser } = useAuthStore();
-  const currentIsSuperAdmin = currentRole === 'superadmin';
+  const { user: currentUser } = useAuthStore();
+  const currentIsSuperAdmin = useAuthStore(s => s.isSuperAdmin);
 
   const [players, setPlayers] = useState([]);
   const [matches, setMatches] = useState([]);
