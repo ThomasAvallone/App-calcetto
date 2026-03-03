@@ -279,9 +279,16 @@ export default function StatsPage() {
         }
       }
       // Assist reciproci: A ha assistito B o viceversa nello stesso match
+      // Fallback su assistName quando assistId non è salvato (eventi modificati manualmente)
+      const nameToId = {};
+      for (const pl of [...(m.redTeam || []), ...(m.blueTeam || [])]) {
+        if (pl.name) nameToId[pl.name.toUpperCase()] = pl.id;
+      }
       for (const ev of (m.events || [])) {
-        if (ev.type !== 'goal' || !ev.scorerId || !ev.assistId || ev.scorerId === ev.assistId) continue;
-        const [id1, id2] = [ev.scorerId, ev.assistId].sort();
+        if (ev.type !== 'goal' || !ev.scorerId) continue;
+        const assistId = ev.assistId || (ev.assistName ? nameToId[ev.assistName.trim().toUpperCase()] : null);
+        if (!assistId || ev.scorerId === assistId) continue;
+        const [id1, id2] = [ev.scorerId, assistId].sort();
         const key = `${id1}|${id2}`;
         if (!pairs[key]) continue;
         const sameRed = (m.redTeam || []).some(p => p.id === id1) && (m.redTeam || []).some(p => p.id === id2);
