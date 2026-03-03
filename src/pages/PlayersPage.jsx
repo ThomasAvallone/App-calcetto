@@ -209,6 +209,8 @@ export default function PlayersPage() {
     };
     const hasHistory = (p.historicalNames || []).length > 0;
     const pForm = playerFormMap[p.id];
+    const rf = p.recentForm;
+    const formColor = rf ? (rf.avg >= 7 ? '#68D391' : rf.avg >= 5 ? '#F6E05E' : '#FC8181') : null;
 
     return (
       <div className="page-content">
@@ -268,6 +270,28 @@ export default function PlayersPage() {
                   {pForm.streak.count} {pForm.streak.type === 'W' ? 'vittorie' : pForm.streak.type === 'L' ? 'sconfitte' : 'pareggi'} di fila
                 </div>
               )}
+              {isAdmin && rf && (
+                <div style={{ marginTop: '0.75rem', paddingTop: '0.5rem', borderTop: '1px solid rgba(45,55,72,0.6)' }}>
+                  <div style={{ fontSize: '0.6rem', color: '#718096', letterSpacing: '0.05em', marginBottom: '0.15rem' }}>⭐ VOTO MEDIO (admin)</div>
+                  <div style={{ fontSize: '1.4rem', fontWeight: 800, lineHeight: 1, color: formColor }}>
+                    {rf.avg.toFixed(1)}<span style={{ fontSize: '0.8rem', color: '#718096' }}>/10</span>
+                  </div>
+                  <div style={{ fontSize: '0.65rem', color: '#718096', marginTop: '0.1rem' }}>
+                    {rf.ratedMatches}/{rf.totalMatches} partite valutate (ultimi 15)
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          {!pForm?.lastFive?.length && isAdmin && rf && (
+            <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid #2D3748' }}>
+              <div style={{ fontSize: '0.62rem', color: '#718096', letterSpacing: '0.06em', marginBottom: '0.2rem' }}>⭐ VOTO MEDIO (admin)</div>
+              <div style={{ fontSize: '1.75rem', fontWeight: 800, lineHeight: 1, color: formColor }}>
+                {rf.avg.toFixed(1)}<span style={{ fontSize: '0.85rem', color: '#718096' }}>/10</span>
+              </div>
+              <div style={{ fontSize: '0.68rem', color: '#718096', marginTop: '0.2rem' }}>
+                {rf.ratedMatches}/{rf.totalMatches} partite valutate (ultimi 15)
+              </div>
             </div>
           )}
         </div>
@@ -447,6 +471,11 @@ export default function PlayersPage() {
               </div>
               <div style={{ textAlign: 'right' }}>
                 <div style={{ fontWeight: 700, color: '#4FD1C5' }}>{(p.powerIndex || 50).toFixed(1)}</div>
+                {isAdmin && p.recentForm && (
+                  <div className="text-xs" style={{ fontWeight: 600, color: p.recentForm.avg >= 7 ? '#68D391' : p.recentForm.avg >= 5 ? '#F6E05E' : '#FC8181' }}>
+                    ⭐ {p.recentForm.avg.toFixed(1)}
+                  </div>
+                )}
                 <div className="text-xs text-muted">
                   {totalGoals}⚽ {totalAssists}🎯
                 </div>
