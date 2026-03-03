@@ -33,7 +33,11 @@ const useAuthStore = create((set, get) => ({
   },
 
   get isAdmin() {
-    return get().role === 'admin';
+    return get().role === 'admin' || get().role === 'superadmin';
+  },
+
+  get isSuperAdmin() {
+    return get().role === 'superadmin';
   },
 }));
 

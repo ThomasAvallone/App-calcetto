@@ -1,5 +1,5 @@
 import { signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, googleProvider, db } from './config';
 
 export async function loginWithGoogle() {
@@ -9,7 +9,8 @@ export async function loginWithGoogle() {
   const userRef = doc(db, 'users', user.uid);
   const snap = await getDoc(userRef);
 
-  const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL || '';
+  const SUPER_ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL || '';
+  const isSuperAdminEmail = user.email === SUPER_ADMIN_EMAIL;
 
   if (!snap.exists()) {
     await setDoc(userRef, {
@@ -17,9 +18,12 @@ export async function loginWithGoogle() {
       email: user.email,
       displayName: user.displayName,
       photoURL: user.photoURL,
-      role: user.email === ADMIN_EMAIL ? 'admin' : 'viewer',
+      role: isSuperAdminEmail ? 'superadmin' : 'viewer',
       createdAt: serverTimestamp(),
     });
+  } else if (isSuperAdminEmail && snap.data().role === 'admin') {
+    // Migra l'account owner da 'admin' a 'superadmin'
+    await updateDoc(userRef, { role: 'superadmin' });
   }
 
   return user;

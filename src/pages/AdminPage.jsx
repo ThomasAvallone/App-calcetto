@@ -5,9 +5,13 @@ import { downloadExcel } from '../services/excelService';
 import { doc, getDocs, collection, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { HISTORICAL_SEASONS, getCurrentRosterPlayers, computeCumulativeStats } from '../data/historicalData';
+import useAuthStore from '../store/authStore';
 import toast from 'react-hot-toast';
 
 export default function AdminPage() {
+  const { role: currentRole, user: currentUser } = useAuthStore();
+  const currentIsSuperAdmin = currentRole === 'superadmin';
+
   const [players, setPlayers] = useState([]);
   const [matches, setMatches] = useState([]);
   const [users, setUsers] = useState([]);
@@ -150,6 +154,10 @@ export default function AdminPage() {
   };
 
   const handleSetRole = async (uid, newRole) => {
+    const target = users.find(u => u.id === uid);
+    if (target?.role === 'superadmin') return; // nessuno può toccare il superadmin
+    if (newRole === 'superadmin') return;       // nessuno può promuovere a superadmin via UI
+    if (!currentIsSuperAdmin && target?.role === 'admin') return; // solo superadmin può toccare altri admin
     try {
       await updateDoc(doc(db, 'users', uid), { role: newRole });
       setUsers(u => u.map(user => user.id === uid ? { ...user, role: newRole } : user));
@@ -300,26 +308,52 @@ export default function AdminPage() {
         <h3 className="mb-3">👥 Gestione Utenti</h3>
         {users.length === 0 ? (
           <p className="text-sm text-muted">Nessun utente registrato</p>
-        ) : users.map(u => (
-          <div key={u.id} style={{
-            display: 'flex', alignItems: 'center', gap: '0.75rem',
-            padding: '0.6rem 0', borderBottom: '1px solid #2D3748',
-          }}>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 500, fontSize: '0.9rem' }}>{u.displayName || u.email}</div>
-              <div className="text-xs text-muted">{u.email}</div>
+        ) : users.map(u => {
+          const isSuperAdminRow = u.role === 'superadmin';
+          const isAdminRow = u.role === 'admin';
+          // Un admin normale non può toccare altri admin; solo superadmin può
+          const canEdit = isSuperAdminRow
+            ? false
+            : isAdminRow
+              ? currentIsSuperAdmin
+              : true; // viewer: chiunque abbia accesso admin può modificarlo
+
+          return (
+            <div key={u.id} style={{
+              display: 'flex', alignItems: 'center', gap: '0.75rem',
+              padding: '0.6rem 0', borderBottom: '1px solid #2D3748',
+            }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 500, fontSize: '0.9rem' }}>{u.displayName || u.email}</div>
+                <div className="text-xs text-muted">{u.email}</div>
+              </div>
+              {canEdit ? (
+                <select
+                  className="input"
+                  style={{ width: 'auto', padding: '0.3rem 0.5rem', minHeight: 'auto', fontSize: '0.8rem' }}
+                  value={u.role || 'viewer'}
+                  onChange={e => handleSetRole(u.id, e.target.value)}
+                >
+                  <option value="viewer">👁️ Viewer</option>
+                  <option value="admin">⚙️ Admin</option>
+                </select>
+              ) : (
+                <span style={{
+                  padding: '0.2rem 0.6rem',
+                  borderRadius: '0.4rem',
+                  fontSize: '0.78rem',
+                  fontWeight: 600,
+                  background: isSuperAdminRow ? 'rgba(246,173,85,0.15)' : 'rgba(99,179,237,0.12)',
+                  color: isSuperAdminRow ? '#F6AD55' : '#63B3ED',
+                  border: `1px solid ${isSuperAdminRow ? 'rgba(246,173,85,0.35)' : 'rgba(99,179,237,0.25)'}`,
+                  userSelect: 'none',
+                }}>
+                  {isSuperAdminRow ? '👑 SuperAdmin' : '⚙️ Admin'}
+                </span>
+              )}
             </div>
-            <select
-              className="input"
-              style={{ width: 'auto', padding: '0.3rem 0.5rem', minHeight: 'auto', fontSize: '0.8rem' }}
-              value={u.role || 'viewer'}
-              onChange={e => handleSetRole(u.id, e.target.value)}
-            >
-              <option value="viewer">👁️ Viewer</option>
-              <option value="admin">⚙️ Admin</option>
-            </select>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Firebase Rules reminder */}

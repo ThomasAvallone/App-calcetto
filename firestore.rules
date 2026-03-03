@@ -8,19 +8,37 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Helper: check if user has admin role
+    // Helper: check if user has superadmin role
+    function isSuperAdmin() {
+      return isAuth() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'superadmin';
+    }
+
+    // Helper: check if user has admin OR superadmin role
     function isAdmin() {
       return isAuth() &&
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'superadmin'];
     }
 
-    // Users: authenticated users can read their own doc; admins can read/write all
+    // Users: authenticated users can read their own doc; admins can read all
+    // Gerarchia aggiornamenti: superadmin > admin > viewer
     match /users/{userId} {
       allow read: if isAuth() && (request.auth.uid == userId || isAdmin());
       allow create: if isAuth() && request.auth.uid == userId;
-      allow update: if isAdmin();
-      allow delete: if isAdmin();
+
+      // Il superadmin può modificare qualsiasi utente.
+      // Un admin normale può modificare solo i viewer (non altri admin né superadmin)
+      // e non può promuovere nessuno a superadmin.
+      allow update: if isSuperAdmin() ||
+                       (isAdmin() &&
+                        resource.data.role != 'superadmin' &&
+                        resource.data.role != 'admin' &&
+                        request.resource.data.role != 'superadmin');
+
+      allow delete: if isSuperAdmin() ||
+                       (isAdmin() && resource.data.role == 'viewer');
     }
 
     // Players: authenticated users can read; only admins can write

@@ -28,7 +28,7 @@ function AdminRoute({ children }) {
   const { user, role, loading } = useAuthStore();
   if (loading) return <Spinner fullPage />;
   if (!user) return <Navigate to="/login" replace />;
-  if (role !== 'admin') return <Navigate to="/" replace />;
+  if (role !== 'admin' && role !== 'superadmin') return <Navigate to="/" replace />;
   return children;
 }
 

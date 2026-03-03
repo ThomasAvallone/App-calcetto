@@ -95,14 +95,14 @@ export default function Layout() {
           </NavLink>
         )}
 
-        {!activeMatchId && role !== 'admin' && (
+        {!activeMatchId && role !== 'admin' && role !== 'superadmin' && (
           <NavLink to="/stagioni" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
             <IconBook />
             <span>Annali</span>
           </NavLink>
         )}
 
-        {role === 'admin' && (
+        {(role === 'admin' || role === 'superadmin') && (
           <NavLink to="/admin" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
             <IconAdmin />
             <span>Admin</span>
