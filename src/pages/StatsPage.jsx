@@ -621,11 +621,9 @@ export default function StatsPage() {
                         {Math.round((h2hStats.together.wins + h2hStats.together.draws * 0.5) / h2hStats.together.matches * 100)}%
                       </strong> su {h2hStats.together.matches} partite
                     </div>
-                    {h2hStats.together.mutualAssists > 0 && (
-                      <div style={{ textAlign: 'center', fontSize: '0.8rem', color: '#63B3ED', marginTop: '0.5rem' }}>
-                        🎯 {h2hStats.together.mutualAssists} assist reciproci
-                      </div>
-                    )}
+                    <div style={{ textAlign: 'center', fontSize: '0.8rem', color: '#63B3ED', marginTop: '0.5rem' }}>
+                      🎯 {h2hStats.together.mutualAssists} assist reciproci
+                    </div>
                   </>
                 )}
               </div>
