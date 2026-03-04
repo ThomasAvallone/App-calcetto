@@ -421,6 +421,7 @@ export default function MatchDetailPage() {
               {isEditing ? (() => {
                 const editTeamPlayers = ev.team === 'red' ? (match.redTeam || []) : (match.blueTeam || []);
                 const editOppPlayers = ev.team === 'red' ? (match.blueTeam || []) : (match.redTeam || []);
+                const editGkPlayers = ev.type === 'autogoal' ? editTeamPlayers : editOppPlayers;
                 return (
                 <div style={{ padding: '0.75rem 0' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
@@ -464,7 +465,7 @@ export default function MatchDetailPage() {
                     onChange={e => setEditForm(f => ({ ...f, gkId: e.target.value }))}
                   >
                     <option value="">🧤 Portiere subito – Nessuno</option>
-                    {editOppPlayers.map(p => (
+                    {editGkPlayers.map(p => (
                       <option key={p.id} value={p.id}>{p.name}</option>
                     ))}
                   </select>
@@ -575,7 +576,10 @@ export default function MatchDetailPage() {
           <select className="input mb-3" value={addForm.gkId}
             onChange={e => setAddForm(f => ({ ...f, gkId: e.target.value }))}>
             <option value="">– Nessuno –</option>
-            {(addForm.team === 'red' ? (match.blueTeam || []) : (match.redTeam || [])).map(p => (
+            {(addForm.type === 'autogoal'
+              ? (addForm.team === 'red' ? (match.redTeam || []) : (match.blueTeam || []))
+              : (addForm.team === 'red' ? (match.blueTeam || []) : (match.redTeam || []))
+            ).map(p => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
           </select>
