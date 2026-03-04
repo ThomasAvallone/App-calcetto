@@ -111,7 +111,7 @@ export default function PlayersPage() {
             if (ev.assistId === p.id) s.assists++;
           }
           if (ev.type === 'autogoal' && ev.scorerId === p.id) s.autogoals++;
-          if (ev.type === 'goal' && ev.gkConcededId === p.id) s.gkGoalsConceded++;
+          if (ev.gkConcededId === p.id) s.gkGoalsConceded++;
         }
         // Track historical matches by season for assist proration
         if (m.isHistorical) {

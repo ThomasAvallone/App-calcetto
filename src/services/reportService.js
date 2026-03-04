@@ -132,7 +132,7 @@ export function generateMatchReport(match, players) {
   // GK stats — legge gkConcededName dall'evento, fallback a playerById
   const gkGoals = {};
   const gkNames = {};
-  for (const ev of goals) {
+  for (const ev of [...goals, ...autogoals]) {
     if (ev.gkConcededId) {
       gkGoals[ev.gkConcededId] = (gkGoals[ev.gkConcededId] || 0) + 1;
       if (ev.gkConcededName) gkNames[ev.gkConcededId] = ev.gkConcededName;

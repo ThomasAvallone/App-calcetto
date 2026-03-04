@@ -80,9 +80,9 @@ export default function DashboardPage() {
         if (ev.type === 'goal') {
           if (ev.scorerId && ps[ev.scorerId]) ps[ev.scorerId].goals++;
           if (ev.assistId && ps[ev.assistId]) ps[ev.assistId].assists++;
-          if (ev.gkConcededId && ps[ev.gkConcededId]) ps[ev.gkConcededId].gkGoalsConceded++;
         }
         if (ev.type === 'autogoal' && ev.scorerId && ps[ev.scorerId]) ps[ev.scorerId].autogoals++;
+        if (ev.gkConcededId && ps[ev.gkConcededId]) ps[ev.gkConcededId].gkGoalsConceded++;
       }
     }
     const list = Object.values(ps);

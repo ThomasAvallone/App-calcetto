@@ -164,9 +164,9 @@ function computeStatsFromMatches(players, matches) {
       for (const ev of (m.events || [])) {
         if (ev.type === 'goal') {
           if (ev.scorerId === p.id) s.goals++;
-          if (ev.assistId === p.id) s.assists++; // counted for real matches
-          if (ev.gkConcededId === p.id) { s.gkGoalsConceded++; wasGkThisMatch = true; }
+          if (ev.assistId === p.id) s.assists++;
         }
+        if (ev.gkConcededId === p.id) { s.gkGoalsConceded++; wasGkThisMatch = true; }
       }
       if (wasGkThisMatch) s.gkMatches++;
       // Track historical matches by season for assist prorating
@@ -215,7 +215,7 @@ export default function StatsPage() {
     for (const m of finishedMatches) {
       const gkInMatch = new Set();
       for (const ev of (m.events || [])) {
-        if (ev.type === 'goal' && ev.gkConcededId && map[ev.gkConcededId]) {
+        if (ev.gkConcededId && map[ev.gkConcededId]) {
           map[ev.gkConcededId].gkGoalsConceded++;
           gkInMatch.add(ev.gkConcededId);
         }

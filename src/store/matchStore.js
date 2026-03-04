@@ -112,7 +112,7 @@ const useMatchStore = create(
         set({ match: { ...match, events, redScore, blueScore }, goalModal: null });
       },
 
-      async recordAutogoal({ team, scorerId, scorerName }) {
+      async recordAutogoal({ team, scorerId, scorerName, gkConcededId, gkConcededName }) {
         const { activeMatchId, match, getElapsedSeconds } = get();
         if (!activeMatchId || !match) return;
         const minute = Math.floor(getElapsedSeconds() / 60);
@@ -120,6 +120,8 @@ const useMatchStore = create(
           id: crypto.randomUUID(),
           type: 'autogoal',
           team, scorerId, scorerName,
+          gkConcededId: gkConcededId || null,
+          gkConcededName: gkConcededName || null,
           minute, timestamp: Date.now(),
         };
         const redScore = team === 'blue' ? (match.redScore || 0) + 1 : (match.redScore || 0);

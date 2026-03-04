@@ -145,8 +145,14 @@ export default function MatchPage() {
     setSelectedScorer(player);
     setGoalScorerModal(false);
     if (autogoalMode) {
-      recordAutogoal({ team: goalTeam, scorerId: player.id, scorerName: player.name });
-      toast.success(`🤦 Autogol di ${player.name}`);
+      // Go straight to GK selection (skip assist)
+      setPendingGoalData({
+        team: goalTeam,
+        scorerId: player.id,
+        scorerName: player.name,
+        _autogoal: true,
+      });
+      setPendingGkConceded(true);
     } else {
       setPendingAssist(true);
     }
@@ -168,13 +174,15 @@ export default function MatchPage() {
   const handleGkConcededSelected = async (player) => {
     setPendingGkConceded(false);
     if (!pendingGoalData) return;
-    await recordGoal({
-      ...pendingGoalData,
-      gkConcededId: player?.id || null,
-      gkConcededName: player?.name || null,
-    });
-    const assistMsg = pendingGoalData.assistId ? ` (assist: ${pendingGoalData.assistName})` : '';
-    toast.success(`⚽ Gol di ${pendingGoalData.scorerName}${assistMsg}!`);
+    const gkFields = { gkConcededId: player?.id || null, gkConcededName: player?.name || null };
+    if (pendingGoalData._autogoal) {
+      await recordAutogoal({ team: pendingGoalData.team, scorerId: pendingGoalData.scorerId, scorerName: pendingGoalData.scorerName, ...gkFields });
+      toast.success(`🤦 Autogol di ${pendingGoalData.scorerName}`);
+    } else {
+      await recordGoal({ ...pendingGoalData, ...gkFields });
+      const assistMsg = pendingGoalData.assistId ? ` (assist: ${pendingGoalData.assistName})` : '';
+      toast.success(`⚽ Gol di ${pendingGoalData.scorerName}${assistMsg}!`);
+    }
     setPendingGoalData(null);
     setSelectedScorer(null);
     setGoalTeam(null);
@@ -276,8 +284,14 @@ export default function MatchPage() {
 
   // ── GK Conceded Modal ───────────────────────────────────────────────────────
   if (pendingGkConceded && pendingGoalData) {
-    const gkTeamPlayers = pendingGoalData.team === 'red' ? blueTeam : redTeam;
-    const gkTeamLabel = pendingGoalData.team === 'red' ? '🔵 Blu' : '🔴 Rossi';
+    const isAutogoal = pendingGoalData._autogoal;
+    // For autogoals the GK is on the scorer's own team; for regular goals it's the opposing team
+    const gkTeamPlayers = isAutogoal
+      ? (pendingGoalData.team === 'red' ? redTeam : blueTeam)
+      : (pendingGoalData.team === 'red' ? blueTeam : redTeam);
+    const gkTeamLabel = isAutogoal
+      ? (pendingGoalData.team === 'red' ? '🔴 Rossi' : '🔵 Blu')
+      : (pendingGoalData.team === 'red' ? '🔵 Blu' : '🔴 Rossi');
     return (
       <div className="modal-overlay">
         <div className="modal animate-slide-up">
