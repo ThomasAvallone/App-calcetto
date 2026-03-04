@@ -80,12 +80,9 @@ export default function DashboardPage() {
         if (ev.type === 'goal') {
           if (ev.scorerId && ps[ev.scorerId]) ps[ev.scorerId].goals++;
           if (ev.assistId && ps[ev.assistId]) ps[ev.assistId].assists++;
+          if (ev.gkConcededId && ps[ev.gkConcededId]) ps[ev.gkConcededId].gkGoalsConceded++;
         }
         if (ev.type === 'autogoal' && ev.scorerId && ps[ev.scorerId]) ps[ev.scorerId].autogoals++;
-        if (ev.type === 'gk_turn' && ev.playerId && ps[ev.playerId]) {
-          ps[ev.playerId].gkMatches++;
-          ps[ev.playerId].gkGoalsConceded += ev.goalsConceded || 0;
-        }
       }
     }
     const list = Object.values(ps);
@@ -93,8 +90,8 @@ export default function DashboardPage() {
     const topAssist   = list.filter(p => p.assists > 0).sort((a, b) => b.assists - a.assists)[0] || null;
     const topAutogoal = list.filter(p => p.autogoals > 0).sort((a, b) => b.autogoals - a.autogoals)[0] || null;
     const worstGk     = list
-      .filter(p => p.gkMatches >= 2)
-      .sort((a, b) => b.gkGoalsConceded / b.gkMatches - a.gkGoalsConceded / a.gkMatches)[0] || null;
+      .filter(p => p.gkGoalsConceded >= 2)
+      .sort((a, b) => b.gkGoalsConceded - a.gkGoalsConceded)[0] || null;
     if (!topScorer && !topAssist && !topAutogoal && !worstGk) return null;
     return { topScorer, topAssist, topAutogoal, worstGk, matchCount: monthly.length };
   }, [finishedMatches]);
@@ -348,7 +345,7 @@ export default function DashboardPage() {
           {[
             coppaDiLatta.topScorer   && { icon: '⚽', label: 'Bomber del Mese',    name: coppaDiLatta.topScorer.name,   val: `${coppaDiLatta.topScorer.goals} gol`, color: '#4FD1C5' },
             coppaDiLatta.topAssist   && { icon: '🎯', label: 'Assistman del Mese', name: coppaDiLatta.topAssist.name,   val: `${coppaDiLatta.topAssist.assists} assist`, color: '#63B3ED' },
-            coppaDiLatta.worstGk     && { icon: '🧤', label: 'Peggior Portiere',   name: coppaDiLatta.worstGk.name,     val: `${(coppaDiLatta.worstGk.gkGoalsConceded / coppaDiLatta.worstGk.gkMatches).toFixed(1)} gol/turno`, color: '#FC8181' },
+            coppaDiLatta.worstGk     && { icon: '🧤', label: 'Peggior Portiere',   name: coppaDiLatta.worstGk.name,     val: `${coppaDiLatta.worstGk.gkGoalsConceded} gol subiti`, color: '#FC8181' },
             coppaDiLatta.topAutogoal && { icon: '🤦', label: 'Re degli Autogol',   name: coppaDiLatta.topAutogoal.name, val: `${coppaDiLatta.topAutogoal.autogoals} autogol`, color: '#B794F4' },
           ].filter(Boolean).map(award => (
             <div key={award.label} className="flex items-center gap-3"
