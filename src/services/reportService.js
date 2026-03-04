@@ -179,11 +179,11 @@ export function generateMatchReport(match, players) {
 
   // "Premi di Latta" — completamente basati su dati degli eventi, sempre aggiornati
   const tinAwards = [];
-  if (topScorerEntry) {
+  if (topScorerEntry && topScorerEntry[1] >= 2) {
     const label = topScorerEntry[1] >= 3 ? '🎩 Hat Trick' : '⚽ Capocannoniere';
     tinAwards.push(`${label}: ${topScorerName} (${topScorerEntry[1]} gol)`);
   }
-  if (topAssistEntry) tinAwards.push(`🎯 Re degli Assist: ${topAssistName} (${topAssistEntry[1]} assist)`);
+  if (topAssistEntry && topAssistEntry[1] >= 2) tinAwards.push(`🎯 Re degli Assist: ${topAssistName} (${topAssistEntry[1]} assist)`);
   if (worstGkEntry) tinAwards.push(`🚪 Porta Girevole: ${worstGkName} (${worstGkEntry[1]} gol subiti)`);
   if (topAutogoalEntry) tinAwards.push(`🤦 Amico degli Avversari: ${topAutogoalName} (${topAutogoalEntry[1]} autogol)`);
 
