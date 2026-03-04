@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getMatch, updateMatch, deleteMatch, recalculatePlayerStats, rateMatch, recalculateRecentFormForPlayers } from '../firebase/firestore';
+import { getMatch, updateMatch, deleteMatch, recalculatePlayerStats, rateMatch, recalculateRecentFormForPlayers, subscribeToMatch } from '../firebase/firestore';
 import useAuthStore, { selectIsAdmin, selectIsSuperAdmin } from '../store/authStore';
 import usePlayersStore from '../store/playersStore';
 import { generateMatchReport } from '../services/reportService';
@@ -115,7 +115,9 @@ export default function MatchDetailPage() {
   const [editForm, setEditForm] = useState({});
 
   useEffect(() => {
-    getMatch(id).then(m => { setMatch(m); setLoading(false); }).catch(() => setLoading(false));
+    setLoading(true);
+    const unsub = subscribeToMatch(id, (m) => { setMatch(m); setLoading(false); });
+    return unsub;
   }, [id]);
 
   if (loading) return <div className="page-content" style={{ textAlign: 'center', paddingTop: '3rem', color: '#718096' }}>Caricamento...</div>;
