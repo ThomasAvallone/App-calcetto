@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getMatch, updateMatch, deleteMatch, recalculatePlayerStats, rateMatch, recalculateRecentFormForPlayers, subscribeToMatch } from '../firebase/firestore';
-import useAuthStore, { selectIsAdmin, selectIsSuperAdmin } from '../store/authStore';
+import useAuthStore, { selectIsAdmin } from '../store/authStore';
 import usePlayersStore from '../store/playersStore';
 import { generateMatchReport } from '../services/reportService';
 import { format } from 'date-fns';
@@ -103,7 +103,6 @@ export default function MatchDetailPage() {
   const { role, user } = useAuthStore();
   const { players } = usePlayersStore();
   const isAdmin = useAuthStore(selectIsAdmin);
-  const isSuperAdmin = useAuthStore(selectIsSuperAdmin);
 
   const [match, setMatch] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -362,7 +361,7 @@ export default function MatchDetailPage() {
       )}
 
       {/* SuperAdmin: all admin ratings */}
-      {isSuperAdmin && match.ratings && Object.keys(match.ratings).length > 0 && (
+      {role === 'superadmin' && match.ratings && Object.keys(match.ratings).length > 0 && (
         <div className="card mb-4" style={{ border: '1px solid rgba(246,173,85,0.25)', background: 'rgba(246,173,85,0.03)' }}>
           <h3 className="mb-3" style={{ fontSize: '0.95rem' }}>👑 Voti degli Admin</h3>
           {Object.entries(match.ratings).map(([uid, rating]) => (
