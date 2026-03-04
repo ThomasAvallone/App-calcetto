@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getMatch, updateMatch, deleteMatch, recalculatePlayerStats, rateMatch, recalculateRecentFormForPlayers, subscribeToMatch } from '../firebase/firestore';
+import { getMatch, updateMatch, deleteMatch, recalculatePlayerStats, rateMatch, recalculateRecentFormForPlayers } from '../firebase/firestore';
 import useAuthStore, { selectIsAdmin } from '../store/authStore';
 import usePlayersStore from '../store/playersStore';
 import { generateMatchReport } from '../services/reportService';
@@ -115,8 +115,7 @@ export default function MatchDetailPage() {
 
   useEffect(() => {
     setLoading(true);
-    const unsub = subscribeToMatch(id, (m) => { setMatch(m); setLoading(false); });
-    return unsub;
+    getMatch(id).then(m => { setMatch(m); setLoading(false); }).catch(() => setLoading(false));
   }, [id]);
 
   if (loading) return <div className="page-content" style={{ textAlign: 'center', paddingTop: '3rem', color: '#718096' }}>Caricamento...</div>;
@@ -262,8 +261,11 @@ export default function MatchDetailPage() {
     }
   };
 
-  const handleShowReport = () => {
-    const r = generateMatchReport(match, players);
+  const handleShowReport = async () => {
+    const freshMatch = await getMatch(id).catch(() => null);
+    const src = freshMatch || match;
+    if (freshMatch) setMatch(freshMatch);
+    const r = generateMatchReport(src, players);
     setReportText(r);
     setShowReport(true);
     updateMatch(id, { report: r }).catch(() => {});
