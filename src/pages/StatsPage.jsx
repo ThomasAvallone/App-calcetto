@@ -160,20 +160,15 @@ function computeStatsFromMatches(players, matches) {
       if (my > their) s.wins++;
       else if (my < their) s.losses++;
       else s.draws++;
-      let wasGkViaTurn = false;
-      let wasGkViaConceded = false;
+      let wasGkThisMatch = false;
       for (const ev of (m.events || [])) {
         if (ev.type === 'goal') {
           if (ev.scorerId === p.id) s.goals++;
           if (ev.assistId === p.id) s.assists++; // counted for real matches
-          if (ev.gkConcededId === p.id) { s.gkGoalsConceded++; wasGkViaConceded = true; }
-        }
-        if (ev.type === 'gk_turn' && ev.playerId === p.id) {
-          wasGkViaTurn = true;
-          s.gkGoalsConceded += ev.goalsConceded || 0;
+          if (ev.gkConcededId === p.id) { s.gkGoalsConceded++; wasGkThisMatch = true; }
         }
       }
-      if (wasGkViaTurn || wasGkViaConceded) s.gkMatches++;
+      if (wasGkThisMatch) s.gkMatches++;
       // Track historical matches by season for assist prorating
       if (m.isHistorical) {
         const sid = getSeasonId(m.date);
@@ -223,10 +218,6 @@ export default function StatsPage() {
         if (ev.type === 'goal' && ev.gkConcededId && map[ev.gkConcededId]) {
           map[ev.gkConcededId].gkGoalsConceded++;
           gkInMatch.add(ev.gkConcededId);
-        }
-        if (ev.type === 'gk_turn' && ev.playerId && map[ev.playerId]) {
-          map[ev.playerId].gkGoalsConceded += ev.goalsConceded || 0;
-          map[ev.playerId].gkMatches++;
         }
       }
       for (const pid of gkInMatch) {
