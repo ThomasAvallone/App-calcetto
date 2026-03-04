@@ -160,17 +160,20 @@ function computeStatsFromMatches(players, matches) {
       if (my > their) s.wins++;
       else if (my < their) s.losses++;
       else s.draws++;
+      let wasGkViaTurn = false;
+      let wasGkViaConceded = false;
       for (const ev of (m.events || [])) {
         if (ev.type === 'goal') {
           if (ev.scorerId === p.id) s.goals++;
           if (ev.assistId === p.id) s.assists++; // counted for real matches
-          if (ev.gkConcededId === p.id) s.gkGoalsConceded++;
+          if (ev.gkConcededId === p.id) { s.gkGoalsConceded++; wasGkViaConceded = true; }
         }
         if (ev.type === 'gk_turn' && ev.playerId === p.id) {
-          s.gkMatches++;
+          wasGkViaTurn = true;
           s.gkGoalsConceded += ev.goalsConceded || 0;
         }
       }
+      if (wasGkViaTurn || wasGkViaConceded) s.gkMatches++;
       // Track historical matches by season for assist prorating
       if (m.isHistorical) {
         const sid = getSeasonId(m.date);
@@ -210,11 +213,35 @@ export default function StatsPage() {
 
   const finishedMatches = useMemo(() => allMatches.filter(m => m.status === 'finished'), [allMatches]);
 
+  // GK stats always computed live from events (Firestore p.stats can be stale for GK fields)
+  const gkFromEvents = useMemo(() => {
+    const map = {};
+    for (const p of players) map[p.id] = { gkGoalsConceded: 0, gkMatches: 0 };
+    for (const m of finishedMatches) {
+      const gkInMatch = new Set();
+      for (const ev of (m.events || [])) {
+        if (ev.type === 'goal' && ev.gkConcededId && map[ev.gkConcededId]) {
+          map[ev.gkConcededId].gkGoalsConceded++;
+          gkInMatch.add(ev.gkConcededId);
+        }
+        if (ev.type === 'gk_turn' && ev.playerId && map[ev.playerId]) {
+          map[ev.playerId].gkGoalsConceded += ev.goalsConceded || 0;
+          map[ev.playerId].gkMatches++;
+        }
+      }
+      for (const pid of gkInMatch) {
+        if (map[pid]) map[pid].gkMatches++;
+      }
+    }
+    return map;
+  }, [players, finishedMatches]);
+
   // withStats: computed from period-filtered matches or all-time aggregated
   const withStats = useMemo(() => {
     if (period === 'all') {
       return players.map(p => {
         const as = p.stats || {};
+        const gk = gkFromEvents[p.id] || {};
         return {
           ...p,
           totalGoals:   as.goals   || 0,
@@ -222,8 +249,8 @@ export default function StatsPage() {
           totalMatches: as.matches || 0,
           totalWins:    as.wins    || 0,
           totalDraws:   as.draws   || 0,
-          gkMatches:    as.gkMatches || 0,
-          gkGoalsConceded: as.gkGoalsConceded || 0,
+          gkMatches:    gk.gkMatches || 0,
+          gkGoalsConceded: gk.gkGoalsConceded || 0,
         };
       });
     }
@@ -389,7 +416,7 @@ export default function StatsPage() {
     matches: getRanked(withStats, (a, b) => b.totalMatches - a.totalMatches, p => p.totalMatches > 0),
     gk: getRanked(
       withStats,
-      (a, b) => a.gkGoalsConceded - b.gkGoalsConceded,
+      (a, b) => b.gkGoalsConceded - a.gkGoalsConceded,
       p => p.gkGoalsConceded > 0
     ),
   }), [withStats]);
@@ -399,7 +426,7 @@ export default function StatsPage() {
     assists: { accent: '#63B3ED', getVal: p => p.totalAssists, getLabel: () => 'assist', getSub: p => `${p.totalMatches} partite` },
     winrate: { accent: '#F6E05E', getVal: p => `${Math.round((p.totalWins + p.totalDraws * 0.5) / p.totalMatches * 100)}`, getLabel: () => '%', getSub: p => `${p.totalWins}V · ${p.totalDraws}P · ${p.totalMatches - p.totalWins - p.totalDraws}S su ${p.totalMatches} partite` },
     matches: { accent: '#A0AEC0', getVal: p => p.totalMatches, getLabel: () => 'pt', getSub: p => `${p.totalWins}V · ${p.totalDraws}P · ${p.totalMatches - p.totalWins - p.totalDraws}S` },
-    gk:      { accent: '#68D391', getVal: p => p.gkGoalsConceded, getLabel: () => 'gs', getSub: p => `${p.gkGoalsConceded} gol subiti da portiere` },
+    gk:      { accent: '#68D391', getVal: p => p.gkGoalsConceded, getLabel: () => 'gs', getSub: p => p.gkMatches > 0 ? `${p.gkMatches} partite in porta · media ${(p.gkGoalsConceded / p.gkMatches).toFixed(1)} gs/pt` : `${p.gkGoalsConceded} gol subiti` },
   };
 
   const cfg = tabConfig[tab];
