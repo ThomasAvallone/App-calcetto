@@ -480,8 +480,7 @@ export default function MatchDetailPage() {
                   </div>
                 </div>
                 );
-              })()
-              ) : (
+              })() : (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.6rem 0' }}>
                   <span style={{ fontSize: '0.8rem', color: '#718096', minWidth: '28px', flexShrink: 0 }}>
                     {ev.minute != null ? `${ev.minute}'` : '—'}
