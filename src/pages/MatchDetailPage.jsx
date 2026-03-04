@@ -226,9 +226,9 @@ export default function MatchDetailPage() {
     setEditingEventId(ev.id);
     setEditForm({
       minute: ev.minute ?? '',
-      scorerName: resolveName(ev),
-      assistName: ev.assistName && ev.assistName !== 'Nessuno' ? ev.assistName : '',
-      gkConcededName: ev.gkConcededName || '',
+      scorerId: ev.scorerId || '',
+      assistId: ev.assistId || '',
+      gkId: ev.gkConcededId || '',
     });
   };
 
@@ -236,11 +236,18 @@ export default function MatchDetailPage() {
     const ev = events.find(e => e.id === editingEventId);
     if (!ev) return;
     const minute = editForm.minute !== '' ? parseInt(editForm.minute, 10) : null;
+    const teamPlayers = ev.team === 'red' ? (match.redTeam || []) : (match.blueTeam || []);
+    const oppPlayers = ev.team === 'red' ? (match.blueTeam || []) : (match.redTeam || []);
+    const scorer = teamPlayers.find(p => p.id === editForm.scorerId);
+    const assist = editForm.assistId ? teamPlayers.find(p => p.id === editForm.assistId) : null;
+    const gk = editForm.gkId ? oppPlayers.find(p => p.id === editForm.gkId) : null;
     const updates = {
       ...(editForm.minute !== '' && !isNaN(minute) ? { minute } : {}),
-      scorerName: editForm.scorerName,
-      assistName: editForm.assistName.trim() || null,
-      gkConcededName: editForm.gkConcededName.trim() || null,
+      ...(scorer ? { scorerId: scorer.id, scorerName: scorer.name } : {}),
+      assistId: assist?.id || null,
+      assistName: assist?.name || null,
+      gkConcededId: gk?.id || null,
+      gkConcededName: gk?.name || null,
     };
     const newEvents = events.map(e => e.id === editingEventId ? { ...e, ...updates } : e);
     setMatch(m => ({ ...m, events: newEvents }));
@@ -411,7 +418,10 @@ export default function MatchDetailPage() {
           const isEditing = isAdmin && editingEventId === ev.id;
           return (
             <div key={ev.id} style={{ borderBottom: '1px solid #2D3748' }}>
-              {isEditing ? (
+              {isEditing ? (() => {
+                const editTeamPlayers = ev.team === 'red' ? (match.redTeam || []) : (match.blueTeam || []);
+                const editOppPlayers = ev.team === 'red' ? (match.blueTeam || []) : (match.redTeam || []);
+                return (
                 <div style={{ padding: '0.75rem 0' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
                     <span style={{ fontSize: '1rem', flexShrink: 0 }}>
@@ -424,28 +434,40 @@ export default function MatchDetailPage() {
                       value={editForm.minute}
                       onChange={e => setEditForm(f => ({ ...f, minute: e.target.value }))}
                     />
-                    <input
+                    <select
                       className="input"
                       style={{ flex: 1, padding: '0.35rem 0.5rem', fontSize: '0.875rem' }}
-                      placeholder="Marcatore"
-                      value={editForm.scorerName}
-                      onChange={e => setEditForm(f => ({ ...f, scorerName: e.target.value }))}
-                    />
+                      value={editForm.scorerId}
+                      onChange={e => setEditForm(f => ({ ...f, scorerId: e.target.value }))}
+                    >
+                      <option value="">– Marcatore –</option>
+                      {editTeamPlayers.map(p => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
                   </div>
-                  <input
+                  <select
                     className="input"
                     style={{ width: '100%', marginBottom: '0.4rem', padding: '0.3rem 0.5rem', fontSize: '0.8rem' }}
-                    placeholder="🎯 Assist (opzionale)"
-                    value={editForm.assistName}
-                    onChange={e => setEditForm(f => ({ ...f, assistName: e.target.value }))}
-                  />
-                  <input
+                    value={editForm.assistId}
+                    onChange={e => setEditForm(f => ({ ...f, assistId: e.target.value }))}
+                  >
+                    <option value="">🎯 Assist – Nessuno</option>
+                    {editTeamPlayers.filter(p => p.id !== editForm.scorerId).map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                  <select
                     className="input"
                     style={{ width: '100%', marginBottom: '0.5rem', padding: '0.3rem 0.5rem', fontSize: '0.8rem' }}
-                    placeholder="🧤 GK subito (opzionale)"
-                    value={editForm.gkConcededName}
-                    onChange={e => setEditForm(f => ({ ...f, gkConcededName: e.target.value }))}
-                  />
+                    value={editForm.gkId}
+                    onChange={e => setEditForm(f => ({ ...f, gkId: e.target.value }))}
+                  >
+                    <option value="">🧤 Portiere subito – Nessuno</option>
+                    {editOppPlayers.map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
                     <button className="btn btn-teal" style={{ flex: 1, padding: '0.4rem', fontSize: '0.85rem' }}
                       onClick={handleSaveEvent} disabled={saving}>
@@ -457,6 +479,8 @@ export default function MatchDetailPage() {
                     </button>
                   </div>
                 </div>
+                );
+              })()
               ) : (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.6rem 0' }}>
                   <span style={{ fontSize: '0.8rem', color: '#718096', minWidth: '28px', flexShrink: 0 }}>

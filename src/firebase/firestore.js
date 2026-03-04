@@ -118,6 +118,7 @@ export async function recalculatePlayerStats(playerIds) {
         if (ev.type === 'goal') {
           if (ev.scorerId === pid) s.goals++;
           if (ev.assistId === pid) s.assists++;
+          if (ev.gkConcededId === pid) s.gkGoalsConceded++;
         }
         if (ev.type === 'autogoal' && ev.scorerId === pid) s.autogoals++;
         if (ev.type === 'gk_turn' && ev.playerId === pid) {
