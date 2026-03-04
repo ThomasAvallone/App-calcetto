@@ -213,10 +213,10 @@ export function computePowerIndex(stats) {
 
 // ─── RATINGS & RECENT FORM ───────────────────────────────────────────────────
 
-export async function rateMatch(matchId, userId, scores) {
+export async function rateMatch(matchId, userId, scores, raterName) {
   // scores: { [playerId]: number (1-10) }
   await updateDoc(doc(db, 'matches', matchId), {
-    [`ratings.${userId}`]: { scores, ratedAt: serverTimestamp() },
+    [`ratings.${userId}`]: { scores, ratedAt: serverTimestamp(), raterName: raterName || null },
     updatedAt: serverTimestamp(),
   });
 }

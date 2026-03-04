@@ -1,14 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getMatch, updateMatch, deleteMatch, recalculatePlayerStats, rateMatch, recalculateRecentFormForPlayers } from '../firebase/firestore';
-import useAuthStore, { selectIsAdmin } from '../store/authStore';
+import useAuthStore, { selectIsAdmin, selectIsSuperAdmin } from '../store/authStore';
 import usePlayersStore from '../store/playersStore';
 import { generateMatchReport } from '../services/reportService';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 
-function RatingSection({ match, userId, onRated }) {
+function RatingSection({ match, userId, userName, onRated }) {
   const allPlayers = [...(match.redTeam || []), ...(match.blueTeam || [])];
   const hasVoted = !!(match.ratings?.[userId]);
   const [scores, setScores] = React.useState(() =>
@@ -22,7 +22,7 @@ function RatingSection({ match, userId, onRated }) {
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
-      await rateMatch(match.id, userId, scores);
+      await rateMatch(match.id, userId, scores, userName);
       await recalculateRecentFormForPlayers(allPlayers.map(p => p.id));
       const updated = await getMatch(match.id);
       onRated(updated);
@@ -103,6 +103,7 @@ export default function MatchDetailPage() {
   const { role, user } = useAuthStore();
   const { players } = usePlayersStore();
   const isAdmin = useAuthStore(selectIsAdmin);
+  const isSuperAdmin = useAuthStore(selectIsSuperAdmin);
 
   const [match, setMatch] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -141,7 +142,10 @@ export default function MatchDetailPage() {
     setMatch(updated);
     setSaving(true);
     try {
-      await updateMatch(id, { events: newEvents, redScore, blueScore });
+      const reportDel = match.status === 'finished'
+        ? { report: generateMatchReport({ ...match, events: newEvents, redScore, blueScore }, players) }
+        : {};
+      await updateMatch(id, { events: newEvents, redScore, blueScore, ...reportDel });
       const allIds = [...(match.redTeam || []), ...(match.blueTeam || [])].map(p => p.id);
       await recalculatePlayerStats(allIds);
       toast.success('Evento eliminato e statistiche ricalcolate');
@@ -157,7 +161,10 @@ export default function MatchDetailPage() {
     setMatch(m => ({ ...m, events: newEvents }));
     setSaving(true);
     try {
-      await updateMatch(id, { events: newEvents });
+      const reportSave = match.status === 'finished'
+        ? { report: generateMatchReport({ ...match, events: newEvents }, players) }
+        : {};
+      await updateMatch(id, { events: newEvents, ...reportSave });
       const allIds = [...(match.redTeam || []), ...(match.blueTeam || [])].map(p => p.id);
       await recalculatePlayerStats(allIds);
       toast.success('Evento aggiornato');
@@ -199,7 +206,10 @@ export default function MatchDetailPage() {
     setMatch(updated);
     setSaving(true);
     try {
-      await updateMatch(id, { events: newEvents, redScore, blueScore });
+      const reportAdd = match.status === 'finished'
+        ? { report: generateMatchReport({ ...match, events: newEvents, redScore, blueScore }, players) }
+        : {};
+      await updateMatch(id, { events: newEvents, redScore, blueScore, ...reportAdd });
       const allIds = [...(match.redTeam || []), ...(match.blueTeam || [])].map(p => p.id);
       await recalculatePlayerStats(allIds);
       toast.success('Evento aggiunto e statistiche ricalcolate');
@@ -237,7 +247,10 @@ export default function MatchDetailPage() {
     setEditingEventId(null);
     setSaving(true);
     try {
-      await updateMatch(id, { events: newEvents });
+      const reportEdit = match.status === 'finished'
+        ? { report: generateMatchReport({ ...match, events: newEvents }, players) }
+        : {};
+      await updateMatch(id, { events: newEvents, ...reportEdit });
       const allIds = [...(match.redTeam || []), ...(match.blueTeam || [])].map(p => p.id);
       await recalculatePlayerStats(allIds);
       toast.success('Evento aggiornato');
@@ -252,6 +265,7 @@ export default function MatchDetailPage() {
     const r = generateMatchReport(match, players);
     setReportText(r);
     setShowReport(true);
+    updateMatch(id, { report: r }).catch(() => {});
   };
 
   const handleDeleteMatch = async () => {
@@ -342,7 +356,33 @@ export default function MatchDetailPage() {
 
       {/* Rating section */}
       {isAdmin && match.status === 'finished' && user && (
-        <RatingSection match={match} userId={user.uid} onRated={setMatch} />
+        <RatingSection match={match} userId={user.uid} userName={user?.displayName || user?.email || ''} onRated={setMatch} />
+      )}
+
+      {/* SuperAdmin: all admin ratings */}
+      {isSuperAdmin && match.ratings && Object.keys(match.ratings).length > 0 && (
+        <div className="card mb-4" style={{ border: '1px solid rgba(246,173,85,0.25)', background: 'rgba(246,173,85,0.03)' }}>
+          <h3 className="mb-3" style={{ fontSize: '0.95rem' }}>👑 Voti degli Admin</h3>
+          {Object.entries(match.ratings).map(([uid, rating]) => (
+            <div key={uid} style={{ marginBottom: '0.75rem', paddingBottom: '0.75rem', borderBottom: '1px solid #2D3748' }}>
+              <div style={{ fontWeight: 600, fontSize: '0.82rem', color: '#F6AD55', marginBottom: '0.35rem' }}>
+                {rating.raterName || uid.slice(0, 8) + '…'}
+              </div>
+              {[...(match.redTeam || []), ...(match.blueTeam || [])].map(p => {
+                const s = rating.scores?.[p.id];
+                if (s == null) return null;
+                const c = s >= 7 ? '#68D391' : s >= 5 ? '#F6E05E' : '#FC8181';
+                const isRed = (match.redTeam || []).some(r => r.id === p.id);
+                return (
+                  <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.2rem 0.5rem' }}>
+                    <span style={{ fontSize: '0.82rem', color: '#A0AEC0' }}>{isRed ? '🔴' : '🔵'} {p.name}</span>
+                    <span style={{ fontWeight: 700, color: c, fontSize: '0.85rem' }}>{s}/10</span>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
       )}
 
       {/* Delete match */}

@@ -5,7 +5,7 @@ import usePlayersStore from '../store/playersStore';
 import useAuthStore, { selectIsAdmin } from '../store/authStore';
 import { generateMatchReport } from '../services/reportService';
 import { exportMatchToSheets } from '../services/sheetsService';
-import { recalculatePlayerStats } from '../firebase/firestore';
+import { recalculatePlayerStats, updateMatch } from '../firebase/firestore';
 import toast from 'react-hot-toast';
 
 const GK_INTERVAL = 6 * 60; // 6 minutes in seconds
@@ -188,6 +188,7 @@ export default function MatchPage() {
       await recalculatePlayerStats(allIds);
       await exportMatchToSheets(match, players).catch(() => {});
       const report = generateMatchReport(match, players);
+      if (activeMatchId) await updateMatch(activeMatchId, { report });
       setReportText(report); setReportModal(true);
     } catch (e) {
       toast.error('Errore: ' + e.message);
