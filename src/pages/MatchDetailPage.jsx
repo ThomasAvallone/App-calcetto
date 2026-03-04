@@ -182,7 +182,8 @@ export default function MatchDetailPage() {
     const oppPlayers = addForm.team === 'red' ? (match.blueTeam || []) : (match.redTeam || []);
     const scorer = teamPlayers.find(p => p.id === addForm.scorerId);
     const assist = addForm.assistId ? teamPlayers.find(p => p.id === addForm.assistId) : null;
-    const gk = addForm.gkId ? oppPlayers.find(p => p.id === addForm.gkId) : null;
+    const gkPool = addForm.type === 'autogoal' ? teamPlayers : oppPlayers;
+    const gk = addForm.gkId ? gkPool.find(p => p.id === addForm.gkId) : null;
     const newEvent = {
       id: crypto.randomUUID(),
       type: addForm.type,
@@ -240,7 +241,8 @@ export default function MatchDetailPage() {
     const oppPlayers = ev.team === 'red' ? (match.blueTeam || []) : (match.redTeam || []);
     const scorer = teamPlayers.find(p => p.id === editForm.scorerId);
     const assist = editForm.assistId ? teamPlayers.find(p => p.id === editForm.assistId) : null;
-    const gk = editForm.gkId ? oppPlayers.find(p => p.id === editForm.gkId) : null;
+    const gkPool = ev.type === 'autogoal' ? teamPlayers : oppPlayers;
+    const gk = editForm.gkId ? gkPool.find(p => p.id === editForm.gkId) : null;
     const updates = {
       ...(editForm.minute !== '' && !isNaN(minute) ? { minute } : {}),
       ...(scorer ? { scorerId: scorer.id, scorerName: scorer.name } : {}),
