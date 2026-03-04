@@ -126,27 +126,66 @@ export function generateMatchReport(match, players) {
   }
 
   const mvpEntry = Object.entries(playerScores).sort((a, b) => b[1] - a[1])[0];
-  const mvp = mvpEntry ? players.find(p => p.id === mvpEntry[0]) : null;
+  // Usa playerById (event-stored names) invece di players.find() per robustezza
+  const mvpName = mvpEntry ? (playerById[mvpEntry[0]] || '?') : null;
 
-  // GK stats this match
+  // GK stats — legge gkConcededName dall'evento, fallback a playerById
   const gkGoals = {};
+  const gkNames = {};
   for (const ev of goals) {
-    if (ev.gkConcededId) gkGoals[ev.gkConcededId] = (gkGoals[ev.gkConcededId] || 0) + 1;
+    if (ev.gkConcededId) {
+      gkGoals[ev.gkConcededId] = (gkGoals[ev.gkConcededId] || 0) + 1;
+      if (ev.gkConcededName) gkNames[ev.gkConcededId] = ev.gkConcededName;
+    }
   }
   const worstGkEntry = Object.entries(gkGoals).sort((a, b) => b[1] - a[1])[0];
-  const worstGk = worstGkEntry ? players.find(p => p.id === worstGkEntry[0]) : null;
+  const worstGkName = worstGkEntry ? (gkNames[worstGkEntry[0]] || playerById[worstGkEntry[0]] || '?') : null;
 
-  // "Premi di Latta"
-  const tinAwards = [];
-  if (worstGk) tinAwards.push(`🚪 Porta Girevole: ${worstGk.name} (${worstGkEntry[1]} gol subiti)`);
-  const topAutogoal = autogoals.length > 0
-    ? autogoals.reduce((acc, e) => { acc[e.scorerId] = (acc[e.scorerId] || 0) + 1; return acc; }, {})
-    : {};
-  const topAutogoalEntry = Object.entries(topAutogoal).sort((a, b) => b[1] - a[1])[0];
-  if (topAutogoalEntry) {
-    const p = players.find(pl => pl.id === topAutogoalEntry[0]);
-    tinAwards.push(`🤦 Amico degli Avversari: ${p?.name || '?'} (${topAutogoalEntry[1]} autogol)`);
+  // Top scorer — legge scorerName dall'evento
+  const goalCounts = {};
+  const scorerNames = {};
+  for (const ev of goals) {
+    if (ev.scorerId) {
+      goalCounts[ev.scorerId] = (goalCounts[ev.scorerId] || 0) + 1;
+      if (ev.scorerName) scorerNames[ev.scorerId] = ev.scorerName;
+    }
   }
+  const topScorerEntry = Object.entries(goalCounts).sort((a, b) => b[1] - a[1])[0];
+  const topScorerName = topScorerEntry ? (scorerNames[topScorerEntry[0]] || playerById[topScorerEntry[0]] || '?') : null;
+
+  // Top assist — legge assistName dall'evento
+  const assistCounts = {};
+  const assistNames = {};
+  for (const ev of goals) {
+    if (ev.assistId) {
+      assistCounts[ev.assistId] = (assistCounts[ev.assistId] || 0) + 1;
+      if (ev.assistName) assistNames[ev.assistId] = ev.assistName;
+    }
+  }
+  const topAssistEntry = Object.entries(assistCounts).sort((a, b) => b[1] - a[1])[0];
+  const topAssistName = topAssistEntry ? (assistNames[topAssistEntry[0]] || playerById[topAssistEntry[0]] || '?') : null;
+
+  // Autogoals — legge scorerName dall'evento
+  const autogoalCounts = {};
+  const autogoalNames = {};
+  for (const ev of autogoals) {
+    if (ev.scorerId) {
+      autogoalCounts[ev.scorerId] = (autogoalCounts[ev.scorerId] || 0) + 1;
+      if (ev.scorerName) autogoalNames[ev.scorerId] = ev.scorerName;
+    }
+  }
+  const topAutogoalEntry = Object.entries(autogoalCounts).sort((a, b) => b[1] - a[1])[0];
+  const topAutogoalName = topAutogoalEntry ? (autogoalNames[topAutogoalEntry[0]] || playerById[topAutogoalEntry[0]] || '?') : null;
+
+  // "Premi di Latta" — completamente basati su dati degli eventi, sempre aggiornati
+  const tinAwards = [];
+  if (topScorerEntry) {
+    const label = topScorerEntry[1] >= 3 ? '🎩 Hat Trick' : '⚽ Capocannoniere';
+    tinAwards.push(`${label}: ${topScorerName} (${topScorerEntry[1]} gol)`);
+  }
+  if (topAssistEntry) tinAwards.push(`🎯 Re degli Assist: ${topAssistName} (${topAssistEntry[1]} assist)`);
+  if (worstGkEntry) tinAwards.push(`🚪 Porta Girevole: ${worstGkName} (${worstGkEntry[1]} gol subiti)`);
+  if (topAutogoalEntry) tinAwards.push(`🤦 Amico degli Avversari: ${topAutogoalName} (${topAutogoalEntry[1]} autogol)`);
 
   // Scorers timeline (le partite storiche non hanno minute, le mettiamo in coda)
   const timeline = [...goals, ...autogoals].sort((a, b) => (a.minute ?? 999) - (b.minute ?? 999));
@@ -184,7 +223,7 @@ ${timeline.length === 0 ? '  Nessun gol (un capolavoro di inutilità)' : timelin
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🏆 MVP TECNICO
-${mvp ? `⭐ ${mvp.name} (${mvpEntry[1]} pt)` : 'Nessun meritevole trovato'}
+${mvpName ? `⭐ ${mvpName} (${mvpEntry[1]} pt)` : 'Nessun meritevole trovato'}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🥫 PREMI DI LATTA
