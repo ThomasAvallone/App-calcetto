@@ -50,7 +50,7 @@ function FormDots({ results, size = 9 }) {
   );
 }
 
-const defaultForm = { name: '', primaryRole: 'Centrocampista', secondaryRole: '' };
+const defaultForm = { name: '', primaryRole: 'Centrocampista', secondaryRole: '', photoURL: '' };
 
 export default function PlayersPage() {
   const { players, addPlayer, updatePlayer: editPlayer, removePlayer } = usePlayersStore();
@@ -186,7 +186,7 @@ export default function PlayersPage() {
 
   const openForm = (p = null) => {
     if (p) {
-      setForm({ name: p.name, primaryRole: p.primaryRole || 'Centrocampista', secondaryRole: p.secondaryRole || '' });
+      setForm({ name: p.name, primaryRole: p.primaryRole || 'Centrocampista', secondaryRole: p.secondaryRole || '', photoURL: p.photoURL || '' });
       setEditId(p.id);
       setLinkedNames(p.historicalNames || []);
     } else {
@@ -219,6 +219,7 @@ export default function PlayersPage() {
         name: form.name.trim(),
         primaryRole: form.primaryRole,
         secondaryRole: form.secondaryRole,
+        photoURL: form.photoURL.trim() || null,
         historicalNames: linkedNames,
         historicalStats,
       };
@@ -308,16 +309,25 @@ export default function PlayersPage() {
           )}
         </div>
 
-        <div className="card mb-4" style={{ textAlign: 'center', padding: '1.75rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '0.75rem' }}>
-            <div style={{ position: 'relative', width: 120, height: 120 }}>
-              <PiArc value={p.powerIndex || 50} />
-              <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
-                <div style={{ fontSize: '1.25rem', lineHeight: 1 }}>{getRoleIcon(p.primaryRole)}</div>
-                <div style={{ fontSize: '1.65rem', fontWeight: 900, color: '#4FD1C5', lineHeight: 1 }}>
-                  {(p.powerIndex || 50).toFixed(1)}
+        <div className="card mb-4" style={{ padding: '1.25rem 1.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.75rem' }}>
+            {/* Caricatura / placeholder */}
+            <div style={{ flexShrink: 0, width: 90, height: 90, borderRadius: '50%', overflow: 'hidden', border: '2px solid #2D3748', background: '#1A202C', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {p.photoURL
+                ? <img src={p.photoURL} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                : <span style={{ fontSize: '2.5rem' }}>{getRoleIcon(p.primaryRole)}</span>
+              }
+            </div>
+            {/* Power index */}
+            <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
+              <div style={{ position: 'relative', width: 120, height: 120 }}>
+                <PiArc value={p.powerIndex || 50} />
+                <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
+                  <div style={{ fontSize: '1.65rem', fontWeight: 900, color: '#4FD1C5', lineHeight: 1 }}>
+                    {(p.powerIndex || 50).toFixed(1)}
+                  </div>
+                  <div style={{ fontSize: '0.55rem', color: '#718096', letterSpacing: '0.06em' }}>POWER INDEX</div>
                 </div>
-                <div style={{ fontSize: '0.55rem', color: '#718096', letterSpacing: '0.06em' }}>POWER INDEX</div>
               </div>
             </div>
           </div>
@@ -507,6 +517,12 @@ export default function PlayersPage() {
                 <option value="">Ruolo Secondario (opt.)</option>
                 {ROLES.map(r => <option key={r} value={r}>{getRoleIcon(r)} {r}</option>)}
               </select>
+              <input
+                className="input"
+                placeholder="🖼️ URL caricatura (Imgur, Drive...)"
+                value={form.photoURL}
+                onChange={e => setForm(f => ({ ...f, photoURL: e.target.value }))}
+              />
 
               {/* ── Historical linking section ── */}
               <HistoricalLinkSection
