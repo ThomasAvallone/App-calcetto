@@ -309,25 +309,26 @@ export default function PlayersPage() {
           )}
         </div>
 
-        <div className="card mb-4" style={{ padding: '1.25rem 1.5rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.75rem' }}>
-            {/* Caricatura / placeholder */}
-            <div style={{ flexShrink: 0, width: 90, height: 90, borderRadius: '50%', overflow: 'hidden', border: '2px solid #2D3748', background: '#1A202C', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              {p.photoURL
-                ? <img src={p.photoURL} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                : <span style={{ fontSize: '2.5rem' }}>{getRoleIcon(p.primaryRole)}</span>
-              }
-            </div>
-            {/* Power index */}
-            <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
-              <div style={{ position: 'relative', width: 120, height: 120 }}>
-                <PiArc value={p.powerIndex || 50} />
-                <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
-                  <div style={{ fontSize: '1.65rem', fontWeight: 900, color: '#4FD1C5', lineHeight: 1 }}>
-                    {(p.powerIndex || 50).toFixed(1)}
-                  </div>
-                  <div style={{ fontSize: '0.55rem', color: '#718096', letterSpacing: '0.06em' }}>POWER INDEX</div>
+        {p.photoURL && (
+          <div style={{ borderRadius: '12px 12px 0 0', overflow: 'hidden', marginBottom: 0, lineHeight: 0, border: '1px solid #2D3748', borderBottom: 'none', background: '#1A202C' }}>
+            <img
+              src={p.photoURL}
+              alt={p.name}
+              style={{ width: '100%', maxHeight: '320px', objectFit: 'contain', objectPosition: 'top center', display: 'block', background: '#1A202C' }}
+              onError={e => { e.currentTarget.style.display = 'none'; }}
+            />
+          </div>
+        )}
+        <div className="card mb-4" style={{ textAlign: 'center', padding: '1.75rem', ...(p.photoURL ? { borderRadius: '0 0 12px 12px', borderTop: 'none' } : {}) }}>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '0.75rem' }}>
+            <div style={{ position: 'relative', width: 120, height: 120 }}>
+              <PiArc value={p.powerIndex || 50} />
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
+                <div style={{ fontSize: '1.25rem', lineHeight: 1 }}>{getRoleIcon(p.primaryRole)}</div>
+                <div style={{ fontSize: '1.65rem', fontWeight: 900, color: '#4FD1C5', lineHeight: 1 }}>
+                  {(p.powerIndex || 50).toFixed(1)}
                 </div>
+                <div style={{ fontSize: '0.55rem', color: '#718096', letterSpacing: '0.06em' }}>POWER INDEX</div>
               </div>
             </div>
           </div>
