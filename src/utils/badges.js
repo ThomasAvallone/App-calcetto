@@ -300,6 +300,31 @@ export const BADGE_DEFS = [
     },
   },
   {
+    id: 'mutombo',
+    icon: '🚫',
+    label: 'MUTOMBO NOT IN MY HOUSE',
+    desc: 'Gioca contro Dani in una partita in cui Dani segna 0 gol — il muro invalicabile',
+    positive: true,
+    check: (_s, p, matches) => {
+      if (!matches?.length || !p?.id) return false;
+      const pid = p.id;
+      for (const m of matches) {
+        if (m.status !== 'finished' || m.isHistorical) continue;
+        const daniInRed  = (m.redTeam  || []).find(pl => pl.name?.toLowerCase().includes('dani'));
+        const daniInBlue = (m.blueTeam || []).find(pl => pl.name?.toLowerCase().includes('dani'));
+        const dani = daniInRed || daniInBlue;
+        if (!dani) continue;
+        // Dani deve aver segnato 0 gol
+        const daniScored = (m.events || []).some(ev => ev.type === 'goal' && ev.scorerId === dani.id);
+        if (daniScored) continue;
+        // Il giocatore deve essere nella squadra avversaria a Dani
+        const opposingTeam = daniInRed ? (m.blueTeam || []) : (m.redTeam || []);
+        if (opposingTeam.some(pl => pl.id === pid)) return true;
+      }
+      return false;
+    },
+  },
+  {
     id: 'wild_card',
     icon: '🃏',
     label: 'Wild Card',
