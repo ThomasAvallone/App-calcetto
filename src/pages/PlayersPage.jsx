@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import usePlayersStore from '../store/playersStore';
 import useAuthStore, { selectIsAdmin } from '../store/authStore';
-import { computeCombinedPowerIndex, recalculatePlayerStats } from '../firebase/firestore';
+import { computeCombinedPowerIndex, recalculatePlayerStats, computePowerIndex } from '../firebase/firestore';
 import { useMatchesSubscription } from '../hooks/useMatchesSubscription';
 import { HISTORICAL_SEASONS, suggestHistoricalNames, computeCumulativeStats, getUnlinkedNames } from '../data/historicalData';
 import { computeBadges } from '../utils/badges';
@@ -458,9 +458,11 @@ export default function PlayersPage() {
           ))}
         </div>
 
+        <PiTrendChart allMatches={allMatches} playerId={p.id} />
+
         <PlayerRecords allMatches={allMatches} player={p} />
 
-        <PlayerBadges player={p} seasonStats={playerSeasonStats[p.id]} />
+        <PlayerBadges player={p} seasonStats={playerSeasonStats[p.id]} allMatches={allMatches} />
 
         {hasHistory && (
           <div className="card mb-4" style={{ background: 'rgba(246,224,94,0.05)', border: '1px solid rgba(246,224,94,0.2)' }}>
@@ -752,6 +754,98 @@ function HistoricalLinkSection({ linkedNames, suggestions, showAll, allNames, hi
   );
 }
 
+function PiTrendChart({ allMatches, playerId }) {
+  const points = useMemo(() => {
+    const played = allMatches
+      .filter(m =>
+        m.status === 'finished' &&
+        !m.isHistorical &&
+        [...(m.redTeam || []), ...(m.blueTeam || [])].some(p => p.id === playerId)
+      )
+      .sort((a, b) => getMs(a.date) - getMs(b.date)); // cronologico ASC
+
+    if (played.length < 3) return [];
+
+    return played.map((_, idx) => {
+      const slice = played.slice(0, idx + 1);
+      const s = { goals: 0, assists: 0, autogoals: 0, gkGoalsConceded: 0, gkMatches: 0, wins: 0, losses: 0, draws: 0, matches: 0 };
+      for (const m of slice) {
+        const inRed = (m.redTeam || []).some(p => p.id === playerId);
+        s.matches++;
+        const my = inRed ? m.redScore : m.blueScore;
+        const their = inRed ? m.blueScore : m.redScore;
+        if (my > their) s.wins++; else if (my < their) s.losses++; else s.draws++;
+        let wasGk = false;
+        for (const ev of (m.events || [])) {
+          if (ev.type === 'goal') { if (ev.scorerId === playerId) s.goals++; if (ev.assistId === playerId) s.assists++; }
+          if (ev.type === 'autogoal' && ev.scorerId === playerId) s.autogoals++;
+          if (ev.gkConcededId === playerId) { s.gkGoalsConceded++; wasGk = true; }
+        }
+        if (wasGk) s.gkMatches++;
+      }
+      return computePowerIndex(s);
+    }).slice(-24); // massimo 24 punti
+  }, [allMatches, playerId]);
+
+  if (points.length < 3) return null;
+
+  const W = 280, H = 80, PAD_T = 14, PAD_B = 6;
+  const inner = H - PAD_T - PAD_B;
+  const minV = Math.max(0,   Math.min(...points) - 3);
+  const maxV = Math.min(100, Math.max(...points) + 3);
+  const range = maxV - minV || 1;
+  const toX = i  => (i / (points.length - 1)) * W;
+  const toY = v  => PAD_T + inner - ((v - minV) / range) * inner;
+
+  const linePath = points.map((v, i) => `${i === 0 ? 'M' : 'L'}${toX(i).toFixed(1)} ${toY(v).toFixed(1)}`).join(' ');
+  const areaPath = `${linePath} L${W} ${H - PAD_B} L0 ${H - PAD_B} Z`;
+
+  const last = points[points.length - 1];
+  const prev = points[points.length - 2];
+  const trend = last > prev ? CLR_WIN : last < prev ? CLR_LOSS : CLR_MUTED;
+
+  return (
+    <div className="card mb-4">
+      <div className="flex items-center justify-between mb-2">
+        <h3 style={{ fontSize: '0.95rem', margin: 0 }}>📈 Andamento Power Index</h3>
+        <span style={{ fontSize: '0.72rem', color: trend, fontWeight: 700 }}>
+          {last > prev ? '▲' : last < prev ? '▼' : '—'} {last.toFixed(1)}
+        </span>
+      </div>
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block', overflow: 'visible' }}>
+        {/* Grid lines */}
+        {[minV, (minV + maxV) / 2, maxV].map((v, i) => (
+          <line key={i} x1={0} y1={toY(v)} x2={W} y2={toY(v)} stroke="#2D3748" strokeWidth="1" />
+        ))}
+        {/* Y labels */}
+        <text x={2} y={toY(maxV) + 1} fill={CLR_MUTED} fontSize="8" dominantBaseline="hanging">{maxV.toFixed(0)}</text>
+        <text x={2} y={toY(minV) - 1} fill={CLR_MUTED} fontSize="8" dominantBaseline="auto">{minV.toFixed(0)}</text>
+        {/* Area fill */}
+        <path d={areaPath} fill="rgba(79,209,197,0.07)" />
+        {/* Line */}
+        <path d={linePath} fill="none" stroke="#4FD1C5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        {/* Dots — show only last 8 to avoid clutter */}
+        {points.slice(-8).map((v, j) => {
+          const i = points.length - 8 + j;
+          const isLast = i === points.length - 1;
+          return (
+            <circle key={i} cx={toX(i)} cy={toY(v)} r={isLast ? 5 : 2.5}
+              fill={isLast ? '#4FD1C5' : '#1A202C'} stroke="#4FD1C5" strokeWidth={isLast ? 2 : 1.5} />
+          );
+        })}
+        {/* Last value label */}
+        <text x={toX(points.length - 1)} y={toY(last) - 8}
+          fill="#4FD1C5" fontSize="10" fontWeight="700" textAnchor="middle">
+          {last.toFixed(1)}
+        </text>
+      </svg>
+      <div style={{ fontSize: '0.62rem', color: CLR_MUTED, marginTop: '0.25rem' }}>
+        Ultime {points.length} partite registrate nell'app
+      </div>
+    </div>
+  );
+}
+
 function PiArc({ value, size = 120, glow = false }) {
   const r = size * 0.38;
   const sw = size * 0.068;
@@ -912,8 +1006,8 @@ function PlayerRecords({ allMatches, player }) {
   );
 }
 
-function PlayerBadges({ player, seasonStats }) {
-  const badges = computeBadges(player, seasonStats);
+function PlayerBadges({ player, seasonStats, allMatches }) {
+  const badges = computeBadges(player, seasonStats, allMatches);
   if (badges.length === 0) return null;
   return (
     <div className="card mb-4">
