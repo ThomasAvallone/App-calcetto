@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import usePlayersStore from '../store/playersStore';
 import useAuthStore, { selectIsAdmin } from '../store/authStore';
-import { computeCombinedPowerIndex, subscribeToMatches, recalculatePlayerStats } from '../firebase/firestore';
+import { computeCombinedPowerIndex, recalculatePlayerStats } from '../firebase/firestore';
+import { useMatchesSubscription } from '../hooks/useMatchesSubscription';
 import { HISTORICAL_SEASONS, suggestHistoricalNames, computeCumulativeStats, getUnlinkedNames } from '../data/historicalData';
 import { computeBadges } from '../utils/badges';
 import { format } from 'date-fns';
@@ -93,11 +94,7 @@ export default function PlayersPage() {
   const [showAllHistorical, setShowAllHistorical] = useState(false);
   const [historicalSearch, setHistoricalSearch] = useState('');
 
-  const [allMatches, setAllMatches] = useState([]);
-  useEffect(() => {
-    const unsub = subscribeToMatches(setAllMatches);
-    return unsub;
-  }, []);
+  const allMatches = useMatchesSubscription();
 
   const finishedMatches = useMemo(() => allMatches.filter(m => m.status === 'finished'), [allMatches]);
 
@@ -294,6 +291,7 @@ export default function PlayersPage() {
   if (selectedPlayer) {
     const p = players.find(pl => pl.id === selectedPlayer);
     if (!p) { setSelectedPlayer(null); return null; }
+    const playerRank = ranking.findIndex(r => r.id === p.id);
 
     const as = p.stats || {};
     const total = {
@@ -316,7 +314,7 @@ export default function PlayersPage() {
 
     return (
       <SwipeBack onSwipe={() => setSelectedPlayer(null)}>
-      <div className="page-content">
+      <div className="page-content slide-in-right">
         <div className="flex items-center gap-3 mb-4" style={{ paddingTop: '0.5rem' }}>
           <button className="btn btn-ghost btn-icon" onClick={() => setSelectedPlayer(null)}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M15 18l-6-6 6-6"/></svg>
@@ -343,7 +341,7 @@ export default function PlayersPage() {
         <div className="card mb-4" style={{ textAlign: 'center', padding: '1.75rem', ...(p.photoURL ? { borderRadius: '0 0 12px 12px', borderTop: 'none' } : {}) }}>
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '0.75rem' }}>
             <div style={{ position: 'relative', width: 120, height: 120 }}>
-              <PiArc value={p.powerIndex || 50} />
+              <PiArc value={p.powerIndex || 50} glow={playerRank < 3} />
               <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
                 <div style={{ fontSize: '1.25rem', lineHeight: 1 }}>{getRoleIcon(p.primaryRole)}</div>
                 <div style={{ fontSize: '1.65rem', fontWeight: 900, color: '#4FD1C5', lineHeight: 1 }}>
@@ -611,7 +609,9 @@ export default function PlayersPage() {
                 {playerFormMap[p.id] && <FormDots results={playerFormMap[p.id].lastFive} size={7} />}
               </div>
               <div style={{ textAlign: 'right' }}>
-                <div style={{ fontWeight: 700, color: '#4FD1C5' }}>{(p.powerIndex || 50).toFixed(1)}</div>
+                <div style={{ fontWeight: 700, color: '#4FD1C5', ...(i < 3 ? { filter: 'drop-shadow(0 0 4px #4FD1C5)' } : {}) }}>
+                  {(p.powerIndex || 50).toFixed(1)}
+                </div>
                 {isAdmin && p.recentForm && (
                   <div className="text-xs" style={{ fontWeight: 600, color: p.recentForm.avg >= 7 ? CLR_WIN : p.recentForm.avg >= 5 ? CLR_DRAW : CLR_LOSS }}>
                     ⭐ {p.recentForm.avg.toFixed(1)}
@@ -752,14 +752,16 @@ function HistoricalLinkSection({ linkedNames, suggestions, showAll, allNames, hi
   );
 }
 
-function PiArc({ value, size = 120 }) {
+function PiArc({ value, size = 120, glow = false }) {
   const r = size * 0.38;
   const sw = size * 0.068;
   const circ = 2 * Math.PI * r;
   const fill = (Math.max(0, Math.min(100, value)) / 100) * circ;
   const mid = size / 2;
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ display: 'block' }}>
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}
+      style={{ display: 'block' }}
+      className={glow ? 'pi-glow' : undefined}>
       <circle cx={mid} cy={mid} r={r} fill="none" stroke="#2D3748" strokeWidth={sw} />
       <circle cx={mid} cy={mid} r={r} fill="none" stroke="#4FD1C5" strokeWidth={sw}
         strokeDasharray={`${fill} ${circ}`}

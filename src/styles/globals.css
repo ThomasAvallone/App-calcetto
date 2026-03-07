@@ -327,7 +327,17 @@ select.input option { background: var(--bg-card); }
 @keyframes slideUp { from { transform:translateY(20px); opacity:0; } to { transform:translateY(0); opacity:1; } }
 @keyframes bounce { 0%,100% { transform:scale(1); } 50% { transform:scale(1.1); } }
 @keyframes spin { to { transform:rotate(360deg); } }
-@keyframes goalFlash { 0% { opacity:1; } 100% { opacity:0; } }
+@keyframes goalFlash   { 0% { opacity:1; } 100% { opacity:0; } }
+@keyframes scoreBounce { 0%,100% { transform:scale(1); } 40% { transform:scale(1.5); } 70% { transform:scale(0.92); } }
+@keyframes scoreShake  { 0%,100% { transform:translateX(0); } 15% { transform:translateX(-7px); } 35% { transform:translateX(7px); } 55% { transform:translateX(-5px); } 75% { transform:translateX(5px); } }
+@keyframes slideInRight { from { transform:translateX(100%); opacity:0; } to { transform:translateX(0); opacity:1; } }
+@keyframes confettiFall { 0% { transform:translateY(-20px) rotate(0deg); opacity:1; } 100% { transform:translateY(100vh) rotate(720deg); opacity:0; } }
+@keyframes piGlow { 0%,100% { filter:drop-shadow(0 0 3px #4FD1C5); } 50% { filter:drop-shadow(0 0 10px #4FD1C5) drop-shadow(0 0 20px #4FD1C5aa); } }
+
+.score-bounce { animation: scoreBounce 0.45s cubic-bezier(.36,.07,.19,.97) forwards; }
+.score-shake  { animation: scoreShake  0.45s cubic-bezier(.36,.07,.19,.97) forwards; }
+.slide-in-right { animation: slideInRight 0.28s cubic-bezier(.25,.46,.45,.94) forwards; }
+.pi-glow { animation: piGlow 2s ease-in-out infinite; }
 
 .animate-pulse { animation: pulse 2s ease-in-out infinite; }
 .animate-slide-up { animation: slideUp 0.3s ease forwards; }

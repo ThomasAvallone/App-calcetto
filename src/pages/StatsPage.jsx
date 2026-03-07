@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import usePlayersStore from '../store/playersStore';
-import { subscribeToMatches } from '../firebase/firestore';
+import { useMatchesSubscription } from '../hooks/useMatchesSubscription';
 import { HISTORICAL_SEASONS } from '../data/historicalData';
 import { getMs } from '../utils/dateUtils';
 import { RESULT_COLORS, CLR_WIN, CLR_DRAW, CLR_LOSS, AVATAR_COLORS } from '../constants/colors';
@@ -197,14 +197,9 @@ export default function StatsPage() {
   const { players } = usePlayersStore();
   const [tab, setTab] = useState('goals');
   const [period, setPeriod] = useState('all');
-  const [allMatches, setAllMatches] = useState([]);
+  const allMatches = useMatchesSubscription();
   const [h2hP1, setH2hP1] = useState('');
   const [h2hP2, setH2hP2] = useState('');
-
-  useEffect(() => {
-    const unsub = subscribeToMatches(setAllMatches);
-    return unsub;
-  }, []);
 
   const finishedMatches = useMemo(() => allMatches.filter(m => m.status === 'finished'), [allMatches]);
 

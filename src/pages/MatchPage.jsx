@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import useMatchStore from '../store/matchStore';
 import usePlayersStore from '../store/playersStore';
 import useAuthStore, { selectIsAdmin } from '../store/authStore';
+import Confetti from '../components/Confetti';
 import { generateMatchReport } from '../services/reportService';
 import { exportMatchToSheets } from '../services/sheetsService';
 import { recalculatePlayerStats, updateMatch } from '../firebase/firestore';
@@ -63,10 +64,25 @@ export default function MatchPage() {
   const [reportText, setReportText] = useState('');
   const [endConfirm, setEndConfirm] = useState(false);
   const [ending, setEnding] = useState(false);
-  const [goalFlash, setGoalFlash] = useState(null); // 'red' | 'blue' | null
+  const [goalFlash, setGoalFlash] = useState(null);   // 'red' | 'blue' | null
+  const [showConfetti, setShowConfetti] = useState(false);
+  const [scoreBounce, setScoreBounce] = useState(null); // 'red' | 'blue' | null
+  const [scoreShake, setScoreShake] = useState(null);   // 'red' | 'blue' | null
+  const prevRedScore  = useRef(0);
+  const prevBlueScore = useRef(0);
 
   const timerRef = useRef(null);
   const prevTurnRef = useRef(-1);
+
+  // Bounce/shake when scores change
+  useEffect(() => {
+    const red  = match?.redScore  || 0;
+    const blue = match?.blueScore || 0;
+    if (red  > prevRedScore.current)  { setScoreBounce('red');  setTimeout(() => setScoreBounce(null), 450); }
+    if (blue > prevBlueScore.current) { setScoreBounce('blue'); setTimeout(() => setScoreBounce(null), 450); }
+    prevRedScore.current  = red;
+    prevBlueScore.current = blue;
+  }, [match?.redScore, match?.blueScore]);
 
   useEffect(() => {
     if (id !== activeMatchId) loadMatch(id);
@@ -179,6 +195,8 @@ export default function MatchPage() {
     if (pendingGoalData._autogoal) {
       await recordAutogoal({ team: pendingGoalData.team, scorerId: pendingGoalData.scorerId, scorerName: pendingGoalData.scorerName, ...gkFields });
       toast.success(`🤦 Autogol di ${pendingGoalData.scorerName}`);
+      setScoreShake(pendingGoalData.team);
+      setTimeout(() => setScoreShake(null), 450);
     } else {
       await recordGoal({ ...pendingGoalData, ...gkFields });
       const assistMsg = pendingGoalData.assistId ? ` (assist: ${pendingGoalData.assistName})` : '';
@@ -200,7 +218,9 @@ export default function MatchPage() {
       await exportMatchToSheets(match, players).catch(() => {});
       const report = generateMatchReport(match, players);
       if (activeMatchId) await updateMatch(activeMatchId, { report });
-      setReportText(report); setReportModal(true);
+      setReportText(report);
+      setShowConfetti(true);
+      setTimeout(() => { setShowConfetti(false); setReportModal(true); }, 2200);
     } catch (e) {
       toast.error('Errore: ' + e.message);
     } finally {
@@ -254,17 +274,24 @@ export default function MatchPage() {
   // ── Assist Modal (5s countdown) ─────────────────────────────────────────────
   if (pendingAssist && selectedScorer) {
     const otherTeamPlayers = goalTeam === 'red' ? redTeam : blueTeam;
+    const cdR = 34, cdCirc = 2 * Math.PI * cdR;
+    const cdFill = (assistCountdown / 5) * cdCirc;
     return (
       <div className="modal-overlay">
         <div className="modal animate-slide-up">
           <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
-            <div style={{ fontSize: '2rem', marginBottom: '0.25rem' }}>🎯</div>
-            <h2 className="modal-title">Assist per {selectedScorer.name}?</h2>
-            <div style={{ fontSize: '2rem', fontWeight: 900, color: '#F6E05E', margin: '0.5rem 0' }}>
-              {assistCountdown}s
-            </div>
-            <div className="progress-bar" style={{ marginBottom: '1rem' }}>
-              <div className="progress-bar-fill" style={{ width: `${(assistCountdown / 5) * 100}%`, background: '#F6E05E' }} />
+            <h2 className="modal-title" style={{ marginBottom: '0.75rem' }}>🎯 Assist per {selectedScorer.name}?</h2>
+            <div style={{ display: 'inline-block', position: 'relative', width: 88, height: 88 }}>
+              <svg width="88" height="88" viewBox="0 0 88 88" style={{ transform: 'rotate(-90deg)' }}>
+                <circle cx="44" cy="44" r={cdR} fill="none" stroke="#2D3748" strokeWidth="6" />
+                <circle cx="44" cy="44" r={cdR} fill="none" stroke="#F6E05E" strokeWidth="6"
+                  strokeDasharray={`${cdFill} ${cdCirc}`} strokeLinecap="round"
+                  style={{ transition: 'stroke-dasharray 0.9s linear' }} />
+              </svg>
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '1.8rem', fontWeight: 900, color: '#F6E05E' }}>
+                {assistCountdown}
+              </div>
             </div>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', maxHeight: '45vh', overflowY: 'auto' }}>
@@ -372,6 +399,8 @@ export default function MatchPage() {
   return (
     <div className="page-content" style={{ paddingTop: '1rem' }}>
 
+      {showConfetti && <Confetti />}
+
       {/* Goal flash overlay */}
       {goalFlash && (
         <div style={{
@@ -396,12 +425,16 @@ export default function MatchPage() {
         {/* Score */}
         <div className="flex items-center justify-center gap-4 mb-4">
           <div style={{ textAlign: 'center' }}>
-            <div className="score-display score-red">{match.redScore ?? 0}</div>
+            <div className={`score-display score-red${scoreBounce === 'red' ? ' score-bounce' : scoreShake === 'red' ? ' score-shake' : ''}`}>
+              {match.redScore ?? 0}
+            </div>
             <div className="text-xs text-muted">ROSSI</div>
           </div>
           <div style={{ fontSize: '1.5rem', color: '#4A5568', fontWeight: 300 }}>—</div>
           <div style={{ textAlign: 'center' }}>
-            <div className="score-display score-blue">{match.blueScore ?? 0}</div>
+            <div className={`score-display score-blue${scoreBounce === 'blue' ? ' score-bounce' : scoreShake === 'blue' ? ' score-shake' : ''}`}>
+              {match.blueScore ?? 0}
+            </div>
             <div className="text-xs text-muted">BLU</div>
           </div>
         </div>

@@ -3,10 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import useAuthStore, { selectIsAdmin } from '../store/authStore';
 import usePlayersStore from '../store/playersStore';
 import useMatchStore from '../store/matchStore';
-import {
-  subscribeToMatches,
-  updateMatch,
-} from '../firebase/firestore';
+import { updateMatch } from '../firebase/firestore';
+import { useMatchesSubscription } from '../hooks/useMatchesSubscription';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import toast from 'react-hot-toast';
@@ -32,13 +30,8 @@ export default function DashboardPage() {
   const navigate = useNavigate();
   const isAdmin = useAuthStore(selectIsAdmin);
 
-  const [allMatches, setAllMatches] = useState([]);
+  const allMatches = useMatchesSubscription();
   const [showStartPicker, setShowStartPicker] = useState(false);
-
-  useEffect(() => {
-    const unsub = subscribeToMatches(setAllMatches);
-    return unsub;
-  }, []);
 
   const recentMatches = allMatches.filter(m => m.status !== 'scheduled').slice(0, 5);
   const finishedMatches = allMatches.filter(m => m.status === 'finished');
