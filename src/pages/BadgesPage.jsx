@@ -24,7 +24,8 @@ function badgeSource(b) {
   if (['veterano', 'diamante', 'il_prescelto', 'fenomeno', 'on_fire', 'crisi'].includes(b.id)) return 'alltime';
   if ([
     'early_bird', 'lone_ranger', 'meteorite', 'rockstar',
-    'campanaro', 'chirurgo', 'bulldozer', 'last_minute',
+    'che_io_tassista', 'chirurgo', 'bulldozer', 'last_minute',
+    'pokemon_leggendario', 'mutombo', 'giancarlo', 'miglior_luciano',
   ].includes(b.id)) return 'match';
   return 'season';
 }

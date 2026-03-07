@@ -53,9 +53,9 @@ export const BADGE_DEFS = [
     id: 'fenomeno',
     icon: '⭐',
     label: 'Fenomeno',
-    desc: 'Power Index > 75',
+    desc: 'Power Index > 90',
     positive: true,
-    check: (_s, p) => (p.powerIndex || 0) > 75,
+    check: (_s, p) => (p.powerIndex || 0) > 90,
   },
   {
     id: 'il_prescelto',
@@ -92,9 +92,9 @@ export const BADGE_DEFS = [
     check: (_s, p) => (p.stats?.matches || 0) >= 150,
   },
   {
-    id: 'motorino',
+    id: 'altruista',
     icon: '🛵',
-    label: 'Motorino',
+    label: 'Altruista',
     desc: 'Più assist che gol in stagione (min 8 assist) — regista puro',
     positive: true,
     check: (s) =>
@@ -219,9 +219,9 @@ export const BADGE_DEFS = [
     },
   },
   {
-    id: 'campanaro',
+    id: 'che_io_tassista',
     icon: '🔔',
-    label: 'Campanaro',
+    label: 'Che io t\'assista',
     desc: '3+ assist in una singola partita — regia da applausi',
     positive: true,
     check: (_s, p, matches) => {
@@ -333,6 +333,55 @@ export const BADGE_DEFS = [
     check: (s) =>
       (s.matches || 0) >= 12 &&
       Math.abs((s.wins || 0) - (s.losses || 0)) <= 1,
+  },
+
+  {
+    id: 'giancarlo',
+    icon: '🎲',
+    label: 'Giancarlo',
+    desc: 'In ogni partita c\'è UN Giancarlo — estratto a sorte tra i presenti. Nessuno sa perché, nessuno sa come. È lui. È Giancarlo.',
+    positive: true,
+    check: (_s, p, matches) => {
+      if (!matches?.length || !p?.id) return false;
+      const pid = p.id;
+      const hash = (str) => {
+        let h = 0;
+        for (let i = 0; i < str.length; i++) h = (Math.imul(31, h) + str.charCodeAt(i)) | 0;
+        return Math.abs(h);
+      };
+      for (const m of matches) {
+        if (m.status !== 'finished' || m.isHistorical) continue;
+        const all = [...(m.redTeam || []), ...(m.blueTeam || [])];
+        if (!all.length) continue;
+        const giancarlo = all[hash(m.id || m.date || '') % all.length];
+        if (giancarlo?.id === pid) return true;
+      }
+      return false;
+    },
+  },
+  {
+    id: 'miglior_luciano',
+    icon: '🥇',
+    label: 'Miglior Luciano',
+    desc: 'Riservato esclusivamente a Luciano. Ogni partita ha il 10% di possibilità di conferirgli questo ambito riconoscimento. Perché il Miglior Luciano merita di essere celebrato.',
+    positive: true,
+    check: (_s, p, matches) => {
+      if (!matches?.length || !p?.id) return false;
+      if (!p.name?.toLowerCase().includes('luciano')) return false;
+      const pid = p.id;
+      const hash = (str) => {
+        let h = 0;
+        for (let i = 0; i < str.length; i++) h = (Math.imul(31, h) + str.charCodeAt(i)) | 0;
+        return Math.abs(h);
+      };
+      for (const m of matches) {
+        if (m.status !== 'finished' || m.isHistorical) continue;
+        const inMatch = [...(m.redTeam || []), ...(m.blueTeam || [])].some(pl => pl.id === pid);
+        if (!inMatch) continue;
+        if (hash(m.id || m.date || '') % 10 === 0) return true;
+      }
+      return false;
+    },
   },
 
   // ── NEGATIVI / GOLIARDICI ─────────────────────────────────────────────────
