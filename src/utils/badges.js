@@ -156,6 +156,25 @@ export const BADGE_DEFS = [
     },
   },
   {
+    id: 'pokemon_leggendario',
+    icon: '✨',
+    label: 'Pokémon Leggendario',
+    desc: '5 gol in una singola partita — quasi impossibile, quasi mitologico',
+    positive: true,
+    check: (_s, p, matches) => {
+      if (!matches?.length || !p?.id) return false;
+      const pid = p.id;
+      for (const m of matches) {
+        if (m.status !== 'finished' || m.isHistorical) continue;
+        const inMatch = [...(m.redTeam || []), ...(m.blueTeam || [])].some(pl => pl.id === pid);
+        if (!inMatch) continue;
+        const goals = (m.events || []).filter(ev => ev.type === 'goal' && ev.scorerId === pid);
+        if (goals.length >= 5) return true;
+      }
+      return false;
+    },
+  },
+  {
     id: 'meteorite',
     icon: '☄️',
     label: 'Meteorite',
