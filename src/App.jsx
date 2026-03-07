@@ -12,6 +12,7 @@ import MatchDetailPage from './pages/MatchDetailPage';
 import ScheduledMatchDetailPage from './pages/ScheduledMatchDetailPage';
 import PlayersPage from './pages/PlayersPage';
 import AdminPage from './pages/AdminPage';
+import BadgesPage from './pages/BadgesPage';
 import StagioniPage from './pages/StagioniPage';
 import StatsPage from './pages/StatsPage';
 import Layout from './components/Layout';
@@ -82,6 +83,7 @@ export default function App() {
           <Route path="stagioni" element={<StagioniPage />} />
           <Route path="stats" element={<StatsPage />} />
           <Route path="admin" element={<AdminRoute><AdminPage /></AdminRoute>} />
+          <Route path="admin/badges" element={<AdminRoute><BadgesPage /></AdminRoute>} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

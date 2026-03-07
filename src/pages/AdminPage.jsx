@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { getMatches, getPlayers, seedHistoricalSeasons, createPlayer, importHistoricalMatches, recalculatePlayerStats } from '../firebase/firestore';
 import { syncAllHistoryToSheets } from '../services/sheetsService';
 import { downloadExcel } from '../services/excelService';
@@ -9,6 +10,7 @@ import useAuthStore, { selectIsAdmin } from '../store/authStore';
 import toast from 'react-hot-toast';
 
 export default function AdminPage() {
+  const navigate = useNavigate();
   const currentIsAdmin = useAuthStore(selectIsAdmin);
   const currentUser = useAuthStore(s => s.user);
   const [players, setPlayers] = useState([]);
@@ -295,6 +297,18 @@ export default function AdminPage() {
           disabled={recalculating}
         >
           {recalculating ? '⏳ Ricalcolo in corso...' : '🔄 Ricalcola Tutto'}
+        </button>
+      </div>
+
+      {/* Badge Catalog */}
+      <div className="card mb-4" style={{ border: '1px solid rgba(183,148,244,0.25)', background: 'rgba(183,148,244,0.03)' }}>
+        <h3 className="mb-1" style={{ fontSize: '0.95rem' }}>🏅 Catalogo Badge</h3>
+        <p className="text-xs text-muted mb-3" style={{ lineHeight: 1.5 }}>
+          Tutti i badge disponibili con descrizione, fonte dati e condizioni di sblocco.
+        </p>
+        <button className="btn" style={{ background: 'rgba(183,148,244,0.15)', color: '#B794F4', border: '1px solid rgba(183,148,244,0.4)' }}
+          onClick={() => navigate('/admin/badges')}>
+          🏅 Vedi Catalogo Badge
         </button>
       </div>
 

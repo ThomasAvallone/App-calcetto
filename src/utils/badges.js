@@ -61,9 +61,9 @@ export const BADGE_DEFS = [
     id: 'il_prescelto',
     icon: '⚡',
     label: 'Il Prescelto',
-    desc: 'Power Index > 80 — élite assoluta',
+    desc: 'Power Index > 95 — élite assoluta, quasi irraggiungibile',
     positive: true,
-    check: (_s, p) => (p.powerIndex || 0) > 80,
+    check: (_s, p) => (p.powerIndex || 0) > 95,
   },
   {
     id: 'on_fire',
@@ -87,9 +87,9 @@ export const BADGE_DEFS = [
     id: 'veterano',
     icon: '🎖️',
     label: 'Veterano',
-    desc: '50+ partite all-time — presente sin dall\'inizio',
+    desc: '150+ partite all-time — una leggenda del campo',
     positive: true,
-    check: (_s, p) => (p.stats?.matches || 0) >= 50,
+    check: (_s, p) => (p.stats?.matches || 0) >= 150,
   },
   {
     id: 'motorino',
@@ -100,6 +100,14 @@ export const BADGE_DEFS = [
     check: (s) =>
       (s.assists || 0) >= 8 &&
       (s.assists || 0) > (s.goals || 0),
+  },
+  {
+    id: 'diamante',
+    icon: '💎',
+    label: 'Diamante',
+    desc: 'Gol + assist all-time ≥ 100 — contributo totale da centenario',
+    positive: true,
+    check: (_s, p) => (p.stats?.goals || 0) + (p.stats?.assists || 0) >= 100,
   },
   {
     id: 'early_bird',
@@ -166,6 +174,122 @@ export const BADGE_DEFS = [
       return false;
     },
   },
+  {
+    id: 'rockstar',
+    icon: '🎸',
+    label: 'Rockstar',
+    desc: 'Gol in 5 partite consecutive',
+    positive: true,
+    check: (_s, p, matches) => {
+      if (!matches?.length || !p?.id) return false;
+      const pid = p.id;
+      const played = matches
+        .filter(m =>
+          m.status === 'finished' &&
+          !m.isHistorical &&
+          [...(m.redTeam || []), ...(m.blueTeam || [])].some(pl => pl.id === pid)
+        )
+        .sort((a, b) => getMs(b.date) - getMs(a.date));
+      let streak = 0;
+      for (const m of played) {
+        const scored = (m.events || []).some(ev => ev.type === 'goal' && ev.scorerId === pid);
+        if (scored) { streak++; if (streak >= 5) return true; }
+        else streak = 0;
+      }
+      return false;
+    },
+  },
+  {
+    id: 'campanaro',
+    icon: '🔔',
+    label: 'Campanaro',
+    desc: '3+ assist in una singola partita — regia da applausi',
+    positive: true,
+    check: (_s, p, matches) => {
+      if (!matches?.length || !p?.id) return false;
+      const pid = p.id;
+      for (const m of matches) {
+        if (m.status !== 'finished' || m.isHistorical) continue;
+        const inMatch = [...(m.redTeam || []), ...(m.blueTeam || [])].some(pl => pl.id === pid);
+        if (!inMatch) continue;
+        const assists = (m.events || []).filter(ev => ev.type === 'goal' && ev.assistId === pid);
+        if (assists.length >= 3) return true;
+      }
+      return false;
+    },
+  },
+  {
+    id: 'chirurgo',
+    icon: '🏥',
+    label: 'Chirurgo',
+    desc: 'Tutti i gol dell\'app con assist ricevuto (min 5 gol) — non segna mai da solo',
+    positive: true,
+    check: (_s, p, matches) => {
+      if (!matches?.length || !p?.id) return false;
+      const pid = p.id;
+      const allGoals = [];
+      for (const m of matches) {
+        if (m.status !== 'finished' || m.isHistorical) continue;
+        for (const ev of (m.events || [])) {
+          if (ev.type === 'goal' && ev.scorerId === pid) allGoals.push(ev);
+        }
+      }
+      return allGoals.length >= 5 && allGoals.every(ev => !!ev.assistId);
+    },
+  },
+  {
+    id: 'bulldozer',
+    icon: '🌪️',
+    label: 'Bulldozer',
+    desc: 'Vince con 5+ gol di scarto in almeno una partita — passaggio devastante',
+    positive: true,
+    check: (_s, p, matches) => {
+      if (!matches?.length || !p?.id) return false;
+      const pid = p.id;
+      for (const m of matches) {
+        if (m.status !== 'finished' || m.isHistorical) continue;
+        const inRed = (m.redTeam || []).some(pl => pl.id === pid);
+        const inBlue = (m.blueTeam || []).some(pl => pl.id === pid);
+        if (!inRed && !inBlue) continue;
+        const my = inRed ? m.redScore : m.blueScore;
+        const their = inRed ? m.blueScore : m.redScore;
+        if (my - their >= 5) return true;
+      }
+      return false;
+    },
+  },
+  {
+    id: 'last_minute',
+    icon: '⏱️',
+    label: 'Last Minute',
+    desc: 'Gol al minuto ≥ 40 per 3 partite — campione del recupero',
+    positive: true,
+    check: (_s, p, matches) => {
+      if (!matches?.length || !p?.id) return false;
+      const pid = p.id;
+      let count = 0;
+      for (const m of matches) {
+        if (m.status !== 'finished' || m.isHistorical) continue;
+        const inMatch = [...(m.redTeam || []), ...(m.blueTeam || [])].some(pl => pl.id === pid);
+        if (!inMatch) continue;
+        const lateGoal = (m.events || []).some(
+          ev => ev.type === 'goal' && ev.scorerId === pid && (ev.minute || 0) >= 40
+        );
+        if (lateGoal) { count++; if (count >= 3) return true; }
+      }
+      return false;
+    },
+  },
+  {
+    id: 'wild_card',
+    icon: '🃏',
+    label: 'Wild Card',
+    desc: 'Vittorie e sconfitte quasi identiche in stagione (|V−S| ≤ 1, min 12 partite) — puro caos',
+    positive: true,
+    check: (s) =>
+      (s.matches || 0) >= 12 &&
+      Math.abs((s.wins || 0) - (s.losses || 0)) <= 1,
+  },
 
   // ── NEGATIVI / GOLIARDICI ─────────────────────────────────────────────────
   {
@@ -180,9 +304,13 @@ export const BADGE_DEFS = [
     id: 'bestie',
     icon: '🙏',
     label: 'Bestie',
-    desc: '1+ autogol in stagione — "Madonna!" almeno una volta',
+    desc: 'Premio giuria Admin — la "Madonna" più sincera e sentita della partita',
     positive: false,
-    check: (s) => (s.autogoals || 0) >= 1,
+    // Assigned manually by admins via match.bestieId; auto-computed from autogoals as fallback
+    check: (_s, p, matches) => {
+      if (!p?.id) return false;
+      return (matches || []).some(m => !m.isHistorical && m.bestieId === p.id);
+    },
   },
   {
     id: 'crisi',
