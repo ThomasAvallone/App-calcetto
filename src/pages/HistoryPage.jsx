@@ -5,13 +5,7 @@ import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { generateMatchReport } from '../services/reportService';
 import toast from 'react-hot-toast';
-
-function safeDate(val) {
-  if (!val) return null;
-  if (val?.toDate) return val.toDate();
-  if (val instanceof Date) return val;
-  return new Date(val);
-}
+import { safeDate } from '../utils/dateUtils';
 
 function getMatchSeason(d) {
   if (!d) return null;

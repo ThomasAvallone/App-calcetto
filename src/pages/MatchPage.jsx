@@ -63,6 +63,7 @@ export default function MatchPage() {
   const [reportText, setReportText] = useState('');
   const [endConfirm, setEndConfirm] = useState(false);
   const [ending, setEnding] = useState(false);
+  const [goalFlash, setGoalFlash] = useState(null); // 'red' | 'blue' | null
 
   const timerRef = useRef(null);
   const prevTurnRef = useRef(-1);
@@ -182,6 +183,8 @@ export default function MatchPage() {
       await recordGoal({ ...pendingGoalData, ...gkFields });
       const assistMsg = pendingGoalData.assistId ? ` (assist: ${pendingGoalData.assistName})` : '';
       toast.success(`⚽ Gol di ${pendingGoalData.scorerName}${assistMsg}!`);
+      setGoalFlash(pendingGoalData.team);
+      setTimeout(() => setGoalFlash(null), 600);
     }
     setPendingGoalData(null);
     setSelectedScorer(null);
@@ -368,6 +371,15 @@ export default function MatchPage() {
   // ── Main Match UI ───────────────────────────────────────────────────────────
   return (
     <div className="page-content" style={{ paddingTop: '1rem' }}>
+
+      {/* Goal flash overlay */}
+      {goalFlash && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 999, pointerEvents: 'none',
+          background: goalFlash === 'red' ? 'rgba(252,129,129,0.25)' : 'rgba(99,179,237,0.25)',
+          animation: 'goalFlash 0.6s ease forwards',
+        }} />
+      )}
 
       {/* Timer */}
       <div className="card mb-4" style={{ textAlign: 'center', padding: '2rem 1.5rem' }}>

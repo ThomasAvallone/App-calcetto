@@ -7,6 +7,7 @@ import { generateMatchReport } from '../services/reportService';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import toast from 'react-hot-toast';
+import { safeDate } from '../utils/dateUtils';
 
 function RatingSection({ match, userId, userName, onRated }) {
   const allPlayers = [...(match.redTeam || []), ...(match.blueTeam || [])];
@@ -88,13 +89,6 @@ function RatingSection({ match, userId, userName, onRated }) {
       </button>
     </div>
   );
-}
-
-function safeDate(val) {
-  if (!val) return null;
-  if (val?.toDate) return val.toDate();
-  if (val instanceof Date) return val;
-  return new Date(val);
 }
 
 export default function MatchDetailPage() {

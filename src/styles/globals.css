@@ -327,6 +327,7 @@ select.input option { background: var(--bg-card); }
 @keyframes slideUp { from { transform:translateY(20px); opacity:0; } to { transform:translateY(0); opacity:1; } }
 @keyframes bounce { 0%,100% { transform:scale(1); } 50% { transform:scale(1.1); } }
 @keyframes spin { to { transform:rotate(360deg); } }
+@keyframes goalFlash { 0% { opacity:1; } 100% { opacity:0; } }
 
 .animate-pulse { animation: pulse 2s ease-in-out infinite; }
 .animate-slide-up { animation: slideUp 0.3s ease forwards; }

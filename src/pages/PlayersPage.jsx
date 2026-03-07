@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import usePlayersStore from '../store/playersStore';
 import useAuthStore, { selectIsAdmin } from '../store/authStore';
 import { computeCombinedPowerIndex, subscribeToMatches, recalculatePlayerStats } from '../firebase/firestore';
@@ -7,10 +7,10 @@ import { computeBadges } from '../utils/badges';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import toast from 'react-hot-toast';
+import { getMs } from '../utils/dateUtils';
+import { RESULT_COLORS, CLR_WIN, CLR_DRAW, CLR_LOSS, AVATAR_COLORS, CLR_MUTED, MEDAL_COLORS } from '../constants/colors';
 
 const ROLES = ['Portiere', 'Difensore', 'Centrocampista', 'Attaccante'];
-
-const getMs = d => d?.toMillis ? d.toMillis() : d ? new Date(d).getTime() : 0;
 
 // Map seasonId → { PLAYERNAME_UPPER → { presenze, assist } }
 const SEASON_PLAYER_MAP = {};
@@ -34,7 +34,7 @@ function getSeasonId(dateVal) {
 }
 
 function FormDots({ results, size = 9 }) {
-  const colors = { W: '#68D391', D: '#F6E05E', L: '#FC8181' };
+  const colors = RESULT_COLORS;
   if (!results || results.length === 0) return null;
   return (
     <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
@@ -51,6 +51,26 @@ function FormDots({ results, size = 9 }) {
 }
 
 const defaultForm = { name: '', primaryRole: 'Centrocampista', secondaryRole: '', photoURL: '' };
+
+/** Riconosce uno swipe da sinistra a destra e chiama onSwipe (back gesture mobile) */
+function SwipeBack({ onSwipe, children }) {
+  const startX = useRef(null);
+  const startY = useRef(null);
+  return (
+    <div
+      onTouchStart={e => { startX.current = e.touches[0].clientX; startY.current = e.touches[0].clientY; }}
+      onTouchEnd={e => {
+        if (startX.current === null) return;
+        const dx = e.changedTouches[0].clientX - startX.current;
+        const dy = Math.abs(e.changedTouches[0].clientY - startY.current);
+        if (dx > 60 && dy < 60) onSwipe();
+        startX.current = null;
+      }}
+    >
+      {children}
+    </div>
+  );
+}
 
 export default function PlayersPage() {
   const { players, addPlayer, updatePlayer: editPlayer, removePlayer } = usePlayersStore();
@@ -290,11 +310,12 @@ export default function PlayersPage() {
     const hasHistory = (p.historicalNames || []).length > 0;
     const pForm = playerFormMap[p.id];
     const rf = p.recentForm;
-    const formColor = rf ? (rf.avg >= 7 ? '#68D391' : rf.avg >= 5 ? '#F6E05E' : '#FC8181') : null;
+    const formColor = rf ? (rf.avg >= 7 ? CLR_WIN : rf.avg >= 5 ? CLR_DRAW : CLR_LOSS) : null;
     const seasonSt = playerSeasonStats[p.id] || {};
     const displaySt = statView === 'season' ? seasonSt : total;
 
     return (
+      <SwipeBack onSwipe={() => setSelectedPlayer(null)}>
       <div className="page-content">
         <div className="flex items-center gap-3 mb-4" style={{ paddingTop: '0.5rem' }}>
           <button className="btn btn-ghost btn-icon" onClick={() => setSelectedPlayer(null)}>
@@ -342,7 +363,7 @@ export default function PlayersPage() {
               <div style={{ fontSize: '0.62rem', color: '#718096', letterSpacing: '0.06em', marginBottom: '0.6rem' }}>FORMA RECENTE (ultime {pForm.lastFive.length})</div>
               <div style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}>
                 {pForm.lastFive.map((r, i) => {
-                  const colors = { W: '#68D391', D: '#F6E05E', L: '#FC8181' };
+                  const colors = RESULT_COLORS;
                   const label = { W: 'V', D: 'P', L: 'S' };
                   return (
                     <div key={i} title={r === 'W' ? 'Vittoria' : r === 'D' ? 'Pareggio' : 'Sconfitta'} style={{
@@ -358,7 +379,7 @@ export default function PlayersPage() {
                 })}
               </div>
               {pForm.streak && pForm.streak.count >= 2 && (
-                <div style={{ marginTop: '0.5rem', fontSize: '0.72rem', color: pForm.streak.type === 'W' ? '#68D391' : pForm.streak.type === 'L' ? '#FC8181' : '#F6E05E' }}>
+                <div style={{ marginTop: '0.5rem', fontSize: '0.72rem', color: pForm.streak.type === 'W' ? CLR_WIN : pForm.streak.type === 'L' ? CLR_LOSS : CLR_DRAW }}>
                   {pForm.streak.count} {pForm.streak.type === 'W' ? 'vittorie' : pForm.streak.type === 'L' ? 'sconfitte' : 'pareggi'} di fila
                 </div>
               )}
@@ -411,7 +432,7 @@ export default function PlayersPage() {
           {[
             { label: 'Gol', value: displaySt.goals || 0, icon: '⚽', color: '#4FD1C5' },
             { label: 'Assist', value: displaySt.assists || 0, icon: '🎯', color: '#63B3ED' },
-            { label: 'Autogol', value: displaySt.autogoals || 0, icon: '🤦', color: '#FC8181' },
+            { label: 'Autogol', value: displaySt.autogoals || 0, icon: '🤦', color: CLR_LOSS },
             { label: 'Partite', value: displaySt.matches || 0, icon: '🏟️', color: '#A0AEC0' },
           ].map(s => (
             <div key={s.label} className="card" style={{ textAlign: 'center', padding: '1rem' }}>
@@ -466,6 +487,7 @@ export default function PlayersPage() {
 
         <PlayerMatchHistory matches={allMatches} playerId={p.id} />
       </div>
+      </SwipeBack>
     );
   }
 
@@ -566,13 +588,13 @@ export default function PlayersPage() {
         return (
           <div key={p.id}
             className="card mb-2"
-            style={{ cursor: 'pointer', borderLeft: i === 0 ? '3px solid #F6E05E' : i === 1 ? '3px solid #9CA3AF' : i === 2 ? '3px solid #C05621' : undefined }}
+            style={{ cursor: 'pointer', borderLeft: i < 3 ? `3px solid ${MEDAL_COLORS[i]}` : undefined }}
             onClick={() => setSelectedPlayer(p.id)}
           >
             <div className="flex items-center gap-3">
               <span style={{
                 fontSize: '1rem', minWidth: '24px', fontWeight: 700, textAlign: 'center',
-                color: i === 0 ? '#F6E05E' : i === 1 ? '#A0AEC0' : i === 2 ? '#C05621' : '#718096',
+                color: i < 3 ? MEDAL_COLORS[i] : CLR_MUTED,
               }}>
                 {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`}
               </span>
@@ -591,7 +613,7 @@ export default function PlayersPage() {
               <div style={{ textAlign: 'right' }}>
                 <div style={{ fontWeight: 700, color: '#4FD1C5' }}>{(p.powerIndex || 50).toFixed(1)}</div>
                 {isAdmin && p.recentForm && (
-                  <div className="text-xs" style={{ fontWeight: 600, color: p.recentForm.avg >= 7 ? '#68D391' : p.recentForm.avg >= 5 ? '#F6E05E' : '#FC8181' }}>
+                  <div className="text-xs" style={{ fontWeight: 600, color: p.recentForm.avg >= 7 ? CLR_WIN : p.recentForm.avg >= 5 ? CLR_DRAW : CLR_LOSS }}>
                     ⭐ {p.recentForm.avg.toFixed(1)}
                   </div>
                 )}
@@ -753,7 +775,6 @@ function getRoleIcon(role) {
   return icons[role] || '⚽';
 }
 
-const AVATAR_COLORS = ['#4FD1C5', '#63B3ED', '#F6E05E', '#FC8181', '#68D391', '#B794F4', '#F6AD55'];
 
 function PlayerAvatar({ name, size = 36 }) {
   const idx = name ? name.charCodeAt(0) % AVATAR_COLORS.length : 0;
@@ -793,7 +814,7 @@ function PlayerMatchHistory({ matches, playerId }) {
         const myScore = inRed ? m.redScore : m.blueScore;
         const theirScore = inRed ? m.blueScore : m.redScore;
         const result = myScore > theirScore ? 'win' : myScore < theirScore ? 'loss' : 'draw';
-        const resultColor = result === 'win' ? '#68D391' : result === 'loss' ? '#FC8181' : '#F6E05E';
+        const resultColor = result === 'win' ? CLR_WIN : result === 'loss' ? CLR_LOSS : CLR_DRAW;
         const resultLabel = result === 'win' ? 'V' : result === 'loss' ? 'S' : 'P';
         const myGoals = (m.events || []).filter(e => e.type === 'goal' && e.scorerId === playerId).length;
         const myAssists = (m.events || []).filter(e => e.type === 'goal' && e.assistId === playerId).length;
@@ -818,7 +839,7 @@ function PlayerMatchHistory({ matches, playerId }) {
                 {format(d, 'dd MMM yyyy', { locale: it })}
                 {myGoals > 0 && <span style={{ color: '#4FD1C5', marginLeft: '0.4rem' }}>⚽{myGoals}</span>}
                 {myAssists > 0 && <span style={{ color: '#63B3ED', marginLeft: '0.3rem' }}>🎯{myAssists}</span>}
-                {myAutogoals > 0 && <span style={{ color: '#FC8181', marginLeft: '0.3rem' }}>🤦{myAutogoals}</span>}
+                {myAutogoals > 0 && <span style={{ color: CLR_LOSS, marginLeft: '0.3rem' }}>🤦{myAutogoals}</span>}
               </div>
             </div>
             <div style={{ fontSize: '0.75rem', color: '#718096', whiteSpace: 'nowrap' }}>
@@ -901,7 +922,7 @@ function PlayerBadges({ player, seasonStats }) {
             display: 'flex', alignItems: 'center', gap: '0.35rem',
             padding: '0.3rem 0.7rem', borderRadius: '999px', fontSize: '0.8rem', fontWeight: 600,
             background: b.positive ? 'rgba(104,211,145,0.12)' : 'rgba(252,129,129,0.12)',
-            color: b.positive ? '#68D391' : '#FC8181',
+            color: b.positive ? CLR_WIN : CLR_LOSS,
             border: `1px solid ${b.positive ? 'rgba(104,211,145,0.35)' : 'rgba(252,129,129,0.35)'}`,
             cursor: 'default',
           }}>
@@ -913,7 +934,7 @@ function PlayerBadges({ player, seasonStats }) {
       <div style={{ marginTop: '0.6rem', display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
         {badges.map(b => (
           <div key={b.id} style={{ fontSize: '0.68rem', color: '#718096' }}>
-            {b.icon} <strong style={{ color: b.positive ? '#68D391' : '#FC8181' }}>{b.label}</strong> — {b.desc}
+            {b.icon} <strong style={{ color: b.positive ? CLR_WIN : CLR_LOSS }}>{b.label}</strong> — {b.desc}
           </div>
         ))}
       </div>
@@ -931,7 +952,7 @@ function StreakBadge({ streak }) {
       fontSize: '0.62rem', fontWeight: 700, padding: '0.1rem 0.35rem',
       borderRadius: '999px',
       background: isWin ? 'rgba(104,211,145,0.15)' : 'rgba(252,129,129,0.15)',
-      color: isWin ? '#68D391' : '#FC8181',
+      color: isWin ? CLR_WIN : CLR_LOSS,
       border: `1px solid ${isWin ? 'rgba(104,211,145,0.4)' : 'rgba(252,129,129,0.4)'}`,
       whiteSpace: 'nowrap',
     }}>

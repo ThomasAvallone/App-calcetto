@@ -4,6 +4,7 @@ import {
   onSnapshot, writeBatch, Timestamp
 } from 'firebase/firestore';
 import { db } from './config';
+import { getMs } from '../utils/dateUtils';
 
 // ─── PLAYERS ─────────────────────────────────────────────────────────────────
 
@@ -96,7 +97,6 @@ export async function recalculatePlayerStats(playerIds) {
   // Map playerId → historicalStats (authoritative source for all historical data)
   const playerHistoricalMap = new Map(allPlayers.map(p => [p.id, p.historicalStats]));
   const batch = writeBatch(db);
-  const getMs = d => d?.toMillis ? d.toMillis() : d ? new Date(d).getTime() : 0;
   const now = Date.now();
 
   // Helper: calculate stats from a list of matches for a player
@@ -222,7 +222,6 @@ export async function rateMatch(matchId, userId, scores, raterName) {
 
 // Pure function: compute recent form for a player from allMatches data
 export function computeStreak(allMatches, playerId) {
-  const getMs = d => d?.toMillis ? d.toMillis() : d ? new Date(d).getTime() : 0;
   const playerMatches = allMatches
     .filter(m =>
       m.status === 'finished' &&
@@ -249,7 +248,6 @@ export function computeStreak(allMatches, playerId) {
 }
 
 export function computeRecentForm(allMatches, playerId) {
-  const getMs = d => d?.toMillis ? d.toMillis() : d ? new Date(d).getTime() : 0;
   const playerMatches = allMatches
     .filter(m =>
       m.status === 'finished' &&

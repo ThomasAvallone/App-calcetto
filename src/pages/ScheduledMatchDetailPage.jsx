@@ -7,13 +7,7 @@ import { generateMatchPreview } from '../services/reportService';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import toast from 'react-hot-toast';
-
-function safeDate(val) {
-  if (!val) return null;
-  if (val?.toDate) return val.toDate();
-  if (val instanceof Date) return val;
-  return new Date(val);
-}
+import { safeDate } from '../utils/dateUtils';
 
 function toDatetimeLocal(val) {
   const d = safeDate(val);

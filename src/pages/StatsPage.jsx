@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import usePlayersStore from '../store/playersStore';
 import { subscribeToMatches } from '../firebase/firestore';
 import { HISTORICAL_SEASONS } from '../data/historicalData';
+import { getMs } from '../utils/dateUtils';
+import { RESULT_COLORS, CLR_WIN, CLR_DRAW, CLR_LOSS, AVATAR_COLORS } from '../constants/colors';
 
 const LEADERBOARD_TABS = [
   { key: 'goals',   label: '⚽ Gol' },
@@ -20,7 +22,6 @@ const PERIODS = [
   { key: '30d',    label: '30gg' },
 ];
 
-const AVATAR_COLORS = ['#4FD1C5', '#63B3ED', '#F6E05E', '#FC8181', '#68D391', '#B794F4', '#F6AD55'];
 
 function Avatar({ name, size = 32 }) {
   const idx = name ? name.charCodeAt(0) % AVATAR_COLORS.length : 0;
@@ -49,7 +50,7 @@ function MedalIcon({ rank }) {
 }
 
 function FormDots({ results }) {
-  const colors = { W: '#68D391', D: '#F6E05E', L: '#FC8181' };
+  const colors = RESULT_COLORS;
   return (
     <div style={{ display: 'flex', gap: '3px', alignItems: 'center', marginTop: '3px' }}>
       {results.map((r, i) => (
@@ -69,7 +70,7 @@ function FormDots({ results }) {
 
 function StreakBadge({ streak }) {
   if (!streak || streak.count < 2) return null;
-  const color = streak.type === 'W' ? '#68D391' : streak.type === 'L' ? '#FC8181' : '#F6E05E';
+  const color = streak.type === 'W' ? CLR_WIN : streak.type === 'L' ? CLR_LOSS : CLR_DRAW;
   const label = streak.type === 'W' ? 'V' : streak.type === 'L' ? 'S' : 'P';
   return (
     <span style={{
@@ -113,7 +114,6 @@ function LeaderboardRow({ rank, player, primary, secondary, primaryLabel, accent
   );
 }
 
-const getMs = d => d?.toMillis ? d.toMillis() : d ? new Date(d).getTime() : 0;
 
 // Returns the timestamp of September 1st of the current football season
 function getSeasonStartMs() {
@@ -415,9 +415,9 @@ export default function StatsPage() {
   const tabConfig = {
     goals:   { accent: '#4FD1C5', getVal: p => p.totalGoals, getLabel: () => 'gol', getSub: p => `${p.totalMatches} partite · ${(p.totalGoals / Math.max(1, p.totalMatches)).toFixed(2)} gol/match` },
     assists: { accent: '#63B3ED', getVal: p => p.totalAssists, getLabel: () => 'assist', getSub: p => `${p.totalMatches} partite` },
-    winrate: { accent: '#F6E05E', getVal: p => `${Math.round((p.totalWins + p.totalDraws * 0.5) / p.totalMatches * 100)}`, getLabel: () => '%', getSub: p => `${p.totalWins}V · ${p.totalDraws}P · ${p.totalMatches - p.totalWins - p.totalDraws}S su ${p.totalMatches} partite` },
+    winrate: { accent: CLR_DRAW, getVal: p => `${Math.round((p.totalWins + p.totalDraws * 0.5) / p.totalMatches * 100)}`, getLabel: () => '%', getSub: p => `${p.totalWins}V · ${p.totalDraws}P · ${p.totalMatches - p.totalWins - p.totalDraws}S su ${p.totalMatches} partite` },
     matches: { accent: '#A0AEC0', getVal: p => p.totalMatches, getLabel: () => 'pt', getSub: p => `${p.totalWins}V · ${p.totalDraws}P · ${p.totalMatches - p.totalWins - p.totalDraws}S` },
-    gk:      { accent: '#68D391', getVal: p => p.gkGoalsConceded, getLabel: () => 'gs', getSub: p => p.gkMatches > 0 ? `${p.gkMatches} partite in porta · media ${(p.gkGoalsConceded / p.gkMatches).toFixed(1)} gs/pt` : `${p.gkGoalsConceded} gol subiti` },
+    gk:      { accent: CLR_WIN, getVal: p => p.gkGoalsConceded, getLabel: () => 'gs', getSub: p => p.gkMatches > 0 ? `${p.gkMatches} partite in porta · media ${(p.gkGoalsConceded / p.gkMatches).toFixed(1)} gs/pt` : `${p.gkGoalsConceded} gol subiti` },
   };
 
   const cfg = tabConfig[tab];
@@ -515,11 +515,11 @@ export default function StatsPage() {
                 <tr style={{ borderBottom: '1px solid #4A5568', color: '#718096' }}>
                   <th style={{ textAlign: 'left', padding: '0.5rem 0.3rem', fontWeight: 600 }}>#</th>
                   <th style={{ textAlign: 'left', padding: '0.5rem 0.3rem', fontWeight: 600 }}>Nome</th>
-                  <th style={{ textAlign: 'center', padding: '0.5rem 0.25rem', fontWeight: 700, color: '#F6E05E' }}>Pt</th>
+                  <th style={{ textAlign: 'center', padding: '0.5rem 0.25rem', fontWeight: 700, color: CLR_DRAW }}>Pt</th>
                   <th style={{ textAlign: 'center', padding: '0.5rem 0.25rem', fontWeight: 600 }}>P</th>
-                  <th style={{ textAlign: 'center', padding: '0.5rem 0.25rem', fontWeight: 600, color: '#68D391' }}>V</th>
-                  <th style={{ textAlign: 'center', padding: '0.5rem 0.25rem', fontWeight: 600, color: '#F6E05E' }}>X</th>
-                  <th style={{ textAlign: 'center', padding: '0.5rem 0.25rem', fontWeight: 600, color: '#FC8181' }}>S</th>
+                  <th style={{ textAlign: 'center', padding: '0.5rem 0.25rem', fontWeight: 600, color: CLR_WIN }}>V</th>
+                  <th style={{ textAlign: 'center', padding: '0.5rem 0.25rem', fontWeight: 600, color: CLR_DRAW }}>X</th>
+                  <th style={{ textAlign: 'center', padding: '0.5rem 0.25rem', fontWeight: 600, color: CLR_LOSS }}>S</th>
                   <th style={{ textAlign: 'center', padding: '0.5rem 0.25rem', fontWeight: 600 }}>GF</th>
                   <th style={{ textAlign: 'center', padding: '0.5rem 0.25rem', fontWeight: 600 }}>GS</th>
                   <th style={{ textAlign: 'center', padding: '0.5rem 0.25rem', fontWeight: 600 }}>DR</th>
@@ -528,16 +528,16 @@ export default function StatsPage() {
               <tbody>
                 {standingsStats.map((row, i) => (
                   <tr key={row.id} style={{ borderBottom: '1px solid #2D3748' }}>
-                    <td style={{ padding: '0.45rem 0.3rem', color: i < 3 ? '#F6E05E' : '#718096', fontWeight: i < 3 ? 700 : 400 }}>{i + 1}</td>
+                    <td style={{ padding: '0.45rem 0.3rem', color: i < 3 ? CLR_DRAW : '#718096', fontWeight: i < 3 ? 700 : 400 }}>{i + 1}</td>
                     <td style={{ padding: '0.45rem 0.3rem', fontWeight: 600, maxWidth: '90px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.name}</td>
-                    <td style={{ textAlign: 'center', padding: '0.45rem 0.25rem', fontWeight: 800, color: '#F6E05E', fontSize: '0.9rem' }}>{row.pt}</td>
+                    <td style={{ textAlign: 'center', padding: '0.45rem 0.25rem', fontWeight: 800, color: CLR_DRAW, fontSize: '0.9rem' }}>{row.pt}</td>
                     <td style={{ textAlign: 'center', padding: '0.45rem 0.25rem', color: '#A0AEC0' }}>{row.p}</td>
-                    <td style={{ textAlign: 'center', padding: '0.45rem 0.25rem', color: '#68D391' }}>{row.v}</td>
-                    <td style={{ textAlign: 'center', padding: '0.45rem 0.25rem', color: '#F6E05E' }}>{row.x}</td>
-                    <td style={{ textAlign: 'center', padding: '0.45rem 0.25rem', color: '#FC8181' }}>{row.s}</td>
+                    <td style={{ textAlign: 'center', padding: '0.45rem 0.25rem', color: CLR_WIN }}>{row.v}</td>
+                    <td style={{ textAlign: 'center', padding: '0.45rem 0.25rem', color: CLR_DRAW }}>{row.x}</td>
+                    <td style={{ textAlign: 'center', padding: '0.45rem 0.25rem', color: CLR_LOSS }}>{row.s}</td>
                     <td style={{ textAlign: 'center', padding: '0.45rem 0.25rem' }}>{row.gf}</td>
                     <td style={{ textAlign: 'center', padding: '0.45rem 0.25rem', color: '#718096' }}>{row.gs}</td>
-                    <td style={{ textAlign: 'center', padding: '0.45rem 0.25rem', fontWeight: 600, color: row.dr > 0 ? '#68D391' : row.dr < 0 ? '#FC8181' : '#A0AEC0' }}>
+                    <td style={{ textAlign: 'center', padding: '0.45rem 0.25rem', fontWeight: 600, color: row.dr > 0 ? CLR_WIN : row.dr < 0 ? CLR_LOSS : '#A0AEC0' }}>
                       {row.dr > 0 ? '+' : ''}{row.dr}
                     </td>
                   </tr>
@@ -621,9 +621,9 @@ export default function StatsPage() {
                   <>
                     <div className="flex gap-3 mb-2" style={{ justifyContent: 'center' }}>
                       {[
-                        { label: 'Vittorie', value: h2hStats.together.wins, color: '#68D391' },
-                        { label: 'Pareggi', value: h2hStats.together.draws, color: '#F6E05E' },
-                        { label: 'Sconfitte', value: h2hStats.together.losses, color: '#FC8181' },
+                        { label: 'Vittorie', value: h2hStats.together.wins, color: CLR_WIN },
+                        { label: 'Pareggi', value: h2hStats.together.draws, color: CLR_DRAW },
+                        { label: 'Sconfitte', value: h2hStats.together.losses, color: CLR_LOSS },
                       ].map(s => (
                         <div key={s.label} style={{ textAlign: 'center', flex: 1 }}>
                           <div style={{ fontSize: '1.6rem', fontWeight: 800, color: s.color }}>{s.value}</div>
@@ -647,7 +647,7 @@ export default function StatsPage() {
 
               {/* Avversari */}
               <div className="card mb-3" style={{ border: '1px solid rgba(252,129,129,0.3)' }}>
-                <h3 className="mb-3" style={{ fontSize: '0.9rem', color: '#FC8181' }}>⚔️ Quando si affrontano</h3>
+                <h3 className="mb-3" style={{ fontSize: '0.9rem', color: CLR_LOSS }}>⚔️ Quando si affrontano</h3>
                 {h2hStats.against.matches === 0 ? (
                   <p className="text-xs text-muted">Non si sono mai affrontati</p>
                 ) : (
@@ -655,16 +655,16 @@ export default function StatsPage() {
                     <div className="flex items-center gap-2 mb-2">
                       <div style={{ flex: 1, textAlign: 'center' }}>
                         <div style={{ fontWeight: 700, color: '#4FD1C5', fontSize: '0.9rem' }}>{h2hStats.p1name}</div>
-                        <div style={{ fontSize: '2rem', fontWeight: 900, color: '#68D391' }}>{h2hStats.against.p1wins}</div>
+                        <div style={{ fontSize: '2rem', fontWeight: 900, color: CLR_WIN }}>{h2hStats.against.p1wins}</div>
                         <div style={{ fontSize: '0.68rem', color: '#718096' }}>vittorie</div>
                       </div>
                       <div style={{ textAlign: 'center', minWidth: 40 }}>
-                        <div style={{ fontSize: '1.1rem', color: '#F6E05E', fontWeight: 700 }}>{h2hStats.against.draws}</div>
+                        <div style={{ fontSize: '1.1rem', color: CLR_DRAW, fontWeight: 700 }}>{h2hStats.against.draws}</div>
                         <div style={{ fontSize: '0.62rem', color: '#718096' }}>pareggi</div>
                       </div>
                       <div style={{ flex: 1, textAlign: 'center' }}>
                         <div style={{ fontWeight: 700, color: '#63B3ED', fontSize: '0.9rem' }}>{h2hStats.p2name}</div>
-                        <div style={{ fontSize: '2rem', fontWeight: 900, color: '#68D391' }}>{h2hStats.against.p2wins}</div>
+                        <div style={{ fontSize: '2rem', fontWeight: 900, color: CLR_WIN }}>{h2hStats.against.p2wins}</div>
                         <div style={{ fontSize: '0.68rem', color: '#718096' }}>vittorie</div>
                       </div>
                     </div>
