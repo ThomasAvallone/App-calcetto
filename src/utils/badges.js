@@ -77,11 +77,11 @@ export const BADGE_DEFS = [
     id: 'muro',
     icon: '🧱',
     label: 'Muro',
-    desc: 'Media GK < 1.5 gol/turno in stagione (min 5 turni)',
+    desc: 'Media GK < 1.5 gol/turno in stagione (min 5 presenze)',
     positive: true,
     check: (s) =>
-      (s.gkMatches || 0) >= 5 &&
-      (s.gkGoalsConceded || 0) / (s.gkMatches || 1) < 1.5,
+      (s.matches || 0) >= 5 &&
+      (s.gkGoalsConceded || 0) / ((s.matches || 1) * 2) < 1.5,
   },
   {
     id: 'veterano',
@@ -417,21 +417,21 @@ export const BADGE_DEFS = [
     id: 'colabrodo',
     icon: '🪣',
     label: 'Colabrodo',
-    desc: 'Media GK > 3 gol/turno in stagione (min 5 turni)',
+    desc: 'Media GK > 3 gol/turno in stagione (min 5 presenze)',
     positive: false,
     check: (s) =>
-      (s.gkMatches || 0) >= 5 &&
-      (s.gkGoalsConceded || 0) / (s.gkMatches || 1) > 3,
+      (s.matches || 0) >= 5 &&
+      (s.gkGoalsConceded || 0) / ((s.matches || 1) * 2) > 3,
   },
   {
     id: 'gufo',
     icon: '🦉',
     label: 'Gufo',
-    desc: 'Media GK > 4 gol/turno (min 3 turni) — porta sfiga dalla porta',
+    desc: 'Media GK > 4 gol/turno (min 3 presenze) — porta sfiga dalla porta',
     positive: false,
     check: (s) =>
-      (s.gkMatches || 0) >= 3 &&
-      (s.gkGoalsConceded || 0) / (s.gkMatches || 1) > 4,
+      (s.matches || 0) >= 3 &&
+      (s.gkGoalsConceded || 0) / ((s.matches || 1) * 2) > 4,
   },
   {
     id: 'fantasma',

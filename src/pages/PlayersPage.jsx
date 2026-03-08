@@ -447,8 +447,14 @@ export default function PlayersPage() {
             { label: 'Vittorie', value: displaySt.wins || 0, icon: '✅' },
             { label: 'Pareggi', value: displaySt.draws || 0, icon: '🤝' },
             { label: 'Sconfitte', value: displaySt.losses || 0, icon: '❌' },
-            { label: 'Partite GK', value: displaySt.gkMatches || 0, icon: '🧤' },
-            { label: 'Gol Subiti (GK)', value: displaySt.gkGoalsConceded || 0, icon: '🚀' },
+            { label: 'Gol Subiti (GK)', value: displaySt.gkGoalsConceded || 0, icon: '🧤' },
+            {
+              label: 'Media Gol/Turno GK',
+              value: (displaySt.matches || 0) > 0
+                ? ((displaySt.gkGoalsConceded || 0) / ((displaySt.matches || 1) * 2)).toFixed(2)
+                : '—',
+              icon: '🚀',
+            },
           ].map(s => (
             <div key={s.label} className="flex items-center justify-between"
               style={{ padding: '0.5rem 0', borderBottom: '1px solid #2D3748' }}>
