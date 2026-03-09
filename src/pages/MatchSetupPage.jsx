@@ -113,16 +113,12 @@ export default function MatchSetupPage() {
       return;
     }
     // Different team: perform swap
-    const newRed = teams.red.map(p => {
-      if (swapPick.team === 'red' && p.id === swapPick.id) return teams.blue.find(b => b.id === playerId);
-      if (swapPick.team === 'blue' && p.id === playerId) return teams.red.find(r => r.id === swapPick.id);
-      return p;
-    });
-    const newBlue = teams.blue.map(p => {
-      if (swapPick.team === 'blue' && p.id === swapPick.id) return teams.red.find(r => r.id === playerId);
-      if (swapPick.team === 'red' && p.id === playerId) return teams.blue.find(b => b.id === swapPick.id);
-      return p;
-    });
+    const redId = swapPick.team === 'red' ? swapPick.id : playerId;
+    const blueId = swapPick.team === 'blue' ? swapPick.id : playerId;
+    const redPlayer = teams.red.find(p => p.id === redId);
+    const bluePlayer = teams.blue.find(p => p.id === blueId);
+    const newRed = teams.red.map(p => p.id === redId ? bluePlayer : p);
+    const newBlue = teams.blue.map(p => p.id === blueId ? redPlayer : p);
     const newTeams = { red: newRed, blue: newBlue };
     setTeams(newTeams);
     setSwapPick(null);
