@@ -29,14 +29,12 @@ const useMatchStore = create(
         set({
           activeMatchId: matchId,
           match,
-          timerState: timerState
-            ? {
-                isRunning: timerState.isRunning || false,
-                startTimestamp: timerState.startTimestamp || null,
-                elapsedMs: timerState.elapsedMs || 0,
-                totalMs: 60 * 60 * 1000,
-              }
-            : get().timerState,
+          timerState: {
+            isRunning: timerState?.isRunning || false,
+            startTimestamp: timerState?.startTimestamp || null,
+            elapsedMs: timerState?.elapsedMs || 0,
+            totalMs: 60 * 60 * 1000,
+          },
         });
         const unsub = subscribeToMatch(matchId, (updatedMatch) => {
           if (updatedMatch) set({ match: updatedMatch });
@@ -47,7 +45,13 @@ const useMatchStore = create(
       unloadMatch() {
         const { unsubscribeMatch } = get();
         if (unsubscribeMatch) unsubscribeMatch();
-        set({ activeMatchId: null, match: null, unsubscribeMatch: null, goalModal: null });
+        set({
+          activeMatchId: null,
+          match: null,
+          unsubscribeMatch: null,
+          goalModal: null,
+          timerState: { isRunning: false, startTimestamp: null, elapsedMs: 0, totalMs: 60 * 60 * 1000 },
+        });
       },
 
       startTimer() {
