@@ -231,6 +231,7 @@ export default function MatchDetailPage() {
 
   const handleAddEvent = async () => {
     if (!addForm.scorerId) return toast.error('Seleziona il marcatore');
+    if (!addForm.gkId) return toast.error('Seleziona il portiere che ha subito il gol');
     if (addForm.minute === '') return toast.error('Inserisci il minuto');
     const teamPlayers = addForm.team === 'red' ? (match.redTeam || []) : (match.blueTeam || []);
     const oppPlayers = addForm.team === 'red' ? (match.blueTeam || []) : (match.redTeam || []);
@@ -633,10 +634,10 @@ export default function MatchDetailPage() {
           </select>
 
           {/* GK conceded */}
-          <label className="text-xs text-muted" style={{ display: 'block', marginBottom: '0.3rem' }}>Portiere subito (opzionale)</label>
+          <label className="text-xs text-muted" style={{ display: 'block', marginBottom: '0.3rem' }}>Portiere subito *</label>
           <select className="input mb-3" value={addForm.gkId}
             onChange={e => setAddForm(f => ({ ...f, gkId: e.target.value }))}>
-            <option value="">– Nessuno –</option>
+            <option value="">– Seleziona portiere –</option>
             {(addForm.type === 'autogoal'
               ? (addForm.team === 'red' ? (match.redTeam || []) : (match.blueTeam || []))
               : (addForm.team === 'red' ? (match.blueTeam || []) : (match.redTeam || []))
