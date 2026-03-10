@@ -9,31 +9,7 @@ import { exportMatchToSheets } from '../services/sheetsService';
 import { recalculatePlayerStats, updateMatch } from '../firebase/firestore';
 import toast from 'react-hot-toast';
 
-const GK_INTERVAL = 6 * 60; // 6 minutes in seconds
 const TOTAL_SECONDS = 60 * 60;
-
-function playGkAlarm() {
-  if (navigator.vibrate) navigator.vibrate([300, 120, 300, 120, 300]);
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const times = [0, 0.35, 0.70];
-    times.forEach(t => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.type = 'sine';
-      osc.frequency.value = 880;
-      gain.gain.setValueAtTime(0, ctx.currentTime + t);
-      gain.gain.linearRampToValueAtTime(0.9, ctx.currentTime + t + 0.02);
-      gain.gain.setValueAtTime(0.9, ctx.currentTime + t + 0.20);
-      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + t + 0.28);
-      osc.start(ctx.currentTime + t);
-      osc.stop(ctx.currentTime + t + 0.30);
-    });
-    setTimeout(() => ctx.close(), 1200);
-  } catch (_) {}
-}
 
 function pad(n) { return String(Math.floor(n)).padStart(2, '0'); }
 function formatTime(secs) { return `${pad(secs / 60)}:${pad(secs % 60)}`; }
@@ -51,7 +27,6 @@ export default function MatchPage() {
   } = useMatchStore();
 
   const [displayTime, setDisplayTime] = useState(0);
-  const [gkAlert, setGkAlert] = useState(false);
   const [goalTeam, setGoalTeam] = useState(null);
   const [goalScorerModal, setGoalScorerModal] = useState(false);
   const [selectedScorer, setSelectedScorer] = useState(null);
@@ -72,7 +47,6 @@ export default function MatchPage() {
   const prevBlueScore = useRef(0);
 
   const timerRef = useRef(null);
-  const prevTurnRef = useRef(-1);
 
   // Bounce/shake when scores change
   useEffect(() => {
@@ -89,17 +63,10 @@ export default function MatchPage() {
     return () => unloadMatch();
   }, [id]);
 
-  // Timer loop — avviso ogni 6 minuti
+  // Timer loop
   useEffect(() => {
     timerRef.current = setInterval(() => {
-      const elapsed = getElapsedSeconds();
-      setDisplayTime(elapsed);
-      const currentTurnIndex = Math.floor(elapsed / GK_INTERVAL);
-      if (currentTurnIndex !== prevTurnRef.current && elapsed > 0 && elapsed % GK_INTERVAL < 3) {
-        playGkAlarm();
-        setGkAlert(true);
-      }
-      prevTurnRef.current = currentTurnIndex;
+      setDisplayTime(getElapsedSeconds());
     }, 500);
     return () => clearInterval(timerRef.current);
   }, [timerState]);
@@ -230,22 +197,6 @@ export default function MatchPage() {
 
   const teamPlayers = goalTeam === 'red' ? redTeam : blueTeam;
   const scorerLabel = autogoalMode ? 'Chi ha fatto autogol?' : `Gol ${goalTeam === 'red' ? '🔴 Rosso' : '🔵 Blu'} — Chi ha segnato?`;
-
-  // ── GK Alert Modal ──────────────────────────────────────────────────────────
-  if (gkAlert) {
-    return (
-      <div className="modal-overlay">
-        <div className="modal animate-slide-up" style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '3rem', marginBottom: '0.5rem' }}>🔄</div>
-          <h2 className="modal-title">Cambio Portiere!</h2>
-          <p className="text-secondary text-sm mb-4">6 minuti completati</p>
-          <button className="btn btn-teal btn-full" onClick={() => setGkAlert(false)}>
-            ✅ OK
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   // ── Scorer Selection Modal ──────────────────────────────────────────────────
   if (goalScorerModal) {
