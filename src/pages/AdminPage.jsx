@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getMatches, getPlayers, seedHistoricalSeasons, createPlayer, importHistoricalMatches, recalculatePlayerStats } from '../firebase/firestore';
+import { getMatches, getPlayers, seedHistoricalSeasons, createPlayer, importHistoricalMatches, recalculatePlayerStats, fixLastMatchGoalMinutes, applyFixedGoalMinutes } from '../firebase/firestore';
 import { syncAllHistoryToSheets } from '../services/sheetsService';
 import { downloadExcel } from '../services/excelService';
 import { doc, getDocs, collection, updateDoc } from 'firebase/firestore';
@@ -22,6 +22,7 @@ export default function AdminPage() {
   const [recalculating, setRecalculating] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [fixingMinutes, setFixingMinutes] = useState(false);
   const [importProgress, setImportProgress] = useState(null);
   const [importingMatches, setImportingMatches] = useState(false);
   const [importMatchProgress, setImportMatchProgress] = useState(null);
@@ -164,6 +165,21 @@ export default function AdminPage() {
     }
   };
 
+  const handleFixGoalMinutes = async () => {
+    setFixingMinutes(true);
+    try {
+      const { matchId, fixedEvents, preview, startTimestamp } = await fixLastMatchGoalMinutes();
+      const msg = `Partita: ${matchId}\nTimer partito: ${new Date(startTimestamp).toLocaleTimeString('it-IT')}\n\nCorrezioni:\n${preview.join('\n')}\n\nConfermi?`;
+      if (!window.confirm(msg)) { setFixingMinutes(false); return; }
+      await applyFixedGoalMinutes(matchId, fixedEvents);
+      toast.success('Minuti gol corretti!');
+    } catch (e) {
+      toast.error('Errore: ' + e.message);
+    } finally {
+      setFixingMinutes(false);
+    }
+  };
+
   if (loading) return (
     <div className="page-content" style={{ textAlign: 'center', paddingTop: '3rem', color: '#718096' }}>
       Caricamento pannello admin...
@@ -282,6 +298,23 @@ export default function AdminPage() {
           disabled={exporting}
         >
           {exporting ? '⏳ Preparazione...' : '⬇️ Download Excel (.xlsx)'}
+        </button>
+      </div>
+
+      {/* Fix minuti gol ultima partita */}
+      <div className="card mb-4" style={{ border: '1px solid rgba(252,129,74,0.3)', background: 'rgba(252,129,74,0.04)' }}>
+        <h3 className="mb-1" style={{ color: '#FC814A' }}>🛠️ Correggi Minuti Gol (ultima partita)</h3>
+        <p className="text-sm text-muted mb-3">
+          Ricalcola i minuti dei gol usando i timestamp assoluti degli eventi e l'ora di avvio del timer.
+          Da usare una sola volta per correggere la partita con i minuti sbagliati.
+        </p>
+        <button
+          className="btn btn-full"
+          style={{ background: 'rgba(252,129,74,0.15)', color: '#FC814A', border: '1px solid rgba(252,129,74,0.4)' }}
+          onClick={handleFixGoalMinutes}
+          disabled={fixingMinutes}
+        >
+          {fixingMinutes ? '⏳ Correzione...' : '🛠️ Correggi Minuti Gol'}
         </button>
       </div>
 

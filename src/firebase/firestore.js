@@ -339,6 +339,35 @@ export function subscribeToMatchState(matchId, callback) {
   });
 }
 
+// ─── ONE-TIME FIX: ricalcola minuti gol usando timestamps assoluti ────────────
+export async function fixLastMatchGoalMinutes() {
+  // 1. Prendi l'ultima partita
+  const snap = await getDocs(query(collection(db, 'matches'), orderBy('date', 'desc'), limit(1)));
+  if (snap.empty) throw new Error('Nessuna partita trovata');
+  const matchDoc = snap.docs[0];
+  const match = { id: matchDoc.id, ...matchDoc.data() };
+
+  // 2. Prendi il matchState per avere startTimestamp reale
+  const stateSnap = await getDoc(doc(db, 'matchStates', match.id));
+  if (!stateSnap.exists()) throw new Error('matchState non trovato per ' + match.id);
+  const { startTimestamp } = stateSnap.data();
+  if (!startTimestamp) throw new Error('startTimestamp non presente nel matchState');
+
+  // 3. Ricalcola ogni evento
+  const preview = [];
+  const fixedEvents = (match.events || []).map(e => {
+    const correctMinute = Math.floor((e.timestamp - startTimestamp) / 60000);
+    preview.push(`${e.scorerName || e.type}: ${e.minute} → ${correctMinute}`);
+    return { ...e, minute: correctMinute };
+  });
+
+  return { matchId: match.id, fixedEvents, preview, startTimestamp };
+}
+
+export async function applyFixedGoalMinutes(matchId, fixedEvents) {
+  await updateDoc(doc(db, 'matches', matchId), { events: fixedEvents });
+}
+
 // ─── SCHEDULED MATCH ─────────────────────────────────────────────────────────
 
 export async function setScheduledMatch(date, note) {
