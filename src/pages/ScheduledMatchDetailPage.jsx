@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getMatch, updateMatch, deleteMatch } from '../firebase/firestore';
 import usePlayersStore from '../store/playersStore';
@@ -35,15 +35,17 @@ export default function ScheduledMatchDetailPage() {
   const [preview, setPreview] = useState('');
   const [swapPick, setSwapPick] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-
-  // Enrich stored player (id, name, primaryRole) with full stats from the store
-  const enrich = (p) => {
-    const full = players.find(fp => fp.id === p.id);
-    return full ? { ...full, ...p } : p;
-  };
+  const loadedRef = useRef(false);
+  const playersRef = useRef(players);
+  useEffect(() => { playersRef.current = players; }, [players]);
 
   useEffect(() => {
-    if (players.length === 0) return; // wait for players to load
+    if (players.length === 0 || loadedRef.current) return;
+    loadedRef.current = true;
+    const enrich = (p) => {
+      const full = playersRef.current.find(fp => fp.id === p.id);
+      return full ? { ...full, ...p } : p;
+    };
     getMatch(id).then(m => {
       if (!m || m.status !== 'scheduled') { navigate('/history'); return; }
       const red = (m.redTeam || []).map(enrich);
