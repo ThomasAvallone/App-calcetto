@@ -73,6 +73,47 @@ function SwipeBack({ onSwipe, children }) {
   );
 }
 
+const MEDIA_CONTAINER_STYLE = { borderRadius: '12px 12px 0 0', overflow: 'hidden', marginBottom: 0, lineHeight: 0, border: '1px solid #2D3748', borderBottom: 'none', background: '#1A202C' };
+
+function PlayerMedia({ url, name }) {
+  const ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+  if (ytMatch) {
+    return (
+      <div style={MEDIA_CONTAINER_STYLE}>
+        <iframe
+          src={`https://www.youtube.com/embed/${ytMatch[1]}?autoplay=0&controls=1`}
+          style={{ width: '100%', height: '220px', display: 'block', border: 'none' }}
+          allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+        />
+      </div>
+    );
+  }
+  if (/\.(mp4|webm|mov|ogg)(\?|$)/i.test(url)) {
+    return (
+      <div style={MEDIA_CONTAINER_STYLE}>
+        <video
+          src={url}
+          controls
+          playsInline
+          style={{ width: '100%', maxHeight: '320px', display: 'block', background: '#1A202C' }}
+          onError={e => { e.currentTarget.style.display = 'none'; }}
+        />
+      </div>
+    );
+  }
+  return (
+    <div style={MEDIA_CONTAINER_STYLE}>
+      <img
+        src={url}
+        alt={name}
+        style={{ width: '100%', maxHeight: '320px', objectFit: 'contain', objectPosition: 'top center', display: 'block', background: '#1A202C' }}
+        onError={e => { e.currentTarget.style.display = 'none'; }}
+      />
+    </div>
+  );
+}
+
 export default function PlayersPage() {
   const { players, addPlayer, updatePlayer: editPlayer, removePlayer } = usePlayersStore();
   const { role } = useAuthStore();
@@ -328,47 +369,7 @@ export default function PlayersPage() {
           )}
         </div>
 
-        {p.photoURL && (() => {
-          const url = p.photoURL;
-          const isVideo = /\.(mp4|webm|mov|ogg)(\?|$)/i.test(url);
-          const ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{11})/);
-          const containerStyle = { borderRadius: '12px 12px 0 0', overflow: 'hidden', marginBottom: 0, lineHeight: 0, border: '1px solid #2D3748', borderBottom: 'none', background: '#1A202C' };
-          if (ytMatch) {
-            return (
-              <div style={containerStyle}>
-                <iframe
-                  src={`https://www.youtube.com/embed/${ytMatch[1]}?autoplay=0&controls=1`}
-                  style={{ width: '100%', height: '220px', display: 'block', border: 'none' }}
-                  allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                />
-              </div>
-            );
-          }
-          if (isVideo) {
-            return (
-              <div style={containerStyle}>
-                <video
-                  src={url}
-                  controls
-                  playsInline
-                  style={{ width: '100%', maxHeight: '320px', display: 'block', background: '#1A202C' }}
-                  onError={e => { e.currentTarget.style.display = 'none'; }}
-                />
-              </div>
-            );
-          }
-          return (
-            <div style={containerStyle}>
-              <img
-                src={url}
-                alt={p.name}
-                style={{ width: '100%', maxHeight: '320px', objectFit: 'contain', objectPosition: 'top center', display: 'block', background: '#1A202C' }}
-                onError={e => { e.currentTarget.style.display = 'none'; }}
-              />
-            </div>
-          );
-        })()}
+        {p.photoURL && <PlayerMedia url={p.photoURL} name={p.name} />}
         <div className="card mb-4" style={{ textAlign: 'center', padding: '1.75rem', ...(p.photoURL ? { borderRadius: '0 0 12px 12px', borderTop: 'none' } : {}) }}>
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '0.75rem' }}>
             <div style={{ position: 'relative', width: 120, height: 120 }}>

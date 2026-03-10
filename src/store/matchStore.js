@@ -8,32 +8,36 @@ import {
 
 // ─── STORE ────────────────────────────────────────────────────────────────────
 
+const DEFAULT_TIMER_STATE = {
+  isRunning: false,
+  startTimestamp: null,
+  elapsedMs: 0,
+  totalMs: 60 * 60 * 1000,
+};
+
 const useMatchStore = create(
   persist(
     (set, get) => ({
       activeMatchId: null,
       match: null,
-      timerState: {
-        isRunning: false,
-        startTimestamp: null,
-        elapsedMs: 0,
-        totalMs: 60 * 60 * 1000,
-      },
+      timerState: DEFAULT_TIMER_STATE,
       goalModal: null,
       unsubscribeMatch: null,
 
       async loadMatch(matchId) {
-        const match = await getMatch(matchId);
+        const [match, timerState] = await Promise.all([
+          getMatch(matchId),
+          getMatchTimerState(matchId),
+        ]);
         if (!match) return;
-        const timerState = await getMatchTimerState(matchId);
         set({
           activeMatchId: matchId,
           match,
           timerState: {
+            ...DEFAULT_TIMER_STATE,
             isRunning: timerState?.isRunning || false,
             startTimestamp: timerState?.startTimestamp || null,
             elapsedMs: timerState?.elapsedMs || 0,
-            totalMs: 60 * 60 * 1000,
           },
         });
         const unsub = subscribeToMatch(matchId, (updatedMatch) => {
@@ -50,7 +54,7 @@ const useMatchStore = create(
           match: null,
           unsubscribeMatch: null,
           goalModal: null,
-          timerState: { isRunning: false, startTimestamp: null, elapsedMs: 0, totalMs: 60 * 60 * 1000 },
+          timerState: DEFAULT_TIMER_STATE,
         });
       },
 

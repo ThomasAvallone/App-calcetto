@@ -364,10 +364,6 @@ export async function fixLastMatchGoalMinutes() {
   return { matchId: match.id, fixedEvents, preview, startTimestamp };
 }
 
-export async function applyFixedGoalMinutes(matchId, fixedEvents) {
-  await updateDoc(doc(db, 'matches', matchId), { events: fixedEvents });
-}
-
 // ─── SCHEDULED MATCH ─────────────────────────────────────────────────────────
 
 export async function setScheduledMatch(date, note) {

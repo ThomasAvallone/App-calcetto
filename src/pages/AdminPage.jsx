@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getMatches, getPlayers, seedHistoricalSeasons, createPlayer, importHistoricalMatches, recalculatePlayerStats, fixLastMatchGoalMinutes, applyFixedGoalMinutes } from '../firebase/firestore';
+import { getMatches, getPlayers, seedHistoricalSeasons, createPlayer, importHistoricalMatches, recalculatePlayerStats, updateMatch, fixLastMatchGoalMinutes } from '../firebase/firestore';
 import { syncAllHistoryToSheets } from '../services/sheetsService';
 import { downloadExcel } from '../services/excelService';
 import { doc, getDocs, collection, updateDoc } from 'firebase/firestore';
@@ -170,8 +170,8 @@ export default function AdminPage() {
     try {
       const { matchId, fixedEvents, preview, startTimestamp } = await fixLastMatchGoalMinutes();
       const msg = `Partita: ${matchId}\nTimer partito: ${new Date(startTimestamp).toLocaleTimeString('it-IT')}\n\nCorrezioni:\n${preview.join('\n')}\n\nConfermi?`;
-      if (!window.confirm(msg)) { setFixingMinutes(false); return; }
-      await applyFixedGoalMinutes(matchId, fixedEvents);
+      if (!window.confirm(msg)) return;
+      await updateMatch(matchId, { events: fixedEvents });
       toast.success('Minuti gol corretti!');
     } catch (e) {
       toast.error('Errore: ' + e.message);
