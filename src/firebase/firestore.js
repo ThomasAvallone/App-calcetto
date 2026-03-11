@@ -96,7 +96,8 @@ export async function recalculatePlayerStats(playerIds, { cachedMatches, cachedP
   const [allMatches, allPlayers] = (cachedMatches && cachedPlayers)
     ? [cachedMatches, cachedPlayers]
     : await Promise.all([getMatches(), getPlayers()]);
-  // Map playerId → historicalStats (authoritative source for all historical data)
+  // Map playerId → player doc (for historicalStats and existing powerHistory)
+  const playerMap = new Map(allPlayers.map(p => [p.id, p]));
   const playerHistoricalMap = new Map(allPlayers.map(p => [p.id, p.historicalStats]));
   const batch = writeBatch(db);
   const now = Date.now();
@@ -196,9 +197,19 @@ export async function recalculatePlayerStats(playerIds, { cachedMatches, cachedP
 
     const recentForm = computeRecentForm(playerMatches, pid, true);
     const streak = computeStreak(playerMatches, pid, true);
+
+    // Append snapshot to powerHistory (keep last 30 entries, one per recalc date)
+    const today = new Date().toISOString().slice(0, 10);
+    const existingHistory = playerMap.get(pid)?.powerHistory || [];
+    const lastEntry = existingHistory[existingHistory.length - 1];
+    const powerHistory = lastEntry?.d === today
+      ? [...existingHistory.slice(0, -1), { d: today, pi: finalPI }]
+      : [...existingHistory, { d: today, pi: finalPI }].slice(-30);
+
     batch.update(doc(db, 'players', pid), {
       stats,
       powerIndex: finalPI,
+      powerHistory,
       recentForm: recentForm ?? null,
       streak: streak ?? null,
       updatedAt: serverTimestamp(),

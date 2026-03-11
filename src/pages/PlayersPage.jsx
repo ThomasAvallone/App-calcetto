@@ -437,7 +437,77 @@ export default function PlayersPage() {
               </div>
             </div>
           )}
+          <PowerIndexChart history={p.powerHistory} />
         </div>
+
+        {/* Nemesi / Spalla / Vittima GK */}
+        {(() => {
+          const pid = p.id;
+          const finished = allMatches.filter(m => m.status === 'finished');
+          // Conta partner/avversari: giocate insieme con vittoria, sconfitte contro, gol su quel GK
+          const winsWith = {};    // pid → vittorie condivise
+          const lossesTo = {};    // pid → sconfitte contro quell'avversario
+          const goalsVsGk = {};   // gkId → gol segnati da pid contro quel GK
+          const goalsFromAssist = {}; // assistId → gol di pid con quell'assist
+          for (const m of finished) {
+            const inRed = (m.redTeam || []).some(pl => pl.id === pid);
+            const inBlue = (m.blueTeam || []).some(pl => pl.id === pid);
+            if (!inRed && !inBlue) continue;
+            const myTeam = inRed ? (m.redTeam || []) : (m.blueTeam || []);
+            const oppTeam = inRed ? (m.blueTeam || []) : (m.redTeam || []);
+            const myScore = inRed ? m.redScore : m.blueScore;
+            const theirScore = inRed ? m.blueScore : m.redScore;
+            const iWin = myScore > theirScore;
+            const iLose = myScore < theirScore;
+            if (iWin) {
+              for (const tp of myTeam) {
+                if (tp.id !== pid) winsWith[tp.id] = (winsWith[tp.id] || 0) + 1;
+              }
+            }
+            if (iLose) {
+              for (const op of oppTeam) {
+                lossesTo[op.id] = (lossesTo[op.id] || 0) + 1;
+              }
+            }
+            for (const ev of (m.events || [])) {
+              if (ev.type === 'goal' && ev.scorerId === pid) {
+                if (ev.gkConcededId) goalsVsGk[ev.gkConcededId] = (goalsVsGk[ev.gkConcededId] || 0) + 1;
+                if (ev.assistId) goalsFromAssist[ev.assistId] = (goalsFromAssist[ev.assistId] || 0) + 1;
+              }
+            }
+          }
+          const allPlayerMap = Object.fromEntries(players.map(pl => [pl.id, pl.name]));
+          const best = (obj, min = 2) => {
+            const sorted = Object.entries(obj).sort((a, b) => b[1] - a[1]);
+            return sorted[0]?.[1] >= min ? { id: sorted[0][0], count: sorted[0][1] } : null;
+          };
+          const spalla = best(winsWith);
+          const nemesi = best(lossesTo);
+          const vittima = best(goalsVsGk);
+          const assistente = best(goalsFromAssist);
+          const items = [
+            spalla     && { emoji: '🤝', label: 'Spalla', name: allPlayerMap[spalla.id], count: `${spalla.count} vittorie insieme` },
+            nemesi     && { emoji: '💀', label: 'Nemesi', name: allPlayerMap[nemesi.id], count: `${nemesi.count} sconfitte contro` },
+            vittima    && { emoji: '🎯', label: 'Vittima GK', name: allPlayerMap[vittima.id], count: `${vittima.count} gol segnati` },
+            assistente && { emoji: '🎁', label: 'Chi ti assiste', name: allPlayerMap[assistente.id], count: `${assistente.count} assist ricevuti` },
+          ].filter(Boolean);
+          if (!items.length) return null;
+          return (
+            <div className="card mb-4" style={{ border: '1px solid rgba(79,209,197,0.2)' }}>
+              <h3 className="mb-3" style={{ fontSize: '0.85rem', color: '#718096', letterSpacing: '0.05em' }}>🔍 STATISTICHE RELAZIONALI</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
+                {items.map(item => (
+                  <div key={item.label} style={{ padding: '0.6rem 0.75rem', borderRadius: '8px', background: 'rgba(45,55,72,0.5)', border: '1px solid rgba(74,85,104,0.4)' }}>
+                    <div style={{ fontSize: '1.2rem', lineHeight: 1, marginBottom: '0.3rem' }}>{item.emoji}</div>
+                    <div style={{ fontSize: '0.6rem', color: '#718096', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{item.label}</div>
+                    <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#E2E8F0', marginTop: '0.15rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name || '—'}</div>
+                    <div style={{ fontSize: '0.65rem', color: '#718096', marginTop: '0.1rem' }}>{item.count}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Stat view toggle */}
         <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
@@ -1072,6 +1142,44 @@ function PlayerBadges({ player, seasonStats, allMatches }) {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function PowerIndexChart({ history }) {
+  if (!history || history.length < 2) return null;
+  const W = 280, H = 72, PAD = 8;
+  const vals = history.map(h => h.pi);
+  const minV = Math.min(...vals);
+  const maxV = Math.max(...vals);
+  const range = maxV - minV || 1;
+  const xs = vals.map((_, i) => PAD + (i / (vals.length - 1)) * (W - PAD * 2));
+  const ys = vals.map(v => PAD + (1 - (v - minV) / range) * (H - PAD * 2));
+  const line = xs.map((x, i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${ys[i].toFixed(1)}`).join(' ');
+  const fill = line + ` L${xs[xs.length - 1].toFixed(1)},${H} L${xs[0].toFixed(1)},${H} Z`;
+  const last = vals[vals.length - 1];
+  const prev = vals[vals.length - 2];
+  const trend = last > prev ? '↑' : last < prev ? '↓' : '→';
+  const trendColor = last > prev ? '#68D391' : last < prev ? '#FC8181' : '#A0AEC0';
+  return (
+    <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid #2D3748' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+        <span style={{ fontSize: '0.6rem', color: '#718096', letterSpacing: '0.06em' }}>ANDAMENTO POWER INDEX (ultimi {vals.length} aggiornamenti)</span>
+        <span style={{ fontSize: '0.75rem', fontWeight: 700, color: trendColor }}>{trend} {last.toFixed(1)}</span>
+      </div>
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ overflow: 'visible' }}>
+        <defs>
+          <linearGradient id="piGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#4FD1C5" stopOpacity="0.25" />
+            <stop offset="100%" stopColor="#4FD1C5" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path d={fill} fill="url(#piGrad)" />
+        <path d={line} fill="none" stroke="#4FD1C5" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+        <circle cx={xs[xs.length - 1].toFixed(1)} cy={ys[ys.length - 1].toFixed(1)} r="3.5" fill="#4FD1C5" />
+        <text x={xs[0].toFixed(1)} y={H - 1} fill="#718096" fontSize="8" textAnchor="middle">{history[0].d?.slice(5)}</text>
+        <text x={xs[xs.length - 1].toFixed(1)} y={H - 1} fill="#718096" fontSize="8" textAnchor="middle">{history[history.length - 1].d?.slice(5)}</text>
+      </svg>
     </div>
   );
 }

@@ -283,6 +283,38 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* Streak attive */}
+      {(() => {
+        const hotStreaks = players
+          .filter(p => p.streak?.count >= 3)
+          .sort((a, b) => b.streak.count - a.streak.count)
+          .slice(0, 5);
+        if (!hotStreaks.length) return null;
+        return (
+          <div className="card mb-4" style={{ background: 'rgba(252,129,129,0.03)', border: '1px solid rgba(252,129,129,0.15)' }}>
+            <h3 className="mb-3" style={{ fontSize: '0.9rem', color: '#A0AEC0', letterSpacing: '0.05em' }}>⚡ STREAK IN CORSO</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              {hotStreaks.map(p => {
+                const isWin = p.streak.type === 'win';
+                const isDraw = p.streak.type === 'draw';
+                const color = isWin ? '#68D391' : isDraw ? '#F6E05E' : '#FC8181';
+                const emoji = isWin ? '🔥' : isDraw ? '🤝' : '📉';
+                const label = isWin ? 'vittorie di fila' : isDraw ? 'pareggi di fila' : 'sconfitte di fila';
+                return (
+                  <div key={p.id} className="flex items-center justify-between"
+                    style={{ padding: '0.4rem 0.6rem', borderRadius: '8px', background: `${color}11`, border: `1px solid ${color}33` }}>
+                    <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>{p.name}</span>
+                    <span style={{ color, fontWeight: 700, fontSize: '0.85rem' }}>
+                      {emoji} {p.streak.count} {label}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Top 5 Ranking */}
       <div className="card mb-4">
         <div className="flex items-center justify-between mb-3">

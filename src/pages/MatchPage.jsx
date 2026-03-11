@@ -37,6 +37,7 @@ export default function MatchPage() {
   const [pendingGoalData, setPendingGoalData] = useState(null);
   const [reportModal, setReportModal] = useState(false);
   const [reportText, setReportText] = useState('');
+  const [matchSummary, setMatchSummary] = useState(null);
   const [endConfirm, setEndConfirm] = useState(false);
   const [ending, setEnding] = useState(false);
   const [goalFlash, setGoalFlash] = useState(null);   // 'red' | 'blue' | null
@@ -179,13 +180,21 @@ export default function MatchPage() {
   const handleEndMatch = async () => {
     setEnding(true); setEndConfirm(false);
     try {
+      const snapshot = {
+        redScore: match.redScore || 0,
+        blueScore: match.blueScore || 0,
+        redTeam: match.redTeam || [],
+        blueTeam: match.blueTeam || [],
+        events: match.events || [],
+      };
       await endMatch();
-      const allIds = [...(match.redTeam || []).map(p => p.id), ...(match.blueTeam || []).map(p => p.id)];
+      const allIds = [...snapshot.redTeam.map(p => p.id), ...snapshot.blueTeam.map(p => p.id)];
       await recalculatePlayerStats(allIds);
       await exportMatchToSheets(match, players).catch(e => console.warn('Sheets export failed:', e));
       const report = generateMatchReport(match, players);
       if (activeMatchId) await updateMatch(activeMatchId, { report });
       setReportText(report);
+      setMatchSummary(snapshot);
       setShowConfetti(true);
       setTimeout(() => { setShowConfetti(false); setReportModal(true); }, 2200);
     } catch (e) {
@@ -320,9 +329,29 @@ export default function MatchPage() {
 
   // ── Report Modal ─────────────────────────────────────────────────────────────
   if (reportModal) {
+    const ms = matchSummary;
+    const goals = ms ? ms.events.filter(e => e.type === 'goal' || e.type === 'autogoal') : [];
+    const winner = ms ? (ms.redScore > ms.blueScore ? 'red' : ms.blueScore > ms.redScore ? 'blue' : null) : null;
+    const mvpEntry = ms ? (() => {
+      const cnt = {};
+      ms.events.forEach(e => { if (e.type === 'goal' && e.scorerId) cnt[e.scorerId] = (cnt[e.scorerId] || { name: e.scorerName, n: 0 }), cnt[e.scorerId].n++; });
+      return Object.values(cnt).sort((a, b) => b.n - a.n)[0] || null;
+    })() : null;
+
+    const shareText = reportText;
+    const canShare = typeof navigator.share === 'function';
+    const handleShare = () => {
+      if (canShare) {
+        navigator.share({ title: 'Risultato Calcetto', text: shareText }).catch(() => {});
+      } else {
+        const wa = `https://api.whatsapp.com/send?text=${encodeURIComponent(shareText)}`;
+        window.open(wa, '_blank');
+      }
+    };
+
     return (
       <div className="modal-overlay">
-        <div className="modal animate-slide-up">
+        <div className="modal animate-slide-up" style={{ maxHeight: '92vh', overflowY: 'auto' }}>
           <div className="flex items-center justify-between mb-3">
             <h2 className="modal-title" style={{ marginBottom: 0 }}>🏆 Verdetto Finale</h2>
             <button className="btn btn-ghost btn-icon" onClick={() => { setReportModal(false); navigate('/'); }}>
@@ -331,10 +360,63 @@ export default function MatchPage() {
               </svg>
             </button>
           </div>
-          <pre style={{ fontFamily: 'Inter, monospace', fontSize: '0.78rem', color: '#A0AEC0', whiteSpace: 'pre-wrap', lineHeight: 1.6, maxHeight: '60vh', overflowY: 'auto' }}>
-            {reportText}
-          </pre>
-          <button className="btn btn-teal btn-full mt-3"
+
+          {/* Match summary card */}
+          {ms && (
+            <div style={{ borderRadius: '12px', background: 'linear-gradient(135deg, rgba(252,129,129,0.08) 0%, rgba(99,179,237,0.08) 100%)', border: '1px solid rgba(255,255,255,0.08)', padding: '1.25rem', marginBottom: '1rem' }}>
+              {/* Score */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem', marginBottom: '0.75rem' }}>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '0.65rem', color: '#FC8181', fontWeight: 700, letterSpacing: '0.08em', marginBottom: '0.25rem' }}>🔴 ROSSO</div>
+                  <div style={{ fontSize: '3rem', fontWeight: 900, lineHeight: 1, color: winner === 'red' ? '#FC8181' : '#A0AEC0' }}>{ms.redScore}</div>
+                </div>
+                <div style={{ fontSize: '1.2rem', color: '#4A5568', fontWeight: 300 }}>–</div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '0.65rem', color: '#63B3ED', fontWeight: 700, letterSpacing: '0.08em', marginBottom: '0.25rem' }}>🔵 BLU</div>
+                  <div style={{ fontSize: '3rem', fontWeight: 900, lineHeight: 1, color: winner === 'blue' ? '#63B3ED' : '#A0AEC0' }}>{ms.blueScore}</div>
+                </div>
+              </div>
+              {/* Winner banner */}
+              <div style={{ textAlign: 'center', fontSize: '0.8rem', fontWeight: 700, color: winner === 'red' ? '#FC8181' : winner === 'blue' ? '#63B3ED' : '#F6E05E', marginBottom: '0.75rem' }}>
+                {winner === 'red' ? '🏆 Vittoria Rosso' : winner === 'blue' ? '🏆 Vittoria Blu' : '🤝 Pareggio'}
+              </div>
+              {/* Scorers */}
+              {goals.length > 0 && (
+                <div style={{ fontSize: '0.72rem', color: '#A0AEC0', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '0.6rem' }}>
+                  {goals.map((g, i) => (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.15rem 0' }}>
+                      <span>{g.team === 'red' ? '🔴' : '🔵'} {g.type === 'autogoal' ? `✗ ${g.scorerName}` : g.scorerName}{g.assistName ? ` (${g.assistName})` : ''}</span>
+                      <span style={{ color: '#718096' }}>{g.minute ? `${g.minute}'` : ''}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {/* MVP */}
+              {mvpEntry && mvpEntry.n >= 2 && (
+                <div style={{ marginTop: '0.6rem', paddingTop: '0.6rem', borderTop: '1px solid rgba(255,255,255,0.06)', textAlign: 'center', fontSize: '0.75rem', color: '#F6E05E' }}>
+                  ⭐ MVP: <strong>{mvpEntry.name}</strong> ({mvpEntry.n} gol)
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Share button */}
+          <button className="btn btn-full mt-1" style={{ background: '#25D366', color: '#fff', fontWeight: 700, border: 'none' }}
+            onClick={handleShare}>
+            {canShare ? '📤 Condividi' : '💬 Condividi su WhatsApp'}
+          </button>
+
+          {/* Full report (collapsible) */}
+          <details style={{ marginTop: '0.75rem' }}>
+            <summary style={{ cursor: 'pointer', fontSize: '0.78rem', color: '#718096', userSelect: 'none', padding: '0.4rem 0' }}>
+              📄 Verdetto testuale completo
+            </summary>
+            <pre style={{ fontFamily: 'Inter, monospace', fontSize: '0.75rem', color: '#A0AEC0', whiteSpace: 'pre-wrap', lineHeight: 1.6, marginTop: '0.5rem', maxHeight: '40vh', overflowY: 'auto' }}>
+              {reportText}
+            </pre>
+          </details>
+
+          <button className="btn btn-teal btn-full mt-2"
             onClick={() => navigator.clipboard.writeText(reportText).then(() => toast.success('Copiato!'))}>
             📋 Copia Verdetto
           </button>
