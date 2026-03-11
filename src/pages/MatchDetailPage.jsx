@@ -182,6 +182,7 @@ export default function MatchDetailPage() {
   const [editForm, setEditForm] = useState({});
   const [editingYoutube, setEditingYoutube] = useState(false);
   const [youtubeInput, setYoutubeInput] = useState('');
+  const [showShareModal, setShowShareModal] = useState(false);
   const allMatchesRef = useRef(null);
 
   useEffect(() => {
@@ -440,6 +441,92 @@ export default function MatchDetailPage() {
     );
   }
 
+  // ── Share card modal ─────────────────────────────────────────────────────────
+  if (showShareModal && match) {
+    const goals = (match.events || [])
+      .filter(e => e.type === 'goal' || e.type === 'autogoal')
+      .sort((a, b) => (a.minute ?? 999) - (b.minute ?? 999));
+    const winner = match.redScore > match.blueScore ? 'red' : match.blueScore > match.redScore ? 'blue' : null;
+    const mvpEntry = (() => {
+      const cnt = {};
+      (match.events || []).forEach(e => {
+        if (e.type === 'goal' && e.scorerId) {
+          if (!cnt[e.scorerId]) cnt[e.scorerId] = { name: e.scorerName, n: 0 };
+          cnt[e.scorerId].n++;
+        }
+      });
+      return Object.values(cnt).sort((a, b) => b.n - a.n)[0] || null;
+    })();
+    const shareText = [
+      `⚽ *Calcetto — Risultato*`,
+      `🔴 Rosso ${match.redScore} – ${match.blueScore} Blu 🔵`,
+      winner === 'red' ? '🏆 Vittoria Rosso' : winner === 'blue' ? '🏆 Vittoria Blu' : '🤝 Pareggio',
+      '',
+      ...goals.map(g =>
+        `${g.team === 'red' ? '🔴' : '🔵'} ${g.type === 'autogoal' ? `✗ ${g.scorerName}` : g.scorerName}${g.assistName ? ` (${g.assistName})` : ''}${g.minute ? ` ${g.minute}'` : ''}`
+      ),
+    ].join('\n');
+    const handleShare = () => {
+      if (typeof navigator.share === 'function') {
+        navigator.share({ title: 'Risultato Calcetto', text: shareText }).catch(() => {});
+      } else {
+        window.open('https://api.whatsapp.com/send?text=' + encodeURIComponent(shareText), '_blank');
+      }
+    };
+    return (
+      <div className="modal-overlay">
+        <div className="modal animate-slide-up" style={{ maxHeight: '92vh', overflowY: 'auto' }}>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="modal-title" style={{ marginBottom: 0 }}>📤 Condividi Risultato</h2>
+            <button className="btn btn-ghost btn-icon" onClick={() => setShowShareModal(false)}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
+
+          {/* Visual card */}
+          <div style={{ borderRadius: '12px', background: 'linear-gradient(135deg, rgba(252,129,129,0.08) 0%, rgba(99,179,237,0.08) 100%)', border: '1px solid rgba(255,255,255,0.08)', padding: '1.25rem', marginBottom: '1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem', marginBottom: '0.75rem' }}>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '0.65rem', color: '#FC8181', fontWeight: 700, letterSpacing: '0.08em', marginBottom: '0.25rem' }}>🔴 ROSSO</div>
+                <div style={{ fontSize: '3rem', fontWeight: 900, lineHeight: 1, color: winner === 'red' ? '#FC8181' : '#A0AEC0' }}>{match.redScore}</div>
+              </div>
+              <div style={{ fontSize: '1.2rem', color: '#4A5568', fontWeight: 300 }}>–</div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '0.65rem', color: '#63B3ED', fontWeight: 700, letterSpacing: '0.08em', marginBottom: '0.25rem' }}>🔵 BLU</div>
+                <div style={{ fontSize: '3rem', fontWeight: 900, lineHeight: 1, color: winner === 'blue' ? '#63B3ED' : '#A0AEC0' }}>{match.blueScore}</div>
+              </div>
+            </div>
+            <div style={{ textAlign: 'center', fontSize: '0.8rem', fontWeight: 700, color: winner === 'red' ? '#FC8181' : winner === 'blue' ? '#63B3ED' : '#F6E05E', marginBottom: '0.75rem' }}>
+              {winner === 'red' ? '🏆 Vittoria Rosso' : winner === 'blue' ? '🏆 Vittoria Blu' : '🤝 Pareggio'}
+            </div>
+            {goals.length > 0 && (
+              <div style={{ fontSize: '0.72rem', color: '#A0AEC0', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '0.6rem' }}>
+                {goals.map((g, i) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.15rem 0' }}>
+                    <span>{g.team === 'red' ? '🔴' : '🔵'} {g.type === 'autogoal' ? `✗ ${g.scorerName}` : g.scorerName}{g.assistName ? ` (${g.assistName})` : ''}</span>
+                    <span style={{ color: '#718096' }}>{g.minute ? `${g.minute}'` : ''}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {mvpEntry && mvpEntry.n >= 2 && (
+              <div style={{ marginTop: '0.6rem', paddingTop: '0.6rem', borderTop: '1px solid rgba(255,255,255,0.06)', textAlign: 'center', fontSize: '0.75rem', color: '#F6E05E' }}>
+                ⭐ MVP: <strong>{mvpEntry.name}</strong> ({mvpEntry.n} gol)
+              </div>
+            )}
+          </div>
+
+          <button className="btn btn-full" style={{ background: '#25D366', color: '#fff', fontWeight: 700, border: 'none' }}
+            onClick={handleShare}>
+            {typeof navigator.share === 'function' ? '📤 Condividi' : '💬 Condividi su WhatsApp'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="page-content">
       <div className="flex items-center gap-3 mb-4" style={{ paddingTop: '0.5rem' }}>
@@ -472,25 +559,7 @@ export default function MatchDetailPage() {
           </button>
           {match.status === 'finished' && (
             <button className="btn" style={{ background: '#25D366', color: '#fff', border: 'none', fontWeight: 700 }}
-              onClick={() => {
-                const goals = (match.events || []).filter(e => e.type === 'goal' || e.type === 'autogoal');
-                const winner = match.redScore > match.blueScore ? '🔴 Rosso' : match.blueScore > match.redScore ? '🔵 Blu' : null;
-                const lines = [
-                  `⚽ *Calcetto — Risultato*`,
-                  `🔴 Rosso ${match.redScore} – ${match.blueScore} Blu 🔵`,
-                  winner ? `🏆 Vittoria ${winner}` : `🤝 Pareggio`,
-                  '',
-                  ...goals.sort((a, b) => (a.minute ?? 999) - (b.minute ?? 999)).map(g =>
-                    `${g.team === 'red' ? '🔴' : '🔵'} ${g.type === 'autogoal' ? `✗ ${g.scorerName}` : g.scorerName}${g.assistName ? ` (${g.assistName})` : ''}${g.minute ? ` ${g.minute}'` : ''}`
-                  ),
-                ];
-                const text = lines.join('\n');
-                if (typeof navigator.share === 'function') {
-                  navigator.share({ title: 'Risultato Calcetto', text }).catch(() => {});
-                } else {
-                  window.open('https://api.whatsapp.com/send?text=' + encodeURIComponent(text), '_blank');
-                }
-              }}>
+              onClick={() => setShowShareModal(true)}>
               📤 Condividi
             </button>
           )}
