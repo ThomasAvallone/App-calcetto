@@ -25,6 +25,8 @@ const useMatchStore = create(
       unsubscribeMatch: null,
 
       async loadMatch(matchId) {
+        const { unsubscribeMatch } = get();
+        if (unsubscribeMatch) unsubscribeMatch();
         const [match, timerState] = await Promise.all([
           getMatch(matchId),
           getMatchTimerState(matchId),

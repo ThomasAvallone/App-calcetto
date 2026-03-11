@@ -99,6 +99,18 @@ export async function recalculatePlayerStats(playerIds) {
   const batch = writeBatch(db);
   const now = Date.now();
 
+  // Pre-build Map<pid, finishedMatches sorted newest-first> to avoid O(n×m) filtering
+  const finishedSorted = allMatches
+    .filter(m => m.status === 'finished')
+    .sort((a, b) => getMs(b.date) - getMs(a.date));
+  const playerMatchMap = new Map();
+  for (const m of finishedSorted) {
+    for (const p of [...(m.redTeam || []), ...(m.blueTeam || [])]) {
+      if (!playerMatchMap.has(p.id)) playerMatchMap.set(p.id, []);
+      playerMatchMap.get(p.id).push(m);
+    }
+  }
+
   // Helper: calculate stats from a list of matches for a player
   function calcStatsForPlayer(matchList, pid) {
     const s = {
@@ -129,13 +141,8 @@ export async function recalculatePlayerStats(playerIds) {
   }
 
   for (const pid of playerIds) {
-    // Get all finished matches for this player, sorted newest first
-    const playerMatches = allMatches
-      .filter(m => {
-        if (m.status !== 'finished') return false;
-        return [...(m.redTeam || []), ...(m.blueTeam || [])].some(p => p.id === pid);
-      })
-      .sort((a, b) => getMs(b.date) - getMs(a.date));
+    // All finished matches for this player, sorted newest first (from pre-built map)
+    const playerMatches = playerMatchMap.get(pid) || [];
 
     // App-only stats (exclude historical matches – those come from historicalStats
     // below). This avoids double-counting for players linked at import time AND
@@ -185,8 +192,8 @@ export async function recalculatePlayerStats(playerIds) {
     // Apply activity decay
     const finalPI = Math.max(0, Math.min(100, Math.round(blendedPI * activityFactor * 10) / 10));
 
-    const recentForm = computeRecentForm(allMatches, pid);
-    const streak = computeStreak(allMatches, pid);
+    const recentForm = computeRecentForm(playerMatches, pid, true);
+    const streak = computeStreak(playerMatches, pid, true);
     batch.update(doc(db, 'players', pid), {
       stats,
       powerIndex: finalPI,
@@ -221,8 +228,8 @@ export async function rateMatch(matchId, userId, scores, raterName) {
 }
 
 // Pure function: compute recent form for a player from allMatches data
-export function computeStreak(allMatches, playerId) {
-  const playerMatches = allMatches
+export function computeStreak(allMatches, playerId, prefiltered = false) {
+  const playerMatches = prefiltered ? allMatches : allMatches
     .filter(m =>
       m.status === 'finished' &&
       [...(m.redTeam || []), ...(m.blueTeam || [])].some(p => p.id === playerId)
@@ -247,13 +254,13 @@ export function computeStreak(allMatches, playerId) {
   return { type: firstType, count };
 }
 
-export function computeRecentForm(allMatches, playerId) {
-  const playerMatches = allMatches
+export function computeRecentForm(allMatches, playerId, prefiltered = false) {
+  const playerMatches = (prefiltered ? allMatches : allMatches
     .filter(m =>
       m.status === 'finished' &&
       [...(m.redTeam || []), ...(m.blueTeam || [])].some(p => p.id === playerId)
     )
-    .sort((a, b) => getMs(b.date) - getMs(a.date))
+    .sort((a, b) => getMs(b.date) - getMs(a.date)))
     .slice(0, 15);
 
   if (playerMatches.length === 0) return null;

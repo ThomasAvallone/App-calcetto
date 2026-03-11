@@ -182,7 +182,7 @@ export default function MatchPage() {
       await endMatch();
       const allIds = [...(match.redTeam || []).map(p => p.id), ...(match.blueTeam || []).map(p => p.id)];
       await recalculatePlayerStats(allIds);
-      await exportMatchToSheets(match, players).catch(() => {});
+      await exportMatchToSheets(match, players).catch(e => console.warn('Sheets export failed:', e));
       const report = generateMatchReport(match, players);
       if (activeMatchId) await updateMatch(activeMatchId, { report });
       setReportText(report);
