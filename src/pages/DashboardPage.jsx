@@ -48,6 +48,20 @@ export default function DashboardPage() {
   });
   const totalGoals = finishedMatches.reduce((s, m) => s + (m.redScore || 0) + (m.blueScore || 0), 0);
 
+  // Players with at least 1 match in the current football season (starts Sep 1)
+  const seasonStartMs = (() => {
+    const now = new Date();
+    const year = now.getMonth() >= 8 ? now.getFullYear() : now.getFullYear() - 1;
+    return new Date(year, 8, 1).getTime();
+  })();
+  const getMs = d => d?.toMillis ? d.toMillis() : d ? new Date(d).getTime() : 0;
+  const seasonMatchesPerPlayer = new Set();
+  finishedMatches.forEach(m => {
+    if (getMs(m.date) >= seasonStartMs) {
+      [...(m.redTeam || []), ...(m.blueTeam || [])].forEach(p => seasonMatchesPerPlayer.add(p.id));
+    }
+  });
+
   const ranking = getRanking().slice(0, 5);
 
   // Coppa di Latta mensile
@@ -286,7 +300,7 @@ export default function DashboardPage() {
       {/* Streak attive */}
       {(() => {
         const hotStreaks = players
-          .filter(p => p.streak?.count >= 3)
+          .filter(p => p.streak?.count >= 3 && seasonMatchesPerPlayer.has(p.id))
           .sort((a, b) => b.streak.count - a.streak.count)
           .slice(0, 5);
         if (!hotStreaks.length) return null;
