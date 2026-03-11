@@ -101,13 +101,17 @@ export default function ScheduledMatchDetailPage() {
 
   const handleAddPending = (player) => {
     const newPending = [...pendingPlayers, player];
-    if (newPending.length === 10) {
+    const totalPlayers = newPending.length + teams.red.length + teams.blue.length;
+    // Auto-balance solo quando si parte da zero (nessuna squadra) e si raggiunge il 10°
+    if (teams.red.length === 0 && teams.blue.length === 0 && newPending.length === 10) {
       const balanced = balanceTeams(newPending.map(p => p.id));
       setTeams(balanced);
       setPendingPlayers([]);
       setShowAddPlayer(false);
       regen(balanced, matchDate, weather);
       toast.success('10 giocatori! Squadre bilanciate automaticamente.');
+    } else if (totalPlayers > 10) {
+      toast.error('Massimo 10 giocatori per partita');
     } else {
       setPendingPlayers(newPending);
     }
@@ -117,8 +121,10 @@ export default function ScheduledMatchDetailPage() {
     setPendingPlayers(prev => prev.filter(p => p.id !== playerId));
 
   const handleBalancePending = () => {
-    if (pendingPlayers.length < 2) return;
-    const balanced = balanceTeams(pendingPlayers.map(p => p.id));
+    // Ri-bilancia includendo i giocatori già nelle squadre
+    const allPlayers = [...pendingPlayers, ...teams.red, ...teams.blue];
+    if (allPlayers.length < 2) return;
+    const balanced = balanceTeams(allPlayers.map(p => p.id));
     setTeams(balanced);
     setPendingPlayers([]);
     setShowAddPlayer(false);
@@ -158,6 +164,11 @@ export default function ScheduledMatchDetailPage() {
   };
 
   const handleStart = async () => {
+    // Pending + squadre esistenti → l'utente deve bilanciarli prima
+    if (pendingPlayers.length > 0 && (teams.red.length > 0 || teams.blue.length > 0)) {
+      toast.error(`${pendingPlayers.length} giocatori in attesa — bilancia prima di iniziare`);
+      return;
+    }
     let startTeams = teams;
     if (teams.red.length === 0 && teams.blue.length === 0 && pendingPlayers.length >= 2) {
       startTeams = balanceTeams(pendingPlayers.map(p => p.id));
@@ -335,16 +346,16 @@ export default function ScheduledMatchDetailPage() {
               </div>
             ))}
           </div>
-          {pendingPlayers.length >= 2 && (
+          {pendingPlayers.length > 0 && (pendingPlayers.length + teams.red.length + teams.blue.length) >= 2 && (
             <button
               className="btn btn-teal btn-full"
               style={{ fontSize: '0.85rem' }}
               onClick={handleBalancePending}
             >
-              ⚖️ Bilancia ora ({pendingPlayers.length} giocatori)
+              ⚖️ Bilancia ora ({pendingPlayers.length + teams.red.length + teams.blue.length} giocatori)
             </button>
           )}
-          {pendingPlayers.length < 10 && (
+          {(pendingPlayers.length + teams.red.length + teams.blue.length) < 10 && teams.red.length === 0 && teams.blue.length === 0 && (
             <p style={{ fontSize: '0.72rem', color: '#718096', marginTop: '0.5rem', textAlign: 'center' }}>
               Le squadre si bilanciano automaticamente al 10° giocatore
             </p>
@@ -402,6 +413,8 @@ export default function ScheduledMatchDetailPage() {
           ...teams.blue.map(p => p.id),
           ...pendingPlayers.map(p => p.id),
         ]);
+        const totalPlayers = teams.red.length + teams.blue.length + pendingPlayers.length;
+        const atCapacity = totalPlayers >= 10;
         const available = players.filter(p => !usedIds.has(p.id));
         const filtered = addSearch
           ? available.filter(p => p.name.toLowerCase().includes(addSearch.toLowerCase()))
@@ -410,13 +423,17 @@ export default function ScheduledMatchDetailPage() {
           <div className="card mb-4">
             <button
               className="flex items-center gap-2"
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#4FD1C5', fontWeight: 600, fontSize: '0.85rem', padding: 0, width: '100%', textAlign: 'left' }}
-              onClick={() => { setShowAddPlayer(v => !v); setAddSearch(''); }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: atCapacity ? '#718096' : '#4FD1C5', fontWeight: 600, fontSize: '0.85rem', padding: 0, width: '100%', textAlign: 'left' }}
+              onClick={() => { if (!atCapacity) { setShowAddPlayer(v => !v); setAddSearch(''); } }}
             >
               <span>{showAddPlayer ? '▾' : '▸'}</span>
-              <span>➕ Aggiungi giocatore{available.length > 0 ? ` (${available.length} disponibili)` : ''}</span>
+              <span>
+                {atCapacity
+                  ? '✅ Squadre al completo (10/10)'
+                  : `➕ Aggiungi giocatore${available.length > 0 ? ` (${available.length} disponibili)` : ''}`}
+              </span>
             </button>
-            {showAddPlayer && (
+            {showAddPlayer && !atCapacity && (
               <div style={{ marginTop: '0.75rem' }}>
                 {available.length === 0 ? (
                   <p style={{ fontSize: '0.8rem', color: '#718096' }}>Tutti i giocatori sono già in lista.</p>
@@ -434,7 +451,7 @@ export default function ScheduledMatchDetailPage() {
                         <div key={p.id} className="flex items-center gap-2" style={{ padding: '0.3rem 0' }}>
                           <span style={{ flex: 1, fontSize: '0.85rem' }}>{getRoleIcon(p.primaryRole)} {p.name}</span>
                           <button
-                            onClick={() => { handleAddPending(p); }}
+                            onClick={() => handleAddPending(p)}
                             style={{ background: 'rgba(79,209,197,0.15)', border: '1px solid rgba(79,209,197,0.4)', borderRadius: '6px', color: '#4FD1C5', cursor: 'pointer', padding: '0.2rem 0.6rem', fontSize: '0.75rem', fontWeight: 700 }}
                           >+ Aggiungi</button>
                         </div>

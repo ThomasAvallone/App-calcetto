@@ -46,8 +46,9 @@ export async function fetchWeatherForDate(date) {
       const { condition, description } = mapCode(c.weathercode, c.windspeed_10m);
       return { condition: applyTemp(condition, temp), temp: String(temp), description };
     } else {
-      // Hourly forecast for the target date
-      const dateStr = d.toISOString().slice(0, 10);
+      // Hourly forecast for the target date (local date, not UTC)
+      const pad = n => String(n).padStart(2, '0');
+      const dateStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
       const url =
         `https://api.open-meteo.com/v1/forecast` +
         `?latitude=${LAT}&longitude=${LON}` +

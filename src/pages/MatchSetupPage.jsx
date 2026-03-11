@@ -33,7 +33,7 @@ export default function MatchSetupPage() {
     setLoading(true);
     try {
       await createNewMatch({
-        redTeam: [], blueTeam: [], weather,
+        redTeam: [], blueTeam: [], pendingPlayers: [], weather,
         redScore: 0, blueScore: 0, status: 'scheduled',
         date: matchDate ? new Date(matchDate) : new Date(),
         events: [],
