@@ -151,6 +151,20 @@ function RatingSection({ match, userId, userName, onRated }) {
   );
 }
 
+// Estrae l'ID video da qualsiasi formato URL YouTube standard
+function getYoutubeId(url) {
+  if (!url) return null;
+  try {
+    const u = new URL(url.trim());
+    if (u.hostname === 'youtu.be') return u.pathname.slice(1).split('?')[0];
+    if (u.hostname.includes('youtube.com')) {
+      if (u.pathname.startsWith('/shorts/')) return u.pathname.split('/shorts/')[1].split('?')[0];
+      return u.searchParams.get('v');
+    }
+  } catch { /* url non valido */ }
+  return null;
+}
+
 export default function MatchDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -166,6 +180,8 @@ export default function MatchDetailPage() {
   const [addForm, setAddForm] = useState({ type: 'goal', team: 'red', scorerId: '', assistId: '', gkId: '', minute: '' });
   const [editingEventId, setEditingEventId] = useState(null);
   const [editForm, setEditForm] = useState({});
+  const [editingYoutube, setEditingYoutube] = useState(false);
+  const [youtubeInput, setYoutubeInput] = useState('');
   const allMatchesRef = useRef(null);
 
   useEffect(() => {
@@ -351,6 +367,36 @@ export default function MatchDetailPage() {
     updateMatch(id, { report: r }).catch(() => {});
   };
 
+  const handleSaveYoutube = async () => {
+    const videoId = getYoutubeId(youtubeInput);
+    if (!videoId) return toast.error('URL YouTube non valido');
+    setSaving(true);
+    try {
+      await updateMatch(id, { youtubeUrl: youtubeInput.trim() });
+      setMatch(m => ({ ...m, youtubeUrl: youtubeInput.trim() }));
+      setEditingYoutube(false);
+      toast.success('Video salvato');
+    } catch (e) {
+      toast.error(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRemoveYoutube = async () => {
+    setSaving(true);
+    try {
+      await updateMatch(id, { youtubeUrl: null });
+      setMatch(m => ({ ...m, youtubeUrl: null }));
+      setEditingYoutube(false);
+      toast.success('Video rimosso');
+    } catch (e) {
+      toast.error(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleDeleteMatch = async () => {
     if (!window.confirm('Eliminare questa partita? Le statistiche verranno ricalcolate. Azione irreversibile.')) return;
     setSaving(true);
@@ -424,6 +470,93 @@ export default function MatchDetailPage() {
           🏆 Genera Verdetto
         </button>
       </div>
+
+      {/* YouTube Video */}
+      {match.status === 'finished' && (() => {
+        const videoId = getYoutubeId(match.youtubeUrl);
+        if (videoId) {
+          return (
+            <div className="card mb-4" style={{ padding: 0, overflow: 'hidden' }}>
+              <div style={{ position: 'relative', paddingBottom: '56.25%', height: 0 }}>
+                <iframe
+                  src={`https://www.youtube.com/embed/${videoId}`}
+                  title="Video partita"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                  style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }}
+                />
+              </div>
+              {isAdmin && (
+                <div className="flex gap-2" style={{ padding: '0.6rem' }}>
+                  {editingYoutube ? (
+                    <>
+                      <input
+                        className="input"
+                        style={{ flex: 1, fontSize: '0.82rem', padding: '0.35rem 0.5rem' }}
+                        placeholder="Nuovo URL YouTube..."
+                        value={youtubeInput}
+                        onChange={e => setYoutubeInput(e.target.value)}
+                        autoFocus
+                      />
+                      <button className="btn btn-teal" style={{ padding: '0.35rem 0.75rem', minHeight: 'auto', fontSize: '0.82rem' }}
+                        onClick={handleSaveYoutube} disabled={saving}>Salva</button>
+                      <button className="btn btn-ghost" style={{ padding: '0.35rem 0.6rem', minHeight: 'auto', fontSize: '0.82rem' }}
+                        onClick={() => setEditingYoutube(false)}>✕</button>
+                    </>
+                  ) : (
+                    <>
+                      <button className="btn btn-ghost text-sm" style={{ padding: '0.35rem 0.75rem', minHeight: 'auto' }}
+                        onClick={() => { setYoutubeInput(match.youtubeUrl || ''); setEditingYoutube(true); }}>
+                        ✏️ Cambia URL
+                      </button>
+                      <button className="btn btn-danger text-sm" style={{ padding: '0.35rem 0.75rem', minHeight: 'auto' }}
+                        onClick={handleRemoveYoutube} disabled={saving}>
+                        🗑️ Rimuovi
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        }
+        if (isAdmin) {
+          return (
+            <div className="card mb-4" style={{ border: '1px dashed rgba(79,209,197,0.3)', background: 'rgba(79,209,197,0.03)' }}>
+              {editingYoutube ? (
+                <div>
+                  <p className="text-sm text-muted mb-2">Incolla il link YouTube della partita (youtube.com o youtu.be)</p>
+                  <div className="flex gap-2">
+                    <input
+                      className="input"
+                      style={{ flex: 1, fontSize: '0.85rem' }}
+                      placeholder="https://youtu.be/..."
+                      value={youtubeInput}
+                      onChange={e => setYoutubeInput(e.target.value)}
+                      autoFocus
+                    />
+                    <button className="btn btn-teal" style={{ padding: '0.5rem 0.9rem', minHeight: 'auto' }}
+                      onClick={handleSaveYoutube} disabled={saving}>
+                      Salva
+                    </button>
+                    <button className="btn btn-ghost" style={{ padding: '0.5rem 0.6rem', minHeight: 'auto' }}
+                      onClick={() => setEditingYoutube(false)}>✕</button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  className="btn btn-ghost btn-full"
+                  style={{ color: '#4FD1C5', border: 'none', background: 'none' }}
+                  onClick={() => { setYoutubeInput(''); setEditingYoutube(true); }}
+                >
+                  📹 Aggiungi video YouTube
+                </button>
+              )}
+            </div>
+          );
+        }
+        return null;
+      })()}
 
       {/* Teams */}
       <div className="grid-2 mb-4">
