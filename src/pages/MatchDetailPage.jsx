@@ -466,9 +466,35 @@ export default function MatchDetailPage() {
             <div className="text-xs text-muted">BLU</div>
           </div>
         </div>
-        <button className="btn btn-gold" style={{ marginTop: '0.5rem' }} onClick={handleShowReport}>
-          🏆 Genera Verdetto
-        </button>
+        <div className="flex gap-2" style={{ marginTop: '0.5rem', justifyContent: 'center' }}>
+          <button className="btn btn-gold" onClick={handleShowReport}>
+            🏆 Genera Verdetto
+          </button>
+          {match.status === 'finished' && (
+            <button className="btn" style={{ background: '#25D366', color: '#fff', border: 'none', fontWeight: 700 }}
+              onClick={() => {
+                const goals = (match.events || []).filter(e => e.type === 'goal' || e.type === 'autogoal');
+                const winner = match.redScore > match.blueScore ? '🔴 Rosso' : match.blueScore > match.redScore ? '🔵 Blu' : null;
+                const lines = [
+                  `⚽ *Calcetto — Risultato*`,
+                  `🔴 Rosso ${match.redScore} – ${match.blueScore} Blu 🔵`,
+                  winner ? `🏆 Vittoria ${winner}` : `🤝 Pareggio`,
+                  '',
+                  ...goals.sort((a, b) => (a.minute ?? 999) - (b.minute ?? 999)).map(g =>
+                    `${g.team === 'red' ? '🔴' : '🔵'} ${g.type === 'autogoal' ? `✗ ${g.scorerName}` : g.scorerName}${g.assistName ? ` (${g.assistName})` : ''}${g.minute ? ` ${g.minute}'` : ''}`
+                  ),
+                ];
+                const text = lines.join('\n');
+                if (typeof navigator.share === 'function') {
+                  navigator.share({ title: 'Risultato Calcetto', text }).catch(() => {});
+                } else {
+                  window.open('https://api.whatsapp.com/send?text=' + encodeURIComponent(text), '_blank');
+                }
+              }}>
+              📤 Condividi
+            </button>
+          )}
+        </div>
       </div>
 
       {/* YouTube Video */}
