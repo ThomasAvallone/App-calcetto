@@ -25,15 +25,15 @@ function getRoleIcon(role) {
 export default function ScheduledMatchDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { players } = usePlayersStore();
+  const { players, balanceTeams } = usePlayersStore();
   const { loadMatch } = useMatchStore();
 
   const [loadingMatch, setLoadingMatch] = useState(true);
   const [saving, setSaving] = useState(false);
   const [teams, setTeams] = useState({ red: [], blue: [] });
+  const [pendingPlayers, setPendingPlayers] = useState([]);
   const [matchDate, setMatchDate] = useState('');
   const [weather, setWeather] = useState({ condition: 'cloudy', temp: '', description: '' });
-  const [weatherAuto, setWeatherAuto] = useState(false);
   const [preview, setPreview] = useState('');
   const [swapPick, setSwapPick] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -54,23 +54,14 @@ export default function ScheduledMatchDetailPage() {
       if (!m || m.status !== 'scheduled') { navigate('/history'); return; }
       const red = (m.redTeam || []).map(enrich);
       const blue = (m.blueTeam || []).map(enrich);
-      let w = m.weather || { condition: 'cloudy', temp: '', description: '' };
+      const pending = (m.pendingPlayers || []).map(enrich);
+      const w = m.weather || { condition: 'cloudy', temp: '', description: '' };
       const d = safeDate(m.date) || new Date();
       setTeams({ red, blue });
+      setPendingPlayers(pending);
       setMatchDate(toDatetimeLocal(m.date));
-      // Auto-fetch weather if not manually set yet (temp empty = never set)
-      if (!w.temp) {
-        fetchWeatherForDate(d).then(fw => {
-          if (fw) {
-            setWeather(fw);
-            setWeatherAuto(true);
-            setPreview(generateMatchPreview({ redTeam: red, blueTeam: blue, weather: fw, date: d }));
-          }
-        });
-      } else {
-        setWeather(w);
-        setPreview(generateMatchPreview({ redTeam: red, blueTeam: blue, weather: w, date: d }));
-      }
+      setWeather(w);
+      setPreview(generateMatchPreview({ redTeam: red, blueTeam: blue, weather: w, date: d }));
       setLoadingMatch(false);
     });
   }, [id, players]);
@@ -108,10 +99,31 @@ export default function ScheduledMatchDetailPage() {
     regen(newTeams, matchDate, weather);
   };
 
-  const handleAddPlayer = (player, team) => {
-    const newTeams = { ...teams, [team]: [...teams[team], player] };
-    setTeams(newTeams);
-    regen(newTeams, matchDate, weather);
+  const handleAddPending = (player) => {
+    const newPending = [...pendingPlayers, player];
+    if (newPending.length === 10) {
+      const balanced = balanceTeams(newPending.map(p => p.id));
+      setTeams(balanced);
+      setPendingPlayers([]);
+      setShowAddPlayer(false);
+      regen(balanced, matchDate, weather);
+      toast.success('10 giocatori! Squadre bilanciate automaticamente.');
+    } else {
+      setPendingPlayers(newPending);
+    }
+  };
+
+  const handleRemovePending = (playerId) =>
+    setPendingPlayers(prev => prev.filter(p => p.id !== playerId));
+
+  const handleBalancePending = () => {
+    if (pendingPlayers.length < 2) return;
+    const balanced = balanceTeams(pendingPlayers.map(p => p.id));
+    setTeams(balanced);
+    setPendingPlayers([]);
+    setShowAddPlayer(false);
+    regen(balanced, matchDate, weather);
+    toast.success('Squadre bilanciate!');
   };
 
   const minimalTeam = team =>
@@ -123,6 +135,7 @@ export default function ScheduledMatchDetailPage() {
       await updateMatch(id, {
         redTeam: minimalTeam(teams.red),
         blueTeam: minimalTeam(teams.blue),
+        pendingPlayers: pendingPlayers.map(p => ({ id: p.id, name: p.name, primaryRole: p.primaryRole || '' })),
         date: matchDate ? new Date(matchDate) : new Date(),
         weather,
       });
@@ -145,11 +158,19 @@ export default function ScheduledMatchDetailPage() {
   };
 
   const handleStart = async () => {
+    let startTeams = teams;
+    if (teams.red.length === 0 && teams.blue.length === 0 && pendingPlayers.length >= 2) {
+      startTeams = balanceTeams(pendingPlayers.map(p => p.id));
+    } else if (teams.red.length === 0 && teams.blue.length === 0) {
+      toast.error('Aggiungi almeno 2 giocatori prima di iniziare');
+      return;
+    }
     setSaving(true);
     try {
       await updateMatch(id, {
-        redTeam: minimalTeam(teams.red),
-        blueTeam: minimalTeam(teams.blue),
+        redTeam: minimalTeam(startTeams.red),
+        blueTeam: minimalTeam(startTeams.blue),
+        pendingPlayers: [],
         date: matchDate ? new Date(matchDate) : new Date(),
         weather,
         status: 'active',
@@ -162,11 +183,25 @@ export default function ScheduledMatchDetailPage() {
     }
   };
 
-  const copyPreview = () =>
-    navigator.clipboard.writeText(preview).then(() => toast.success('Preview copiata!'));
+  const buildFreshPreview = async () => {
+    const date = matchDate ? new Date(matchDate) : new Date();
+    const fw = await fetchWeatherForDate(date);
+    const w = fw || weather;
+    if (fw) setWeather(fw);
+    const text = generateMatchPreview({ redTeam: teams.red, blueTeam: teams.blue, weather: w, date });
+    setPreview(text);
+    return text;
+  };
 
-  const shareWhatsApp = () =>
-    window.open(`https://wa.me/?text=${encodeURIComponent(preview)}`, '_blank');
+  const copyPreview = async () => {
+    const text = await buildFreshPreview();
+    navigator.clipboard.writeText(text).then(() => toast.success('Preview copiata!'));
+  };
+
+  const shareWhatsApp = async () => {
+    const text = await buildFreshPreview();
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+  };
 
   if (loadingMatch) {
     return (
@@ -246,11 +281,6 @@ export default function ScheduledMatchDetailPage() {
           onChange={e => {
             setMatchDate(e.target.value);
             regen(teams, e.target.value, weather);
-            if (e.target.value) {
-              fetchWeatherForDate(new Date(e.target.value)).then(fw => {
-                if (fw) { setWeather(fw); setWeatherAuto(true); regen(teams, e.target.value, fw); }
-              });
-            }
           }}
           style={{ width: '100%' }}
         />
@@ -258,17 +288,12 @@ export default function ScheduledMatchDetailPage() {
 
       {/* Weather */}
       <div className="card mb-4">
-        <div className="flex items-center justify-between mb-3">
-          <h3 style={{ marginBottom: 0 }}>🌤️ Meteo</h3>
-          {weatherAuto && (
-            <span style={{ fontSize: '0.7rem', color: '#68D391' }}>📍 Bologna — rilevato auto</span>
-          )}
-        </div>
+        <h3 className="mb-3">🌤️ Meteo</h3>
         <div className="grid-2" style={{ gap: '0.75rem' }}>
           <select className="input" value={weather.condition}
             onChange={e => {
               const w = { ...weather, condition: e.target.value };
-              setWeather(w); setWeatherAuto(false);
+              setWeather(w);
               regen(teams, matchDate, w);
             }}>
             <option value="sunny">☀️ Soleggiato</option>
@@ -282,62 +307,105 @@ export default function ScheduledMatchDetailPage() {
             value={weather.temp}
             onChange={e => {
               const w = { ...weather, temp: e.target.value };
-              setWeather(w); setWeatherAuto(false);
+              setWeather(w);
               regen(teams, matchDate, w);
             }}
           />
         </div>
       </div>
 
-      {/* Teams with swap */}
-      {swapPick && (
-        <div style={{ textAlign: 'center', marginBottom: '0.5rem', fontSize: '0.78rem', color: '#F6E05E' }}>
-          ↔️ Tocca un giocatore dell'altra squadra per scambiarlo
+      {/* Pending players (before balance) */}
+      {pendingPlayers.length > 0 && (
+        <div className="card mb-3">
+          <div className="flex items-center justify-between mb-2">
+            <h3 style={{ marginBottom: 0 }}>👥 Giocatori confermati</h3>
+            <span style={{ fontSize: '0.78rem', color: pendingPlayers.length === 10 ? '#68D391' : '#F6E05E', fontWeight: 700 }}>
+              {pendingPlayers.length}/10
+            </span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', marginBottom: '0.75rem' }}>
+            {pendingPlayers.map(p => (
+              <div key={p.id} className="flex items-center gap-2" style={{ padding: '0.25rem 0.3rem' }}>
+                <span style={{ fontSize: '0.8rem' }}>{getRoleIcon(p.primaryRole)}</span>
+                <span style={{ flex: 1, fontSize: '0.85rem', fontWeight: 500 }}>{p.name}</span>
+                <button
+                  onClick={() => handleRemovePending(p.id)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#718096', padding: '0 2px', fontSize: '0.9rem', lineHeight: 1 }}
+                >×</button>
+              </div>
+            ))}
+          </div>
+          {pendingPlayers.length >= 2 && (
+            <button
+              className="btn btn-teal btn-full"
+              style={{ fontSize: '0.85rem' }}
+              onClick={handleBalancePending}
+            >
+              ⚖️ Bilancia ora ({pendingPlayers.length} giocatori)
+            </button>
+          )}
+          {pendingPlayers.length < 10 && (
+            <p style={{ fontSize: '0.72rem', color: '#718096', marginTop: '0.5rem', textAlign: 'center' }}>
+              Le squadre si bilanciano automaticamente al 10° giocatore
+            </p>
+          )}
         </div>
       )}
-      <div className="grid-2 mb-3">
-        {(['red', 'blue']).map(side => (
-          <div key={side} className={`card team-${side}-bg`}>
-            <h3 className={`team-${side}-text mb-2`}>{side === 'red' ? '🔴 Squadra Rossa' : '🔵 Squadra Blu'}</h3>
-            {teams[side].length === 0 && (
-              <p style={{ fontSize: '0.75rem', color: '#718096', fontStyle: 'italic' }}>Nessun giocatore</p>
-            )}
-            {teams[side].map(p => {
-              const isPicked = swapPick?.id === p.id && swapPick?.team === side;
-              const isTarget = swapPick && swapPick.team !== side;
-              return (
-                <div key={p.id}
-                  className="flex items-center gap-2"
-                  style={{
-                    padding: '0.25rem 0.4rem', borderRadius: '6px',
-                    background: isPicked ? 'rgba(246,224,94,0.2)' : isTarget ? (side === 'red' ? 'rgba(252,129,129,0.1)' : 'rgba(99,179,237,0.1)') : 'transparent',
-                    border: isPicked ? '1px solid #F6E05E' : '1px solid transparent',
-                    transition: 'all 0.15s',
-                  }}
-                >
-                  <div onClick={() => handlePlayerTap(p.id, side)} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flex: 1, cursor: 'pointer' }}>
-                    <span style={{ fontSize: '0.8rem' }}>{getRoleIcon(p.primaryRole)}</span>
-                    <span style={{ fontSize: '0.85rem', fontWeight: 500 }}>{p.name}</span>
-                  </div>
-                  <button
-                    onClick={() => handleRemovePlayer(p.id, side)}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#718096', padding: '0 2px', fontSize: '0.85rem', lineHeight: 1 }}
-                    title="Rimuovi"
-                  >×</button>
-                </div>
-              );
-            })}
-          </div>
-        ))}
-      </div>
 
-      {/* Add players */}
+      {/* Teams (after balance) */}
+      {(teams.red.length > 0 || teams.blue.length > 0) && (
+        <>
+          {swapPick && (
+            <div style={{ textAlign: 'center', marginBottom: '0.5rem', fontSize: '0.78rem', color: '#F6E05E' }}>
+              ↔️ Tocca un giocatore dell'altra squadra per scambiarlo
+            </div>
+          )}
+          <div className="grid-2 mb-3">
+            {(['red', 'blue']).map(side => (
+              <div key={side} className={`card team-${side}-bg`}>
+                <h3 className={`team-${side}-text mb-2`}>{side === 'red' ? '🔴 Rossa' : '🔵 Blu'}</h3>
+                {teams[side].map(p => {
+                  const isPicked = swapPick?.id === p.id && swapPick?.team === side;
+                  const isTarget = swapPick && swapPick.team !== side;
+                  return (
+                    <div key={p.id} className="flex items-center gap-2"
+                      style={{
+                        padding: '0.25rem 0.3rem', borderRadius: '6px',
+                        background: isPicked ? 'rgba(246,224,94,0.2)' : isTarget ? (side === 'red' ? 'rgba(252,129,129,0.1)' : 'rgba(99,179,237,0.1)') : 'transparent',
+                        border: isPicked ? '1px solid #F6E05E' : '1px solid transparent',
+                        transition: 'all 0.15s',
+                      }}
+                    >
+                      <div onClick={() => handlePlayerTap(p.id, side)}
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', flex: 1, cursor: 'pointer' }}>
+                        <span style={{ fontSize: '0.8rem' }}>{getRoleIcon(p.primaryRole)}</span>
+                        <span style={{ fontSize: '0.85rem', fontWeight: 500 }}>{p.name}</span>
+                      </div>
+                      <button
+                        onClick={() => handleRemovePlayer(p.id, side)}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#718096', padding: '0 2px', fontSize: '0.9rem', lineHeight: 1 }}
+                        title="Rimuovi"
+                      >×</button>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Add player picker */}
       {(() => {
-        const assignedIds = new Set([...teams.red, ...teams.blue].map(p => p.id));
-        const unassigned = players.filter(p => !assignedIds.has(p.id));
+        const usedIds = new Set([
+          ...teams.red.map(p => p.id),
+          ...teams.blue.map(p => p.id),
+          ...pendingPlayers.map(p => p.id),
+        ]);
+        const available = players.filter(p => !usedIds.has(p.id));
         const filtered = addSearch
-          ? unassigned.filter(p => p.name.toLowerCase().includes(addSearch.toLowerCase()))
-          : unassigned;
+          ? available.filter(p => p.name.toLowerCase().includes(addSearch.toLowerCase()))
+          : available;
         return (
           <div className="card mb-4">
             <button
@@ -346,12 +414,12 @@ export default function ScheduledMatchDetailPage() {
               onClick={() => { setShowAddPlayer(v => !v); setAddSearch(''); }}
             >
               <span>{showAddPlayer ? '▾' : '▸'}</span>
-              <span>➕ Aggiungi giocatore {unassigned.length > 0 ? `(${unassigned.length} disponibili)` : ''}</span>
+              <span>➕ Aggiungi giocatore{available.length > 0 ? ` (${available.length} disponibili)` : ''}</span>
             </button>
             {showAddPlayer && (
               <div style={{ marginTop: '0.75rem' }}>
-                {unassigned.length === 0 ? (
-                  <p style={{ fontSize: '0.8rem', color: '#718096' }}>Tutti i giocatori sono già assegnati.</p>
+                {available.length === 0 ? (
+                  <p style={{ fontSize: '0.8rem', color: '#718096' }}>Tutti i giocatori sono già in lista.</p>
                 ) : (
                   <>
                     <input
@@ -366,13 +434,9 @@ export default function ScheduledMatchDetailPage() {
                         <div key={p.id} className="flex items-center gap-2" style={{ padding: '0.3rem 0' }}>
                           <span style={{ flex: 1, fontSize: '0.85rem' }}>{getRoleIcon(p.primaryRole)} {p.name}</span>
                           <button
-                            onClick={() => handleAddPlayer(p, 'red')}
-                            style={{ background: 'rgba(252,129,129,0.15)', border: '1px solid rgba(252,129,129,0.4)', borderRadius: '6px', color: '#FC8181', cursor: 'pointer', padding: '0.2rem 0.5rem', fontSize: '0.75rem', fontWeight: 700 }}
-                          >🔴</button>
-                          <button
-                            onClick={() => handleAddPlayer(p, 'blue')}
-                            style={{ background: 'rgba(99,179,237,0.15)', border: '1px solid rgba(99,179,237,0.4)', borderRadius: '6px', color: '#63B3ED', cursor: 'pointer', padding: '0.2rem 0.5rem', fontSize: '0.75rem', fontWeight: 700 }}
-                          >🔵</button>
+                            onClick={() => { handleAddPending(p); }}
+                            style={{ background: 'rgba(79,209,197,0.15)', border: '1px solid rgba(79,209,197,0.4)', borderRadius: '6px', color: '#4FD1C5', cursor: 'pointer', padding: '0.2rem 0.6rem', fontSize: '0.75rem', fontWeight: 700 }}
+                          >+ Aggiungi</button>
                         </div>
                       ))}
                     </div>
@@ -384,8 +448,8 @@ export default function ScheduledMatchDetailPage() {
         );
       })()}
 
-      {/* Match Preview */}
-      <div className="card mb-4">
+      {/* Match Preview — only when teams are set */}
+      {(teams.red.length > 0 || teams.blue.length > 0) && <div className="card mb-4">
         <div className="flex items-center justify-between mb-3">
           <h3>📋 Match Preview</h3>
           <div className="flex gap-2">
@@ -407,7 +471,7 @@ export default function ScheduledMatchDetailPage() {
         }}>
           {preview}
         </pre>
-      </div>
+      </div>}
 
       {/* Actions */}
       <div className="flex gap-3">
