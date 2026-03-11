@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import usePlayersStore from '../store/playersStore';
 import useMatchStore from '../store/matchStore';
 import { generateMatchPreview } from '../services/reportService';
+import { fetchWeatherForDate } from '../services/weatherService';
 import toast from 'react-hot-toast';
 
 const ROLES = ['Portiere', 'Difensore', 'Centrocampista', 'Attaccante'];
@@ -18,14 +19,41 @@ export default function MatchSetupPage() {
   const [preview, setPreview] = useState('');
   const [loading, setLoading] = useState(false);
   const [weather, setWeather] = useState({ condition: 'cloudy', temp: '', description: '' });
+  const [weatherAuto, setWeatherAuto] = useState(false);
   const [swapPick, setSwapPick] = useState(null); // { id, team } of first-selected player
   const [matchDate, setMatchDate] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Auto-fetch weather for Bologna on mount and when matchDate changes
+  useEffect(() => {
+    const date = matchDate ? new Date(matchDate) : new Date();
+    fetchWeatherForDate(date).then(w => {
+      if (w) { setWeather(w); setWeatherAuto(true); }
+    });
+  }, [matchDate]);
 
   const togglePlayer = (id) => {
     setSelectedIds(prev =>
       prev.includes(id) ? prev.filter(x => x !== id) : prev.length < 10 ? [...prev, id] : prev
     );
+  };
+
+  const handlePlanEmpty = async () => {
+    setLoading(true);
+    try {
+      await createNewMatch({
+        redTeam: [], blueTeam: [], weather,
+        redScore: 0, blueScore: 0, status: 'scheduled',
+        date: matchDate ? new Date(matchDate) : new Date(),
+        events: [],
+      });
+      toast.success('Partita pianificata! Aggiungi i giocatori dallo storico.');
+      navigate('/history');
+    } catch (e) {
+      toast.error('Errore: ' + e.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleBalance = () => {
@@ -282,10 +310,15 @@ export default function MatchSetupPage() {
 
       {/* Weather */}
       <div className="card mb-4">
-        <h3 className="mb-3">🌤️ Meteo (opzionale)</h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 style={{ marginBottom: 0 }}>🌤️ Meteo</h3>
+          {weatherAuto && (
+            <span style={{ fontSize: '0.7rem', color: '#68D391' }}>📍 Bologna — rilevato auto</span>
+          )}
+        </div>
         <div className="grid-2" style={{ gap: '0.75rem' }}>
           <select className="input" value={weather.condition}
-            onChange={e => setWeather(w => ({ ...w, condition: e.target.value }))}>
+            onChange={e => { setWeatherAuto(false); setWeather(w => ({ ...w, condition: e.target.value })); }}>
             <option value="sunny">☀️ Soleggiato</option>
             <option value="cloudy">☁️ Nuvoloso</option>
             <option value="rainy">🌧️ Pioggia</option>
@@ -295,7 +328,7 @@ export default function MatchSetupPage() {
           </select>
           <input className="input" type="number" placeholder="°C (opt.)"
             value={weather.temp}
-            onChange={e => setWeather(w => ({ ...w, temp: e.target.value }))}
+            onChange={e => { setWeatherAuto(false); setWeather(w => ({ ...w, temp: e.target.value })); }}
           />
         </div>
       </div>
@@ -370,6 +403,14 @@ export default function MatchSetupPage() {
         style={{ position: 'sticky', bottom: '80px' }}
       >
         ⚖️ Bilancia le Squadre →
+      </button>
+      <button
+        className="btn btn-ghost btn-full"
+        onClick={handlePlanEmpty}
+        disabled={loading}
+        style={{ marginTop: '0.5rem', position: 'sticky', bottom: '36px', fontSize: '0.85rem' }}
+      >
+        📅 Pianifica senza giocatori
       </button>
     </div>
   );

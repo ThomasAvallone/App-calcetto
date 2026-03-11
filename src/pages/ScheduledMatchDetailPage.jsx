@@ -4,6 +4,7 @@ import { getMatch, updateMatch, deleteMatch } from '../firebase/firestore';
 import usePlayersStore from '../store/playersStore';
 import useMatchStore from '../store/matchStore';
 import { generateMatchPreview } from '../services/reportService';
+import { fetchWeatherForDate } from '../services/weatherService';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import toast from 'react-hot-toast';
@@ -32,9 +33,12 @@ export default function ScheduledMatchDetailPage() {
   const [teams, setTeams] = useState({ red: [], blue: [] });
   const [matchDate, setMatchDate] = useState('');
   const [weather, setWeather] = useState({ condition: 'cloudy', temp: '', description: '' });
+  const [weatherAuto, setWeatherAuto] = useState(false);
   const [preview, setPreview] = useState('');
   const [swapPick, setSwapPick] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showAddPlayer, setShowAddPlayer] = useState(false);
+  const [addSearch, setAddSearch] = useState('');
   const loadedRef = useRef(false);
   const playersRef = useRef(players);
   useEffect(() => { playersRef.current = players; }, [players]);
@@ -50,12 +54,23 @@ export default function ScheduledMatchDetailPage() {
       if (!m || m.status !== 'scheduled') { navigate('/history'); return; }
       const red = (m.redTeam || []).map(enrich);
       const blue = (m.blueTeam || []).map(enrich);
-      const w = m.weather || { condition: 'cloudy', temp: '', description: '' };
+      let w = m.weather || { condition: 'cloudy', temp: '', description: '' };
       const d = safeDate(m.date) || new Date();
       setTeams({ red, blue });
       setMatchDate(toDatetimeLocal(m.date));
-      setWeather(w);
-      setPreview(generateMatchPreview({ redTeam: red, blueTeam: blue, weather: w, date: d }));
+      // Auto-fetch weather if not manually set yet (temp empty = never set)
+      if (!w.temp) {
+        fetchWeatherForDate(d).then(fw => {
+          if (fw) {
+            setWeather(fw);
+            setWeatherAuto(true);
+            setPreview(generateMatchPreview({ redTeam: red, blueTeam: blue, weather: fw, date: d }));
+          }
+        });
+      } else {
+        setWeather(w);
+        setPreview(generateMatchPreview({ redTeam: red, blueTeam: blue, weather: w, date: d }));
+      }
       setLoadingMatch(false);
     });
   }, [id, players]);
@@ -84,6 +99,19 @@ export default function ScheduledMatchDetailPage() {
     setSwapPick(null);
     regen(newTeams, matchDate, weather);
     toast.success('Giocatori scambiati');
+  };
+
+  const handleRemovePlayer = (playerId, team) => {
+    const newTeams = { ...teams, [team]: teams[team].filter(p => p.id !== playerId) };
+    setTeams(newTeams);
+    setSwapPick(null);
+    regen(newTeams, matchDate, weather);
+  };
+
+  const handleAddPlayer = (player, team) => {
+    const newTeams = { ...teams, [team]: [...teams[team], player] };
+    setTeams(newTeams);
+    regen(newTeams, matchDate, weather);
   };
 
   const minimalTeam = team =>
@@ -218,6 +246,11 @@ export default function ScheduledMatchDetailPage() {
           onChange={e => {
             setMatchDate(e.target.value);
             regen(teams, e.target.value, weather);
+            if (e.target.value) {
+              fetchWeatherForDate(new Date(e.target.value)).then(fw => {
+                if (fw) { setWeather(fw); setWeatherAuto(true); regen(teams, e.target.value, fw); }
+              });
+            }
           }}
           style={{ width: '100%' }}
         />
@@ -225,12 +258,17 @@ export default function ScheduledMatchDetailPage() {
 
       {/* Weather */}
       <div className="card mb-4">
-        <h3 className="mb-3">🌤️ Meteo</h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 style={{ marginBottom: 0 }}>🌤️ Meteo</h3>
+          {weatherAuto && (
+            <span style={{ fontSize: '0.7rem', color: '#68D391' }}>📍 Bologna — rilevato auto</span>
+          )}
+        </div>
         <div className="grid-2" style={{ gap: '0.75rem' }}>
           <select className="input" value={weather.condition}
             onChange={e => {
               const w = { ...weather, condition: e.target.value };
-              setWeather(w);
+              setWeather(w); setWeatherAuto(false);
               regen(teams, matchDate, w);
             }}>
             <option value="sunny">☀️ Soleggiato</option>
@@ -244,7 +282,7 @@ export default function ScheduledMatchDetailPage() {
             value={weather.temp}
             onChange={e => {
               const w = { ...weather, temp: e.target.value };
-              setWeather(w);
+              setWeather(w); setWeatherAuto(false);
               regen(teams, matchDate, w);
             }}
           />
@@ -257,56 +295,94 @@ export default function ScheduledMatchDetailPage() {
           ↔️ Tocca un giocatore dell'altra squadra per scambiarlo
         </div>
       )}
-      <div className="grid-2 mb-4">
-        <div className="card team-red-bg">
-          <h3 className="team-red-text mb-2">🔴 Squadra Rossa</h3>
-          {teams.red.map(p => {
-            const isPicked = swapPick?.id === p.id && swapPick?.team === 'red';
-            const isTarget = swapPick && swapPick.team === 'blue';
-            return (
-              <div key={p.id} onClick={() => handlePlayerTap(p.id, 'red')}
-                className="flex items-center gap-2"
-                style={{
-                  padding: '0.3rem 0.4rem', borderRadius: '6px', cursor: 'pointer',
-                  background: isPicked ? 'rgba(246,224,94,0.2)' : isTarget ? 'rgba(252,129,129,0.1)' : 'transparent',
-                  border: isPicked ? '1px solid #F6E05E' : '1px solid transparent',
-                  transition: 'all 0.15s',
-                }}
-              >
-                <span style={{ fontSize: '0.85rem' }}>{getRoleIcon(p.primaryRole)}</span>
-                <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>{p.name}</span>
-                <span className="text-xs text-muted" style={{ marginLeft: 'auto' }}>
-                  {p.powerIndex?.toFixed(0) || 50}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-        <div className="card team-blue-bg">
-          <h3 className="team-blue-text mb-2">🔵 Squadra Blu</h3>
-          {teams.blue.map(p => {
-            const isPicked = swapPick?.id === p.id && swapPick?.team === 'blue';
-            const isTarget = swapPick && swapPick.team === 'red';
-            return (
-              <div key={p.id} onClick={() => handlePlayerTap(p.id, 'blue')}
-                className="flex items-center gap-2"
-                style={{
-                  padding: '0.3rem 0.4rem', borderRadius: '6px', cursor: 'pointer',
-                  background: isPicked ? 'rgba(246,224,94,0.2)' : isTarget ? 'rgba(99,179,237,0.1)' : 'transparent',
-                  border: isPicked ? '1px solid #F6E05E' : '1px solid transparent',
-                  transition: 'all 0.15s',
-                }}
-              >
-                <span style={{ fontSize: '0.85rem' }}>{getRoleIcon(p.primaryRole)}</span>
-                <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>{p.name}</span>
-                <span className="text-xs text-muted" style={{ marginLeft: 'auto' }}>
-                  {p.powerIndex?.toFixed(0) || 50}
-                </span>
-              </div>
-            );
-          })}
-        </div>
+      <div className="grid-2 mb-3">
+        {(['red', 'blue']).map(side => (
+          <div key={side} className={`card team-${side}-bg`}>
+            <h3 className={`team-${side}-text mb-2`}>{side === 'red' ? '🔴 Squadra Rossa' : '🔵 Squadra Blu'}</h3>
+            {teams[side].length === 0 && (
+              <p style={{ fontSize: '0.75rem', color: '#718096', fontStyle: 'italic' }}>Nessun giocatore</p>
+            )}
+            {teams[side].map(p => {
+              const isPicked = swapPick?.id === p.id && swapPick?.team === side;
+              const isTarget = swapPick && swapPick.team !== side;
+              return (
+                <div key={p.id}
+                  className="flex items-center gap-2"
+                  style={{
+                    padding: '0.25rem 0.4rem', borderRadius: '6px',
+                    background: isPicked ? 'rgba(246,224,94,0.2)' : isTarget ? (side === 'red' ? 'rgba(252,129,129,0.1)' : 'rgba(99,179,237,0.1)') : 'transparent',
+                    border: isPicked ? '1px solid #F6E05E' : '1px solid transparent',
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  <div onClick={() => handlePlayerTap(p.id, side)} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flex: 1, cursor: 'pointer' }}>
+                    <span style={{ fontSize: '0.8rem' }}>{getRoleIcon(p.primaryRole)}</span>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 500 }}>{p.name}</span>
+                  </div>
+                  <button
+                    onClick={() => handleRemovePlayer(p.id, side)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#718096', padding: '0 2px', fontSize: '0.85rem', lineHeight: 1 }}
+                    title="Rimuovi"
+                  >×</button>
+                </div>
+              );
+            })}
+          </div>
+        ))}
       </div>
+
+      {/* Add players */}
+      {(() => {
+        const assignedIds = new Set([...teams.red, ...teams.blue].map(p => p.id));
+        const unassigned = players.filter(p => !assignedIds.has(p.id));
+        const filtered = addSearch
+          ? unassigned.filter(p => p.name.toLowerCase().includes(addSearch.toLowerCase()))
+          : unassigned;
+        return (
+          <div className="card mb-4">
+            <button
+              className="flex items-center gap-2"
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#4FD1C5', fontWeight: 600, fontSize: '0.85rem', padding: 0, width: '100%', textAlign: 'left' }}
+              onClick={() => { setShowAddPlayer(v => !v); setAddSearch(''); }}
+            >
+              <span>{showAddPlayer ? '▾' : '▸'}</span>
+              <span>➕ Aggiungi giocatore {unassigned.length > 0 ? `(${unassigned.length} disponibili)` : ''}</span>
+            </button>
+            {showAddPlayer && (
+              <div style={{ marginTop: '0.75rem' }}>
+                {unassigned.length === 0 ? (
+                  <p style={{ fontSize: '0.8rem', color: '#718096' }}>Tutti i giocatori sono già assegnati.</p>
+                ) : (
+                  <>
+                    <input
+                      className="input"
+                      placeholder="Cerca..."
+                      value={addSearch}
+                      onChange={e => setAddSearch(e.target.value)}
+                      style={{ width: '100%', marginBottom: '0.5rem' }}
+                    />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', maxHeight: '240px', overflowY: 'auto' }}>
+                      {filtered.map(p => (
+                        <div key={p.id} className="flex items-center gap-2" style={{ padding: '0.3rem 0' }}>
+                          <span style={{ flex: 1, fontSize: '0.85rem' }}>{getRoleIcon(p.primaryRole)} {p.name}</span>
+                          <button
+                            onClick={() => handleAddPlayer(p, 'red')}
+                            style={{ background: 'rgba(252,129,129,0.15)', border: '1px solid rgba(252,129,129,0.4)', borderRadius: '6px', color: '#FC8181', cursor: 'pointer', padding: '0.2rem 0.5rem', fontSize: '0.75rem', fontWeight: 700 }}
+                          >🔴</button>
+                          <button
+                            onClick={() => handleAddPlayer(p, 'blue')}
+                            style={{ background: 'rgba(99,179,237,0.15)', border: '1px solid rgba(99,179,237,0.4)', borderRadius: '6px', color: '#63B3ED', cursor: 'pointer', padding: '0.2rem 0.5rem', fontSize: '0.75rem', fontWeight: 700 }}
+                          >🔵</button>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Match Preview */}
       <div className="card mb-4">
