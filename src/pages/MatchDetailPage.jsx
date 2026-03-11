@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getMatch, updateMatch, deleteMatch, recalculatePlayerStats, rateMatch, recalculateRecentFormForPlayers } from '../firebase/firestore';
+import { getMatch, getMatches, updateMatch, deleteMatch, recalculatePlayerStats, rateMatch, recalculateRecentFormForPlayers } from '../firebase/firestore';
 import useAuthStore, { selectIsAdmin } from '../store/authStore';
 import usePlayersStore from '../store/playersStore';
 import { generateMatchReport } from '../services/reportService';
@@ -166,11 +166,27 @@ export default function MatchDetailPage() {
   const [addForm, setAddForm] = useState({ type: 'goal', team: 'red', scorerId: '', assistId: '', gkId: '', minute: '' });
   const [editingEventId, setEditingEventId] = useState(null);
   const [editForm, setEditForm] = useState({});
+  const allMatchesRef = useRef(null);
 
   useEffect(() => {
     setLoading(true);
     getMatch(id).then(m => { setMatch(m); setLoading(false); }).catch(() => setLoading(false));
+    getMatches().then(ms => { allMatchesRef.current = ms; });
   }, [id]);
+
+  // Ricalcola le statistiche usando dati già in cache, evitando read extra su Firestore.
+  // updatedMatch: la versione aggiornata della partita corrente (null se eliminata).
+  const recalcStats = async (playerIds, updatedMatch) => {
+    if (!allMatchesRef.current) {
+      await recalculatePlayerStats(playerIds);
+      return;
+    }
+    const cachedMatches = updatedMatch === null
+      ? allMatchesRef.current.filter(m => m.id !== id)
+      : allMatchesRef.current.map(m => m.id === updatedMatch.id ? updatedMatch : m);
+    allMatchesRef.current = cachedMatches;
+    await recalculatePlayerStats(playerIds, { cachedMatches, cachedPlayers: players });
+  };
 
   if (loading) return <div className="page-content" style={{ textAlign: 'center', paddingTop: '3rem', color: '#718096' }}>Caricamento...</div>;
   if (!match) return <div className="page-content" style={{ textAlign: 'center', paddingTop: '3rem', color: '#FC8181' }}>Partita non trovata</div>;
@@ -201,7 +217,7 @@ export default function MatchDetailPage() {
         : {};
       await updateMatch(id, { events: newEvents, redScore, blueScore, ...reportDel });
       const allIds = [...(match.redTeam || []), ...(match.blueTeam || [])].map(p => p.id);
-      await recalculatePlayerStats(allIds);
+      await recalcStats(allIds, updated);
       toast.success('Evento eliminato e statistiche ricalcolate');
     } catch (e) {
       toast.error(e.message);
@@ -220,7 +236,7 @@ export default function MatchDetailPage() {
         : {};
       await updateMatch(id, { events: newEvents, ...reportSave });
       const allIds = [...(match.redTeam || []), ...(match.blueTeam || [])].map(p => p.id);
-      await recalculatePlayerStats(allIds);
+      await recalcStats(allIds, { ...match, events: newEvents });
       toast.success('Evento aggiornato');
     } catch (e) {
       toast.error(e.message);
@@ -267,7 +283,7 @@ export default function MatchDetailPage() {
         : {};
       await updateMatch(id, { events: newEvents, redScore, blueScore, ...reportAdd });
       const allIds = [...(match.redTeam || []), ...(match.blueTeam || [])].map(p => p.id);
-      await recalculatePlayerStats(allIds);
+      await recalcStats(allIds, updated);
       toast.success('Evento aggiunto e statistiche ricalcolate');
       setAddForm({ type: 'goal', team: 'red', scorerId: '', assistId: '', gkId: '', minute: '' });
     } catch (e) {
@@ -316,7 +332,7 @@ export default function MatchDetailPage() {
         : {};
       await updateMatch(id, { events: newEvents, ...reportEdit });
       const allIds = [...(match.redTeam || []), ...(match.blueTeam || [])].map(p => p.id);
-      await recalculatePlayerStats(allIds);
+      await recalcStats(allIds, { ...match, events: newEvents });
       toast.success('Evento aggiornato');
     } catch (e) {
       toast.error(e.message);
@@ -341,7 +357,7 @@ export default function MatchDetailPage() {
     try {
       const allIds = [...(match.redTeam || []), ...(match.blueTeam || [])].map(p => p.id);
       await deleteMatch(id);
-      await recalculatePlayerStats(allIds);
+      await recalcStats(allIds, null);
       toast.success('Partita eliminata');
       navigate('/history');
     } catch (e) {

@@ -92,8 +92,10 @@ export function subscribeToMatches(callback) {
 
 const RECENT_MATCHES_WINDOW = 20; // last N matches for recent PI
 
-export async function recalculatePlayerStats(playerIds) {
-  const [allMatches, allPlayers] = await Promise.all([getMatches(), getPlayers()]);
+export async function recalculatePlayerStats(playerIds, { cachedMatches, cachedPlayers } = {}) {
+  const [allMatches, allPlayers] = (cachedMatches && cachedPlayers)
+    ? [cachedMatches, cachedPlayers]
+    : await Promise.all([getMatches(), getPlayers()]);
   // Map playerId → historicalStats (authoritative source for all historical data)
   const playerHistoricalMap = new Map(allPlayers.map(p => [p.id, p.historicalStats]));
   const batch = writeBatch(db);
