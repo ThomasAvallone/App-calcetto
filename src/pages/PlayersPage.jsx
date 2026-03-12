@@ -461,12 +461,12 @@ export default function PlayersPage() {
             const iLose = myScore < theirScore;
             if (iWin) {
               for (const tp of myTeam) {
-                if (tp.id !== pid) winsWith[tp.id] = (winsWith[tp.id] || 0) + 1;
+                if (tp.id && tp.id !== pid) winsWith[tp.id] = (winsWith[tp.id] || 0) + 1;
               }
             }
             if (iLose) {
               for (const op of oppTeam) {
-                lossesTo[op.id] = (lossesTo[op.id] || 0) + 1;
+                if (op.id) lossesTo[op.id] = (lossesTo[op.id] || 0) + 1;
               }
             }
             for (const ev of (m.events || [])) {
