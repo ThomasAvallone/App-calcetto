@@ -165,14 +165,16 @@ export default function PlayersPage() {
         else if (my < their) s.losses++;
         else s.draws++;
         if (their === 0) s.cleanSheets++;
+        let wasGkThisMatch = false;
         for (const ev of m.events || []) {
           if (ev.type === 'goal') {
             if (ev.scorerId === p.id) s.goals++;
             if (ev.assistId === p.id) s.assists++;
           }
           if (ev.type === 'autogoal' && ev.scorerId === p.id) s.autogoals++;
-          if (ev.gkConcededId === p.id) { s.gkGoalsConceded++; }
+          if (ev.gkConcededId === p.id) { s.gkGoalsConceded++; wasGkThisMatch = true; }
         }
+        if (wasGkThisMatch) s.gkMatches++;
         // Track historical matches by season for assist proration
         if (m.isHistorical) {
           const sid = getSeasonId(m.date);
@@ -372,7 +374,9 @@ export default function PlayersPage() {
     const rf = p.recentForm;
     const formColor = rf ? (rf.avg >= 7 ? CLR_WIN : rf.avg >= 5 ? CLR_DRAW : CLR_LOSS) : null;
     const seasonSt = playerSeasonStats[p.id] || {};
-    const displaySt = statView === 'season' ? seasonSt : total;
+    // cleanSheets: use all-match count since GK/CS tracking started this season
+    const seasonStWithCs = { ...seasonSt, cleanSheets: playerCleanSheets[p.id] || 0 };
+    const displaySt = statView === 'season' ? seasonStWithCs : total;
 
     return (
       <SwipeBack onSwipe={() => setSelectedPlayer(null)}>

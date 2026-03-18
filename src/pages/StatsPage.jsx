@@ -265,7 +265,18 @@ export default function StatsPage() {
       ? Date.now() - 30 * 24 * 60 * 60 * 1000
       : getSeasonStartMs();
     const filtered = finishedMatches.filter(m => getMs(m.date) >= cutoff);
-    return computeStatsFromMatches(players, filtered);
+    const computed = computeStatsFromMatches(players, filtered);
+    // GK stats (gkMatches, gkGoalsConceded, cleanSheets) use all matches since
+    // GK/clean-sheet tracking started this season → no date filtering needed.
+    return computed.map(p => {
+      const gk = gkFromEvents[p.id] || {};
+      return {
+        ...p,
+        gkMatches:       gk.gkMatches || 0,
+        gkGoalsConceded: gk.gkGoalsConceded || 0,
+        cleanSheets:     gk.cleanSheets || 0,
+      };
+    });
   }, [period, players, finishedMatches, gkFromEvents]);
 
   // Classifica: computed from matches (GF/GS not in p.stats)
