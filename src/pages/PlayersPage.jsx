@@ -591,7 +591,7 @@ export default function PlayersPage() {
           ))}
         </div>
 
-        <PiTrendChart allMatches={allMatches} playerId={p.id} />
+        <PiTrendChart allMatches={allMatches} playerId={p.id} playerPi={p.powerIndex} />
 
         <AiTrendCard player={p} allMatches={allMatches} />
 
@@ -889,7 +889,7 @@ function HistoricalLinkSection({ linkedNames, suggestions, showAll, allNames, hi
   );
 }
 
-function PiTrendChart({ allMatches, playerId }) {
+function PiTrendChart({ allMatches, playerId, playerPi }) {
   const points = useMemo(() => {
     const played = allMatches
       .filter(m =>
@@ -905,7 +905,7 @@ function PiTrendChart({ allMatches, playerId }) {
     // fino a quel momento. Mostriamo gli ultimi 4 punti (≈ 1 mese).
     const WINDOW = 4;
     const startIdx = Math.max(0, played.length - WINDOW);
-    return played.slice(startIdx).map((_, relIdx) => {
+    const computed = played.slice(startIdx).map((_, relIdx) => {
       const absIdx = startIdx + relIdx;
       const winStart = Math.max(0, absIdx - WINDOW + 1);
       const window = played.slice(winStart, absIdx + 1);
@@ -926,7 +926,14 @@ function PiTrendChart({ allMatches, playerId }) {
       }
       return { pi: computePowerIndex(s), date: played[absIdx].date };
     });
-  }, [allMatches, playerId]);
+
+    // L'ultimo punto usa il PI reale del giocatore (coerente con il valore in cima alla scheda)
+    if (computed.length > 0 && playerPi != null) {
+      computed[computed.length - 1] = { ...computed[computed.length - 1], pi: playerPi };
+    }
+
+    return computed;
+  }, [allMatches, playerId, playerPi]);
 
   if (points.length < 2) return null;
 
@@ -1027,7 +1034,7 @@ function PiTrendChart({ allMatches, playerId }) {
         ))}
       </svg>
       <div style={{ fontSize: '0.62rem', color: FLAT, marginTop: '0.25rem' }}>
-        Ultime {points.length} partite · PI calcolato su finestra mobile di 4 match
+        Ultime {points.length} partite · PI finale = valore corrente della scheda
       </div>
     </div>
   );
