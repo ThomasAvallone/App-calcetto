@@ -437,7 +437,6 @@ export default function PlayersPage() {
               </div>
             </div>
           )}
-          <PowerIndexChart history={p.powerHistory} />
         </div>
 
         {/* Nemesi / Spalla / Vittima GK */}
@@ -870,9 +869,9 @@ function PiTrendChart({ allMatches, playerId }) {
         !m.isHistorical &&
         [...(m.redTeam || []), ...(m.blueTeam || [])].some(p => p.id === playerId)
       )
-      .sort((a, b) => getMs(a.date) - getMs(b.date)); // cronologico ASC
+      .sort((a, b) => getMs(a.date) - getMs(b.date));
 
-    if (played.length < 3) return [];
+    if (played.length < 2) return [];
 
     return played.map((_, idx) => {
       const slice = played.slice(0, idx + 1);
@@ -891,64 +890,110 @@ function PiTrendChart({ allMatches, playerId }) {
         }
         if (wasGk) s.gkMatches++;
       }
-      return computePowerIndex(s);
-    }).slice(-24); // massimo 24 punti
+      return { pi: computePowerIndex(s), date: played[idx].date };
+    }).slice(-4); // ultimo mese ≈ 4 partite settimanali
   }, [allMatches, playerId]);
 
-  if (points.length < 3) return null;
+  if (points.length < 2) return null;
 
-  const W = 280, H = 80, PAD_T = 14, PAD_B = 6;
+  const GREEN = '#68D391', RED = '#FC8181', FLAT = CLR_MUTED;
+  const W = 280, H = 80, PAD_T = 14, PAD_B = 20;
   const inner = H - PAD_T - PAD_B;
-  const minV = Math.max(0,   Math.min(...points) - 3);
-  const maxV = Math.min(100, Math.max(...points) + 3);
+  const vals = points.map(pt => pt.pi);
+  const minV = Math.max(0, Math.min(...vals) - 3);
+  const maxV = Math.min(100, Math.max(...vals) + 3);
   const range = maxV - minV || 1;
-  const toX = i  => (i / (points.length - 1)) * W;
-  const toY = v  => PAD_T + inner - ((v - minV) / range) * inner;
+  const toX = i => (i / (points.length - 1)) * W;
+  const toY = v => PAD_T + inner - ((v - minV) / range) * inner;
 
-  const linePath = points.map((v, i) => `${i === 0 ? 'M' : 'L'}${toX(i).toFixed(1)} ${toY(v).toFixed(1)}`).join(' ');
-  const areaPath = `${linePath} L${W} ${H - PAD_B} L0 ${H - PAD_B} Z`;
+  // Colore per segmento: verde se sale, rosso se scende
+  const segCols = vals.slice(1).map((v, i) => v > vals[i] ? GREEN : v < vals[i] ? RED : FLAT);
 
-  const last = points[points.length - 1];
-  const prev = points[points.length - 2];
-  const trend = last > prev ? CLR_WIN : last < prev ? CLR_LOSS : CLR_MUTED;
+  // Blend di due colori hex (per transizione morbida ai punti di cambio)
+  const hexBlend = (c1, c2) => {
+    const p = c => [parseInt(c.slice(1, 3), 16), parseInt(c.slice(3, 5), 16), parseInt(c.slice(5, 7), 16)];
+    const [r1, g1, b1] = p(c1), [r2, g2, b2] = p(c2);
+    const h = n => n.toString(16).padStart(2, '0');
+    return `#${h(Math.round((r1 + r2) / 2))}${h(Math.round((g1 + g2) / 2))}${h(Math.round((b1 + b2) / 2))}`;
+  };
+
+  // Colore ad ogni punto = blend dei segmenti adiacenti (sfumatura senza stacco netto)
+  const ptCols = vals.map((_, i) => {
+    if (i === 0) return segCols[0];
+    if (i === vals.length - 1) return segCols[segCols.length - 1];
+    const prev = segCols[i - 1], curr = segCols[i];
+    return prev === curr ? curr : hexBlend(prev, curr);
+  });
+
+  const last = vals[vals.length - 1];
+  const prev = vals[vals.length - 2];
+  const trendCol = last > prev ? GREEN : last < prev ? RED : FLAT;
+
+  const fmtDate = d => {
+    const ms = d?.toMillis ? d.toMillis() : new Date(d).getTime();
+    const dt = new Date(ms);
+    return `${dt.getDate()}/${dt.getMonth() + 1}`;
+  };
+
+  const safeId = playerId.replace(/[^a-z0-9]/gi, '-');
 
   return (
     <div className="card mb-4">
       <div className="flex items-center justify-between mb-2">
         <h3 style={{ fontSize: '0.95rem', margin: 0 }}>📈 Andamento Power Index</h3>
-        <span style={{ fontSize: '0.72rem', color: trend, fontWeight: 700 }}>
+        <span style={{ fontSize: '0.72rem', color: trendCol, fontWeight: 700 }}>
           {last > prev ? '▲' : last < prev ? '▼' : '—'} {last.toFixed(1)}
         </span>
       </div>
       <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block', overflow: 'visible' }}>
+        <defs>
+          {segCols.map((_, i) => (
+            <linearGradient key={i} id={`pi-seg-${safeId}-${i}`}
+              gradientUnits="userSpaceOnUse"
+              x1={toX(i).toFixed(1)} y1={toY(vals[i]).toFixed(1)}
+              x2={toX(i + 1).toFixed(1)} y2={toY(vals[i + 1]).toFixed(1)}>
+              <stop offset="0%" stopColor={ptCols[i]} />
+              <stop offset="100%" stopColor={ptCols[i + 1]} />
+            </linearGradient>
+          ))}
+        </defs>
         {/* Grid lines */}
         {[minV, (minV + maxV) / 2, maxV].map((v, i) => (
           <line key={i} x1={0} y1={toY(v)} x2={W} y2={toY(v)} stroke="#2D3748" strokeWidth="1" />
         ))}
         {/* Y labels */}
-        <text x={2} y={toY(maxV) + 1} fill={CLR_MUTED} fontSize="8" dominantBaseline="hanging">{maxV.toFixed(0)}</text>
-        <text x={2} y={toY(minV) - 1} fill={CLR_MUTED} fontSize="8" dominantBaseline="auto">{minV.toFixed(0)}</text>
-        {/* Area fill */}
-        <path d={areaPath} fill="rgba(79,209,197,0.07)" />
-        {/* Line */}
-        <path d={linePath} fill="none" stroke="#4FD1C5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        {/* Dots — show only last 8 to avoid clutter */}
-        {points.slice(-8).map((v, j) => {
-          const i = points.length - 8 + j;
-          const isLast = i === points.length - 1;
+        <text x={2} y={toY(maxV) + 1} fill={FLAT} fontSize="8" dominantBaseline="hanging">{maxV.toFixed(0)}</text>
+        <text x={2} y={toY(minV) - 1} fill={FLAT} fontSize="8" dominantBaseline="auto">{minV.toFixed(0)}</text>
+        {/* Segmenti colorati con gradiente */}
+        {segCols.map((_, i) => (
+          <path key={i}
+            d={`M${toX(i).toFixed(1)} ${toY(vals[i]).toFixed(1)} L${toX(i + 1).toFixed(1)} ${toY(vals[i + 1]).toFixed(1)}`}
+            fill="none" stroke={`url(#pi-seg-${safeId}-${i})`} strokeWidth="2.5" strokeLinecap="round" />
+        ))}
+        {/* Dots su ogni punto */}
+        {vals.map((v, i) => {
+          const isLast = i === vals.length - 1;
           return (
-            <circle key={i} cx={toX(i)} cy={toY(v)} r={isLast ? 5 : 2.5}
-              fill={isLast ? '#4FD1C5' : '#1A202C'} stroke="#4FD1C5" strokeWidth={isLast ? 2 : 1.5} />
+            <circle key={i} cx={toX(i).toFixed(1)} cy={toY(v).toFixed(1)}
+              r={isLast ? 5 : 3}
+              fill={isLast ? ptCols[i] : '#1A202C'}
+              stroke={ptCols[i]} strokeWidth={isLast ? 2 : 1.5} />
           );
         })}
-        {/* Last value label */}
-        <text x={toX(points.length - 1)} y={toY(last) - 8}
-          fill="#4FD1C5" fontSize="10" fontWeight="700" textAnchor="middle">
+        {/* Etichetta valore corrente */}
+        <text x={toX(vals.length - 1)} y={toY(last) - 8}
+          fill={ptCols[vals.length - 1]} fontSize="10" fontWeight="700" textAnchor="middle">
           {last.toFixed(1)}
         </text>
+        {/* Date sotto ogni punto */}
+        {points.map((pt, i) => (
+          <text key={i} x={toX(i)} y={H - 2} fill={FLAT} fontSize="8" textAnchor="middle">
+            {fmtDate(pt.date)}
+          </text>
+        ))}
       </svg>
-      <div style={{ fontSize: '0.62rem', color: CLR_MUTED, marginTop: '0.25rem' }}>
-        Ultime {points.length} partite registrate nell'app
+      <div style={{ fontSize: '0.62rem', color: FLAT, marginTop: '0.25rem' }}>
+        Ultime {points.length} partite · andamento settimanale
       </div>
     </div>
   );
