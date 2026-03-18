@@ -4,6 +4,7 @@ import { getMatch, getMatches, updateMatch, deleteMatch, recalculatePlayerStats,
 import useAuthStore, { selectIsAdmin } from '../store/authStore';
 import usePlayersStore from '../store/playersStore';
 import { generateMatchReport } from '../services/reportService';
+import { generateMatchCommentary } from '../services/geminiService';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import toast from 'react-hot-toast';
@@ -183,6 +184,8 @@ export default function MatchDetailPage() {
   const [editingYoutube, setEditingYoutube] = useState(false);
   const [youtubeInput, setYoutubeInput] = useState('');
   const [showShareModal, setShowShareModal] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [showAiCommentary, setShowAiCommentary] = useState(false);
   const allMatchesRef = useRef(null);
 
   useEffect(() => {
@@ -366,6 +369,25 @@ export default function MatchDetailPage() {
     setReportText(r);
     setShowReport(true);
     updateMatch(id, { report: r }).catch(() => {});
+  };
+
+  const handleAiCommentary = async () => {
+    if (match.aiCommentary) {
+      setShowAiCommentary(v => !v);
+      return;
+    }
+    setAiLoading(true);
+    try {
+      const text = await generateMatchCommentary(match, players);
+      await updateMatch(id, { aiCommentary: text });
+      setMatch(m => ({ ...m, aiCommentary: text }));
+      setShowAiCommentary(true);
+      toast.success('✨ Commento AI generato!');
+    } catch (e) {
+      toast.error('Errore AI: ' + e.message);
+    } finally {
+      setAiLoading(false);
+    }
   };
 
   const handleSaveYoutube = async () => {
@@ -553,10 +575,16 @@ export default function MatchDetailPage() {
             <div className="text-xs text-muted">BLU</div>
           </div>
         </div>
-        <div className="flex gap-2" style={{ marginTop: '0.5rem', justifyContent: 'center' }}>
+        <div className="flex gap-2" style={{ marginTop: '0.5rem', justifyContent: 'center', flexWrap: 'wrap' }}>
           <button className="btn btn-gold" onClick={handleShowReport}>
             🏆 Genera Verdetto
           </button>
+          {isAdmin && match.status === 'finished' && (
+            <button className="btn" onClick={handleAiCommentary} disabled={aiLoading}
+              style={{ background: 'linear-gradient(135deg, #667eea 0%, #9f7aea 100%)', color: '#fff', border: 'none', fontWeight: 700 }}>
+              {aiLoading ? '⏳' : '✨'} {match.aiCommentary ? (showAiCommentary ? 'Nascondi AI' : 'Commento AI') : 'Genera AI'}
+            </button>
+          )}
           {match.status === 'finished' && (
             <button className="btn" style={{ background: '#25D366', color: '#fff', border: 'none', fontWeight: 700 }}
               onClick={() => setShowShareModal(true)}>
@@ -565,6 +593,37 @@ export default function MatchDetailPage() {
           )}
         </div>
       </div>
+
+      {/* AI Commentary Card */}
+      {showAiCommentary && match.aiCommentary && (
+        <div className="card mb-4" style={{ border: '1px solid rgba(159,122,234,0.4)', background: 'rgba(102,126,234,0.05)' }}>
+          <div className="flex items-center justify-between mb-3">
+            <h3 style={{ fontSize: '0.95rem', margin: 0 }}>✨ Commento AI</h3>
+            <button
+              onClick={async () => {
+                setMatch(m => ({ ...m, aiCommentary: null }));
+                setShowAiCommentary(false);
+                await updateMatch(id, { aiCommentary: null });
+              }}
+              style={{ fontSize: '0.7rem', color: '#718096', background: 'none', border: 'none', cursor: 'pointer' }}>
+              ↺ Rigenera
+            </button>
+          </div>
+          <p style={{ fontSize: '0.85rem', color: '#CBD5E0', lineHeight: 1.75, margin: 0, whiteSpace: 'pre-wrap' }}>
+            {match.aiCommentary}
+          </p>
+          <div className="flex gap-2" style={{ marginTop: '1rem' }}>
+            <button className="btn" style={{ flex: 1, fontSize: '0.8rem' }}
+              onClick={() => navigator.clipboard.writeText(match.aiCommentary).then(() => toast.success('Copiato!'))}>
+              📋 Copia
+            </button>
+            <button className="btn" style={{ flex: 1, fontSize: '0.8rem', background: '#25D366', color: '#fff', border: 'none' }}
+              onClick={() => window.open('https://wa.me/?text=' + encodeURIComponent(match.aiCommentary), '_blank')}>
+              📲 WhatsApp
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* YouTube Video */}
       {match.status === 'finished' && (() => {

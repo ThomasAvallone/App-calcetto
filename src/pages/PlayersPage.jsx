@@ -9,6 +9,7 @@ import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 import { getMs } from '../utils/dateUtils';
+import { generatePlayerTrendAnalysis } from '../services/geminiService';
 import { RESULT_COLORS, CLR_WIN, CLR_DRAW, CLR_LOSS, AVATAR_COLORS, CLR_MUTED, MEDAL_COLORS } from '../constants/colors';
 
 const ROLES = ['Portiere', 'Difensore', 'Centrocampista', 'Attaccante'];
@@ -567,6 +568,8 @@ export default function PlayersPage() {
 
         <PiTrendChart allMatches={allMatches} playerId={p.id} />
 
+        <AiTrendCard player={p} allMatches={allMatches} />
+
         <PlayerRecords allMatches={allMatches} player={p} />
 
         <PlayerBadges player={p} seasonStats={playerSeasonStats[p.id]} allMatches={allMatches} />
@@ -995,6 +998,77 @@ function PiTrendChart({ allMatches, playerId }) {
       <div style={{ fontSize: '0.62rem', color: FLAT, marginTop: '0.25rem' }}>
         Ultime {points.length} partite · andamento settimanale
       </div>
+    </div>
+  );
+}
+
+function AiTrendCard({ player, allMatches }) {
+  const [analysis, setAnalysis] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const generate = async () => {
+    setLoading(true);
+    try {
+      const played = allMatches
+        .filter(m =>
+          m.status === 'finished' &&
+          !m.isHistorical &&
+          [...(m.redTeam || []), ...(m.blueTeam || [])].some(p => p.id === player.id)
+        )
+        .sort((a, b) => getMs(a.date) - getMs(b.date))
+        .slice(-4);
+
+      if (played.length < 1) {
+        toast('Nessuna partita registrata per questo giocatore.');
+        return;
+      }
+
+      const recentData = played.map(match => {
+        const inRed  = (match.redTeam || []).some(p => p.id === player.id);
+        const my     = inRed ? match.redScore : match.blueScore;
+        const their  = inRed ? match.blueScore : match.redScore;
+        const result = my > their ? 'W' : my < their ? 'L' : 'D';
+        let goals = 0, assists = 0, autogoals = 0;
+        for (const ev of (match.events || [])) {
+          if (ev.type === 'goal'     && ev.scorerId === player.id) goals++;
+          if (ev.type === 'goal'     && ev.assistId === player.id) assists++;
+          if (ev.type === 'autogoal' && ev.scorerId === player.id) autogoals++;
+        }
+        return { result, goals, assists, autogoals };
+      });
+
+      const text = await generatePlayerTrendAnalysis(player, recentData);
+      setAnalysis(text);
+    } catch (e) {
+      toast.error('Errore AI: ' + e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!analysis) {
+    return (
+      <div className="card mb-4" style={{ textAlign: 'center', border: '1px dashed rgba(159,122,234,0.35)', background: 'rgba(102,126,234,0.03)' }}>
+        <button onClick={generate} disabled={loading}
+          style={{ background: 'none', border: 'none', cursor: loading ? 'default' : 'pointer', color: '#9F7AEA', fontSize: '0.88rem', padding: '0.6rem 0', width: '100%' }}>
+          {loading ? '⏳ Analisi in corso...' : '✨ Genera analisi AI del momento di forma'}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card mb-4" style={{ border: '1px solid rgba(159,122,234,0.4)', background: 'rgba(102,126,234,0.05)' }}>
+      <div className="flex items-center justify-between mb-3">
+        <h3 style={{ fontSize: '0.95rem', margin: 0 }}>✨ Analisi AI</h3>
+        <button onClick={() => setAnalysis(null)}
+          style={{ fontSize: '0.7rem', color: '#718096', background: 'none', border: 'none', cursor: 'pointer' }}>
+          ↺ Rigenera
+        </button>
+      </div>
+      <p style={{ fontSize: '0.84rem', color: '#CBD5E0', lineHeight: 1.75, margin: 0, whiteSpace: 'pre-wrap' }}>
+        {analysis}
+      </p>
     </div>
   );
 }
