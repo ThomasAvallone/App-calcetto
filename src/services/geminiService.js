@@ -3,7 +3,7 @@
 // La chiave viene letta dall'env e non è mai esposta nel codice sorgente.
 // Protezione aggiuntiva: imposta la restrizione HTTP referrer su Google Cloud Console.
 
-const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+const API_KEY = import.meta.env.VITE_GEMINI_API_KEY || 'AIzaSyAzBVHzjV-L5BynWgb6tPSHTTvlO6Abu0M';
 const MODEL   = 'gemini-3.1-flash-lite-preview';
 const BASE_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 
