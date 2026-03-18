@@ -339,7 +339,7 @@ export const BADGE_DEFS = [
     id: 'giancarlo',
     icon: '🎲',
     label: 'Giancarlo',
-    desc: 'In ogni partita c\'è UN Giancarlo — estratto a sorte tra i presenti. Nessuno sa perché, nessuno sa come. È lui. È Giancarlo.',
+    desc: 'Titolo in carica: il Giancarlo dell\'ultima partita giocata. Ogni partita lo riassegna a un nuovo eletto. Uno solo può portare questo peso.',
     positive: true,
     check: (_s, p, matches) => {
       if (!matches?.length || !p?.id) return false;
@@ -349,14 +349,18 @@ export const BADGE_DEFS = [
         for (let i = 0; i < str.length; i++) h = (Math.imul(31, h) + str.charCodeAt(i)) | 0;
         return Math.abs(h);
       };
-      for (const m of matches) {
-        if (m.status !== 'finished' || m.isHistorical) continue;
-        const all = [...(m.redTeam || []), ...(m.blueTeam || [])];
-        if (!all.length) continue;
-        const giancarlo = all[hash(m.id || m.date || '') % all.length];
-        if (giancarlo?.id === pid) return true;
-      }
-      return false;
+      const lastMatch = [...matches]
+        .filter(m => m.status === 'finished' && !m.isHistorical)
+        .sort((a, b) => {
+          const ta = a.date?.toMillis ? a.date.toMillis() : (a.date ? new Date(a.date).getTime() : 0);
+          const tb = b.date?.toMillis ? b.date.toMillis() : (b.date ? new Date(b.date).getTime() : 0);
+          return tb - ta;
+        })[0];
+      if (!lastMatch) return false;
+      const all = [...(lastMatch.redTeam || []), ...(lastMatch.blueTeam || [])];
+      if (!all.length) return false;
+      const giancarlo = all[hash(lastMatch.id || lastMatch.date || '') % all.length];
+      return giancarlo?.id === pid;
     },
   },
   {
