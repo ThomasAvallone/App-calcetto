@@ -52,7 +52,7 @@ export async function generateMatchCommentary(match, players) {
   const eventsStr = timeline.length === 0
     ? 'Nessun gol segnato (0-0 imbarazzante).'
     : timeline.map(ev => {
-        const min   = ev.minute != null ? `${ev.minute}'` : '?'';
+        const min   = ev.minute != null ? `${ev.minute}'` : '?';
         const team  = ev.team === 'red' ? 'Rossi' : 'Blu';
         if (ev.type === 'goal') {
           const assist = resolveAssist(ev);
