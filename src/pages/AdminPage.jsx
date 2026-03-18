@@ -11,6 +11,22 @@ import toast from 'react-hot-toast';
 
 const CHANGELOG = [
   {
+    version: '2.7.0',
+    date: 'Marzo 2026',
+    entries: [
+      { type: 'new', text: 'AI Gemini: formazione squadre equilibrate — il pulsante "🤖 AI Bilancia" usa Gemini per assegnare i giocatori tenendo conto di PI, ruoli, portieri e streak attive' },
+      { type: 'new', text: 'AI Gemini: commento narrativo post-partita in stile giornalistico (Caressa/Bizzotto), generato automaticamente al termine della partita' },
+      { type: 'new', text: 'AI Gemini: analisi trend giocatore — commento sarcastico e divertente sulla forma recente, visibile nel profilo' },
+      { type: 'new', text: 'Grafico andamento Power Index: rolling window sulle ultime 4 partite, gradiente verde/rosso per indicare trend positivo/negativo' },
+      { type: 'new', text: 'Card condivisibile: al termine della partita è possibile generare e condividere una card visiva con il risultato' },
+      { type: 'new', text: 'Pulsante Condividi disponibile anche nello storico partite (non solo durante la partita live)' },
+      { type: 'new', text: 'Video YouTube nel dettaglio partita: possibilità di allegare e riprodurre un video highlights direttamente dalla pagina' },
+      { type: 'new', text: 'Badge visibili per ogni partita nello storico: mostra i badge assegnati ai giocatori nel riepilogo' },
+      { type: 'new', text: 'Badge "Re in carica" (Giancarlo): riassegnato automaticamente dopo ogni partita al giocatore con più gol all-time' },
+      { type: 'new', text: 'Pianificazione partita senza giocatori: crea una partita programmata vuota e aggiungi i giocatori successivamente dallo storico' },
+    ],
+  },
+  {
     version: '2.6.0',
     date: 'Marzo 2026',
     entries: [

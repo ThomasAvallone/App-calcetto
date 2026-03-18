@@ -86,6 +86,69 @@ Scrivi il commento narrativo ora:`;
   return callGemini(prompt, { temperature: 0.9, maxTokens: 500 });
 }
 
+// ─── Formazione squadre equilibrate con AI ────────────────────────────────────
+// players: array di oggetti player con id, name, powerIndex, primaryRole, streak
+// Ritorna { red: [...], blue: [...], reasoning: string }
+export async function generateAIBalancedTeams(players) {
+  const playerList = players.map(p => {
+    const pi = (p.powerIndex || 50).toFixed(1);
+    const role = p.primaryRole || 'N/A';
+    const streakStr = p.streak?.count >= 2
+      ? ` — streak ${p.streak.count} ${p.streak.type === 'win' ? 'vittorie' : 'sconfitte'} consecutive`
+      : '';
+    return `- ${p.name} (PI: ${pi}, Ruolo: ${role}${streakStr})`;
+  }).join('\n');
+
+  const half = Math.ceil(players.length / 2);
+
+  const prompt = `Sei il responsabile tecnico di un torneo di calcetto amatoriale. \
+Devi formare due squadre il più equilibrate possibile tra i seguenti ${players.length} giocatori.
+
+GIOCATORI DISPONIBILI:
+${playerList}
+
+CRITERI DI EQUILIBRIO (in ordine di priorità):
+1. Power Index totale simile tra le due squadre
+2. Almeno un portiere per squadra (se disponibili tra i giocatori)
+3. Distribuzione equilibrata degli altri ruoli
+4. Non concentrare tutte le streak positive nella stessa squadra
+
+Ogni squadra deve avere al massimo ${half} giocatori. \
+Assegna ogni giocatore a una sola squadra, nessuno deve essere escluso.
+
+Rispondi ESCLUSIVAMENTE con un JSON valido (niente testo prima o dopo):
+{"red":["Nome1","Nome2"],"blue":["Nome3","Nome4"],"reasoning":"breve spiegazione in italiano di max 2 frasi"}`;
+
+  const raw = await callGemini(prompt, { temperature: 0.25, maxTokens: 400 });
+
+  // Extract JSON from response (handles potential extra text)
+  const jsonMatch = raw.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error('Risposta AI non parseable');
+
+  let parsed;
+  try {
+    parsed = JSON.parse(jsonMatch[0]);
+  } catch {
+    throw new Error('JSON AI non valido');
+  }
+
+  // Map names back to player objects (case-insensitive)
+  const nameToPlayer = Object.fromEntries(players.map(p => [p.name.toLowerCase().trim(), p]));
+  const red = (parsed.red || []).map(n => nameToPlayer[n.toLowerCase().trim()]).filter(Boolean);
+  const blue = (parsed.blue || []).map(n => nameToPlayer[n.toLowerCase().trim()]).filter(Boolean);
+
+  // Safety: assign any unassigned player to the smaller team
+  const assigned = new Set([...red, ...blue].map(p => p.id));
+  for (const p of players) {
+    if (!assigned.has(p.id)) {
+      if (red.length <= blue.length) red.push(p);
+      else blue.push(p);
+    }
+  }
+
+  return { red, blue, reasoning: parsed.reasoning || '' };
+}
+
 // ─── Analisi trend giocatore ──────────────────────────────────────────────────
 // recentData: array di max 4 oggetti { result: 'W'|'L'|'D', goals, assists, autogoals }
 export async function generatePlayerTrendAnalysis(player, recentData) {

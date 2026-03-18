@@ -4,6 +4,7 @@ import usePlayersStore from '../store/playersStore';
 import useMatchStore from '../store/matchStore';
 import { generateMatchPreview } from '../services/reportService';
 import { fetchWeatherForDate } from '../services/weatherService';
+import { generateAIBalancedTeams } from '../services/geminiService';
 import toast from 'react-hot-toast';
 
 const ROLES = ['Portiere', 'Difensore', 'Centrocampista', 'Attaccante'];
@@ -22,6 +23,8 @@ export default function MatchSetupPage() {
   const [swapPick, setSwapPick] = useState(null); // { id, team } of first-selected player
   const [matchDate, setMatchDate] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiReasoning, setAiReasoning] = useState('');
 
   const togglePlayer = (id) => {
     setSelectedIds(prev =>
@@ -51,6 +54,7 @@ export default function MatchSetupPage() {
     if (selectedIds.length < 2) { toast.error('Seleziona almeno 2 giocatori'); return; }
     const balanced = balanceTeams(selectedIds);
     setTeams(balanced);
+    setAiReasoning('');
     const prev = generateMatchPreview({
       redTeam: balanced.red,
       blueTeam: balanced.blue,
@@ -59,6 +63,41 @@ export default function MatchSetupPage() {
     });
     setPreview(prev);
     setStep('preview');
+  };
+
+  const handleAIBalance = async () => {
+    if (selectedIds.length < 2) { toast.error('Seleziona almeno 2 giocatori'); return; }
+    setAiLoading(true);
+    const pool = players.filter(p => selectedIds.includes(p.id));
+    try {
+      const { red, blue, reasoning } = await generateAIBalancedTeams(pool);
+      setTeams({ red, blue });
+      setAiReasoning(reasoning);
+      const prev = generateMatchPreview({
+        redTeam: red,
+        blueTeam: blue,
+        weather,
+        date: matchDate ? new Date(matchDate) : new Date(),
+      });
+      setPreview(prev);
+      setStep('preview');
+      toast.success('🤖 Squadre formate dall\'AI!');
+    } catch (e) {
+      toast.error('AI non disponibile, uso bilanciamento standard');
+      const balanced = balanceTeams(selectedIds);
+      setTeams(balanced);
+      setAiReasoning('');
+      const prev = generateMatchPreview({
+        redTeam: balanced.red,
+        blueTeam: balanced.blue,
+        weather,
+        date: matchDate ? new Date(matchDate) : new Date(),
+      });
+      setPreview(prev);
+      setStep('preview');
+    } finally {
+      setAiLoading(false);
+    }
   };
 
   const handleStartMatch = async () => {
@@ -230,6 +269,17 @@ export default function MatchSetupPage() {
           </div>
         </div>
 
+        {/* AI Reasoning */}
+        {aiReasoning && (
+          <div className="card mb-3" style={{ background: 'rgba(79,209,197,0.05)', border: '1px solid rgba(79,209,197,0.2)' }}>
+            <div className="flex items-center gap-2 mb-1">
+              <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#4FD1C5' }}>🤖 AI</span>
+              <span style={{ fontSize: '0.75rem', color: '#718096' }}>Ragionamento sulla formazione</span>
+            </div>
+            <p style={{ fontSize: '0.82rem', color: '#A0AEC0', lineHeight: 1.5, margin: 0 }}>{aiReasoning}</p>
+          </div>
+        )}
+
         {/* Preview text */}
         <div className="card mb-4">
           <div className="flex items-center justify-between mb-3">
@@ -394,14 +444,29 @@ export default function MatchSetupPage() {
 
       <div style={{ height: '1rem' }} />
 
-      <button
-        className="btn btn-teal btn-lg btn-full"
-        onClick={handleBalance}
-        disabled={selectedIds.length < 2}
-        style={{ position: 'sticky', bottom: '80px' }}
-      >
-        ⚖️ Bilancia le Squadre →
-      </button>
+      <div style={{ display: 'flex', gap: '0.5rem', position: 'sticky', bottom: '80px' }}>
+        <button
+          className="btn btn-teal btn-lg"
+          onClick={handleBalance}
+          disabled={selectedIds.length < 2 || aiLoading}
+          style={{ flex: 1 }}
+        >
+          ⚖️ Bilancia
+        </button>
+        <button
+          className="btn btn-lg"
+          onClick={handleAIBalance}
+          disabled={selectedIds.length < 2 || aiLoading}
+          style={{
+            flex: 1,
+            background: aiLoading ? 'rgba(79,209,197,0.08)' : 'rgba(79,209,197,0.15)',
+            color: '#4FD1C5',
+            border: '1px solid rgba(79,209,197,0.4)',
+          }}
+        >
+          {aiLoading ? '⏳ AI...' : '🤖 AI Bilancia'}
+        </button>
+      </div>
       <button
         className="btn btn-ghost btn-full"
         onClick={handlePlanEmpty}
