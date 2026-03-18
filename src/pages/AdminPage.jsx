@@ -11,6 +11,18 @@ import toast from 'react-hot-toast';
 
 const CHANGELOG = [
   {
+    version: '2.6.0',
+    date: 'Marzo 2026',
+    entries: [
+      { type: 'new', text: 'Tab GK (Classifiche): clean sheet nel leaderboard portieri con conteggio stagione e all-time' },
+      { type: 'new', text: 'Profilo giocatore: clean sheet in Record Stagione e All-time' },
+      { type: 'new', text: 'Tab "Squadre" (Classifiche): seleziona due gruppi di giocatori e vedi lo storico delle sfide tra quelle formazioni' },
+      { type: 'new', text: 'GK stats avanzate: clean sheet, win rate in porta (vittorie/partite da GK)' },
+      { type: 'new', text: 'Statistiche relazionali nel profilo giocatore: Spalla (più vittorie insieme), Nemesi, Vittima GK, Chi ti assiste' },
+      { type: 'fix', text: 'Clean sheet e gkMatches ora corretti nella vista Stagione (le partite fuori dal cutoff di data non escludevano più dati GK)' },
+    ],
+  },
+  {
     version: '2.5.0',
     date: 'Marzo 2026',
     entries: [
