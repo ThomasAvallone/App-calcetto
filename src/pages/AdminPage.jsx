@@ -9,6 +9,70 @@ import { HISTORICAL_SEASONS, getCurrentRosterPlayers, computeCumulativeStats } f
 import useAuthStore, { selectIsAdmin } from '../store/authStore';
 import toast from 'react-hot-toast';
 
+const CHANGELOG = [
+  {
+    version: '2.5.0',
+    date: 'Marzo 2026',
+    entries: [
+      { type: 'new', text: 'Pannello Admin: log operazioni di sessione' },
+      { type: 'new', text: 'Pannello Admin: changelog aggiornamenti espandibile' },
+      { type: 'new', text: 'Pannello Admin: sezioni one-time nascoste in blocco collassabile' },
+    ],
+  },
+  {
+    version: '2.4.0',
+    date: 'Febbraio 2026',
+    entries: [
+      { type: 'new', text: 'Sistema badge con 4 tipologie: Stagione, All-time, Partita, Admin' },
+      { type: 'new', text: 'Catalogo badge con descrizioni e condizioni di sblocco' },
+      { type: 'fix', text: 'Corretto calcolo minuti gol usando timestamp assoluti' },
+    ],
+  },
+  {
+    version: '2.3.0',
+    date: 'Gennaio 2026',
+    entries: [
+      { type: 'new', text: 'Power Index: formula aggiornata (forma recente 60% + storico 40%)' },
+      { type: 'new', text: 'Streak tracking: vittorie/sconfitte/pareggi consecutivi' },
+      { type: 'new', text: 'Decay factor per giocatori inattivi da più di 30 giorni' },
+      { type: 'fix', text: 'Ricalcolo statistiche storiche corretto per alias multipli' },
+    ],
+  },
+  {
+    version: '2.2.0',
+    date: 'Dicembre 2025',
+    entries: [
+      { type: 'new', text: 'Export Excel multi-foglio (Giocatori, Partite, Eventi)' },
+      { type: 'new', text: 'Sincronizzazione Google Sheets tramite Apps Script webhook' },
+      { type: 'new', text: 'Import 300 partite storiche (2018/19 → 2025/26)' },
+    ],
+  },
+  {
+    version: '2.1.0',
+    date: 'Novembre 2025',
+    entries: [
+      { type: 'new', text: 'Gestione ruoli utenti: viewer, admin, superadmin' },
+      { type: 'new', text: 'Pagina Annali con storico stagioni dal 2018' },
+      { type: 'fix', text: 'Protezione route admin con verifica ruolo su Firestore' },
+    ],
+  },
+  {
+    version: '2.0.0',
+    date: 'Ottobre 2025',
+    entries: [
+      { type: 'new', text: 'Riscrittura completa in React + Firebase' },
+      { type: 'new', text: 'Autenticazione Google OAuth' },
+      { type: 'new', text: 'Live match con timer e registrazione eventi in tempo reale' },
+      { type: 'new', text: 'Progressive Web App (PWA) installabile' },
+    ],
+  },
+];
+
+const TYPE_STYLE = {
+  new: { label: 'NEW', color: '#4FD1C5', bg: 'rgba(79,209,197,0.12)' },
+  fix: { label: 'FIX', color: '#FC814A', bg: 'rgba(252,129,74,0.12)' },
+};
+
 export default function AdminPage() {
   const navigate = useNavigate();
   const currentIsAdmin = useAuthStore(selectIsAdmin);
@@ -26,6 +90,9 @@ export default function AdminPage() {
   const [importProgress, setImportProgress] = useState(null);
   const [importingMatches, setImportingMatches] = useState(false);
   const [importMatchProgress, setImportMatchProgress] = useState(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showChangelog, setShowChangelog] = useState(false);
+  const [opLog, setOpLog] = useState([]);
 
   useEffect(() => {
     Promise.all([getPlayers(), getMatches(), loadUsers()]).then(([p, m, u]) => {
@@ -38,13 +105,27 @@ export default function AdminPage() {
     return snap.docs.map(d => ({ id: d.id, ...d.data() }));
   }
 
+  function addLog(action, status = 'ok', detail = '') {
+    const entry = {
+      id: Date.now(),
+      time: new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      user: currentUser?.displayName || currentUser?.email || 'Admin',
+      action,
+      status,
+      detail,
+    };
+    setOpLog(prev => [entry, ...prev]);
+  }
+
   const handleSyncSheets = async () => {
     setSyncing(true);
     try {
       await syncAllHistoryToSheets(matches, players);
       toast.success('Sincronizzazione completata!');
+      addLog('Sync Google Sheets', 'ok', `${matches.length} partite sincronizzate`);
     } catch (e) {
       toast.error('Errore sync: ' + e.message);
+      addLog('Sync Google Sheets', 'err', e.message);
     } finally {
       setSyncing(false);
     }
@@ -55,8 +136,10 @@ export default function AdminPage() {
     try {
       downloadExcel(players, matches);
       toast.success('Download avviato!');
+      addLog('Export Excel', 'ok', `${players.length} giocatori, ${matches.length} partite`);
     } catch (e) {
       toast.error('Errore export: ' + e.message);
+      addLog('Export Excel', 'err', e.message);
     } finally {
       setExporting(false);
     }
@@ -90,10 +173,12 @@ export default function AdminPage() {
         done++;
       }
       toast.success(`${done} giocatori importati con storico!`);
+      addLog('Import Giocatori', 'ok', `${done} giocatori importati`);
       const updated = await getPlayers();
       setPlayers(updated);
     } catch (e) {
       toast.error('Errore importazione: ' + e.message);
+      addLog('Import Giocatori', 'err', e.message);
     } finally {
       setImporting(false);
       setImportProgress(null);
@@ -106,8 +191,10 @@ export default function AdminPage() {
     try {
       await seedHistoricalSeasons(HISTORICAL_SEASONS);
       toast.success(`${HISTORICAL_SEASONS.length} stagioni importate su Firestore!`);
+      addLog('Import Stagioni Storiche', 'ok', `${HISTORICAL_SEASONS.length} stagioni`);
     } catch (e) {
       toast.error('Errore import: ' + e.message);
+      addLog('Import Stagioni Storiche', 'err', e.message);
     } finally {
       setSeeding(false);
     }
@@ -119,8 +206,10 @@ export default function AdminPage() {
       const allIds = players.map(p => p.id);
       await recalculatePlayerStats(allIds);
       toast.success('Power Index ricalcolati per tutti i giocatori!');
+      addLog('Ricalcolo Power Index', 'ok', `${allIds.length} giocatori aggiornati`);
     } catch (e) {
       toast.error('Errore: ' + e.message);
+      addLog('Ricalcolo Power Index', 'err', e.message);
     } finally {
       setRecalculating(false);
     }
@@ -144,10 +233,12 @@ export default function AdminPage() {
         (done, total, matchNum) => setImportMatchProgress({ done, total, matchNum })
       );
       toast.success(`${done} partite storiche importate!`);
+      addLog('Import Partite Storiche', 'ok', `${done} partite importate`);
       const updated = await getMatches();
       setMatches(updated);
     } catch (e) {
       toast.error('Errore importazione partite: ' + e.message);
+      addLog('Import Partite Storiche', 'err', e.message);
     } finally {
       setImportingMatches(false);
       setImportMatchProgress(null);
@@ -156,12 +247,15 @@ export default function AdminPage() {
 
   const handleSetRole = async (uid, newRole) => {
     if (!currentIsAdmin) return;
+    const targetUser = users.find(u => u.id === uid);
     try {
       await updateDoc(doc(db, 'users', uid), { role: newRole });
       setUsers(u => u.map(user => user.id === uid ? { ...user, role: newRole } : user));
       toast.success(`Ruolo aggiornato: ${newRole}`);
+      addLog('Cambio Ruolo Utente', 'ok', `${targetUser?.email} → ${newRole}`);
     } catch (e) {
       toast.error('Errore aggiornamento ruolo: ' + e.message);
+      addLog('Cambio Ruolo Utente', 'err', e.message);
     }
   };
 
@@ -173,8 +267,10 @@ export default function AdminPage() {
       if (!window.confirm(msg)) return;
       await updateMatch(matchId, { events: fixedEvents });
       toast.success('Minuti gol corretti!');
+      addLog('Correggi Minuti Gol', 'ok', `Partita ${matchId}`);
     } catch (e) {
       toast.error('Errore: ' + e.message);
+      addLog('Correggi Minuti Gol', 'err', e.message);
     } finally {
       setFixingMinutes(false);
     }
@@ -210,64 +306,6 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {/* Import Current Players */}
-      <div className="card mb-4">
-        <h3 className="mb-1">👥 Importa Giocatori</h3>
-        <p className="text-sm text-muted mb-3">
-          Importa automaticamente la rosa corrente (ultimi 3 stagioni, min 5 presenze)
-          con le statistiche storiche già collegate.
-        </p>
-        {importProgress && (
-          <p className="text-sm text-muted mb-2">
-            ⏳ {importProgress.current} ({importProgress.done}/{importProgress.total})
-          </p>
-        )}
-        <button
-          className="btn btn-teal btn-full"
-          onClick={handleImportCurrentPlayers}
-          disabled={importing}
-        >
-          {importing ? '⏳ Importazione...' : '👥 Importa Rosa Corrente'}
-        </button>
-      </div>
-
-      {/* Import Historical Matches */}
-      <div className="card mb-4">
-        <h3 className="mb-1">⚽ Importa Partite Storiche</h3>
-        <p className="text-sm text-muted mb-3">
-          Importa le 300 partite storiche (2018/19 → 2025/26) con gol e autorete.
-          Le statistiche dei giocatori verranno collegate automaticamente tramite i nomi storici.
-        </p>
-        {importMatchProgress && (
-          <p className="text-sm text-muted mb-2">
-            ⏳ Partita #{importMatchProgress.matchNum} ({importMatchProgress.done}/{importMatchProgress.total})
-          </p>
-        )}
-        <button
-          className="btn btn-teal btn-full"
-          onClick={handleImportHistoricalMatchesData}
-          disabled={importingMatches}
-        >
-          {importingMatches ? '⏳ Importazione partite...' : '⚽ Importa Partite Storiche (300)'}
-        </button>
-      </div>
-
-      {/* Import Historical Seasons */}
-      <div className="card mb-4">
-        <h3 className="mb-1">📚 Importa Annali Storici</h3>
-        <p className="text-sm text-muted mb-3">
-          Carica su Firestore tutte le {HISTORICAL_SEASONS.length} stagioni storiche (2018/19 → oggi).
-          Serve per la pagina Annali e per il collegamento giocatori ↔ storico.
-        </p>
-        <button
-          className="btn btn-teal btn-full"
-          onClick={handleSeedHistory}
-          disabled={seeding}
-        >
-          {seeding ? '⏳ Importazione...' : '📥 Importa Stagioni Storiche'}
-        </button>
-      </div>
-
       {/* Google Sheets */}
       <div className="card mb-4">
         <h3 className="mb-1">📊 Google Sheets</h3>
@@ -298,23 +336,6 @@ export default function AdminPage() {
           disabled={exporting}
         >
           {exporting ? '⏳ Preparazione...' : '⬇️ Download Excel (.xlsx)'}
-        </button>
-      </div>
-
-      {/* Fix minuti gol ultima partita */}
-      <div className="card mb-4" style={{ border: '1px solid rgba(252,129,74,0.3)', background: 'rgba(252,129,74,0.04)' }}>
-        <h3 className="mb-1" style={{ color: '#FC814A' }}>🛠️ Correggi Minuti Gol (ultima partita)</h3>
-        <p className="text-sm text-muted mb-3">
-          Ricalcola i minuti dei gol usando i timestamp assoluti degli eventi e l'ora di avvio del timer.
-          Da usare una sola volta per correggere la partita con i minuti sbagliati.
-        </p>
-        <button
-          className="btn btn-full"
-          style={{ background: 'rgba(252,129,74,0.15)', color: '#FC814A', border: '1px solid rgba(252,129,74,0.4)' }}
-          onClick={handleFixGoalMinutes}
-          disabled={fixingMinutes}
-        >
-          {fixingMinutes ? '⏳ Correzione...' : '🛠️ Correggi Minuti Gol'}
         </button>
       </div>
 
@@ -390,14 +411,165 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* Firebase Rules reminder */}
-      <div className="card" style={{ background: 'rgba(246,224,94,0.05)', border: '1px solid rgba(246,224,94,0.2)' }}>
-        <h3 className="text-gold mb-2">⚠️ Sicurezza Firebase</h3>
-        <p className="text-sm text-secondary" style={{ lineHeight: 1.7 }}>
-          Assicurati che le Firestore Security Rules siano configurate correttamente.
-          Solo gli utenti autenticati devono poter leggere i dati, solo gli admin possono scrivere.
-          Consulta il file <code style={{ color: '#4FD1C5' }}>firestore.rules</code> incluso nel progetto.
+      {/* Operations Log */}
+      <div className="card mb-4">
+        <h3 className="mb-1" style={{ fontSize: '0.95rem' }}>📋 Log Operazioni</h3>
+        <p className="text-xs text-muted mb-3">Azioni eseguite in questa sessione.</p>
+        {opLog.length === 0 ? (
+          <p className="text-xs text-muted" style={{ fontStyle: 'italic' }}>Nessuna operazione eseguita.</p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+            {opLog.map(entry => (
+              <div key={entry.id} style={{
+                display: 'flex', alignItems: 'flex-start', gap: '0.6rem',
+                padding: '0.5rem 0.6rem', borderRadius: '0.4rem',
+                background: entry.status === 'ok' ? 'rgba(79,209,197,0.06)' : 'rgba(252,129,74,0.06)',
+                border: `1px solid ${entry.status === 'ok' ? 'rgba(79,209,197,0.2)' : 'rgba(252,129,74,0.2)'}`,
+                fontSize: '0.78rem',
+              }}>
+                <span style={{ color: entry.status === 'ok' ? '#4FD1C5' : '#FC814A', flexShrink: 0 }}>
+                  {entry.status === 'ok' ? '✓' : '✗'}
+                </span>
+                <div style={{ flex: 1 }}>
+                  <span style={{ fontWeight: 600, color: '#E2E8F0' }}>{entry.action}</span>
+                  {entry.detail && <span style={{ color: '#718096' }}> — {entry.detail}</span>}
+                  <div style={{ color: '#4A5568', marginTop: '0.1rem' }}>{entry.time} · {entry.user}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Changelog */}
+      <div className="card mb-4">
+        <button
+          onClick={() => setShowChangelog(v => !v)}
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            width: '100%', background: 'none', border: 'none', cursor: 'pointer',
+            padding: 0, color: 'inherit',
+          }}
+        >
+          <h3 style={{ margin: 0, fontSize: '0.95rem' }}>📝 Aggiornamenti & Changelog</h3>
+          <span style={{ color: '#718096', fontSize: '0.85rem', transition: 'transform 0.2s', display: 'inline-block', transform: showChangelog ? 'rotate(180deg)' : 'rotate(0deg)' }}>▼</span>
+        </button>
+        {showChangelog && (
+          <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {CHANGELOG.map(release => (
+              <div key={release.version}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem' }}>
+                  <span style={{ fontWeight: 700, fontSize: '0.85rem', color: '#4FD1C5' }}>v{release.version}</span>
+                  <span style={{ fontSize: '0.75rem', color: '#4A5568' }}>{release.date}</span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                  {release.entries.map((e, i) => {
+                    const s = TYPE_STYLE[e.type] || TYPE_STYLE.new;
+                    return (
+                      <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', fontSize: '0.8rem' }}>
+                        <span style={{
+                          padding: '0.05rem 0.35rem', borderRadius: '0.25rem',
+                          fontSize: '0.65rem', fontWeight: 700, flexShrink: 0,
+                          color: s.color, background: s.bg, letterSpacing: '0.04em',
+                        }}>
+                          {s.label}
+                        </span>
+                        <span style={{ color: '#A0AEC0', lineHeight: 1.4 }}>{e.text}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Advanced / One-time tools */}
+      <div className="card mb-4" style={{ border: '1px solid rgba(113,128,150,0.25)', background: 'rgba(113,128,150,0.03)' }}>
+        <button
+          onClick={() => setShowAdvanced(v => !v)}
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            width: '100%', background: 'none', border: 'none', cursor: 'pointer',
+            padding: 0, color: 'inherit',
+          }}
+        >
+          <h3 style={{ margin: 0, fontSize: '0.95rem', color: '#718096' }}>🔧 Strumenti Avanzati</h3>
+          <span style={{ color: '#4A5568', fontSize: '0.85rem', transition: 'transform 0.2s', display: 'inline-block', transform: showAdvanced ? 'rotate(180deg)' : 'rotate(0deg)' }}>▼</span>
+        </button>
+        <p className="text-xs text-muted" style={{ marginTop: '0.35rem', marginBottom: 0 }}>
+          Operazioni di migrazione e correzione dati — da usare con cautela.
         </p>
+
+        {showAdvanced && (
+          <div style={{ marginTop: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {/* Import Current Players */}
+            <div>
+              <div style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: '0.25rem' }}>👥 Importa Rosa Corrente</div>
+              <p className="text-xs text-muted mb-2">
+                Importa automaticamente la rosa (ultimi 3 stagioni, min 5 presenze) con le statistiche storiche già collegate.
+              </p>
+              {importProgress && (
+                <p className="text-xs text-muted mb-1">
+                  ⏳ {importProgress.current} ({importProgress.done}/{importProgress.total})
+                </p>
+              )}
+              <button className="btn btn-ghost btn-full" onClick={handleImportCurrentPlayers} disabled={importing}>
+                {importing ? '⏳ Importazione...' : '👥 Importa Giocatori'}
+              </button>
+            </div>
+
+            <div style={{ height: '1px', background: '#2D3748' }} />
+
+            {/* Import Historical Matches */}
+            <div>
+              <div style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: '0.25rem' }}>⚽ Importa Partite Storiche</div>
+              <p className="text-xs text-muted mb-2">
+                Importa le 300 partite storiche (2018/19 → 2025/26) con gol e autorete.
+              </p>
+              {importMatchProgress && (
+                <p className="text-xs text-muted mb-1">
+                  ⏳ Partita #{importMatchProgress.matchNum} ({importMatchProgress.done}/{importMatchProgress.total})
+                </p>
+              )}
+              <button className="btn btn-ghost btn-full" onClick={handleImportHistoricalMatchesData} disabled={importingMatches}>
+                {importingMatches ? '⏳ Importazione partite...' : '⚽ Importa Partite Storiche (300)'}
+              </button>
+            </div>
+
+            <div style={{ height: '1px', background: '#2D3748' }} />
+
+            {/* Import Historical Seasons */}
+            <div>
+              <div style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: '0.25rem' }}>📚 Importa Annali Storici</div>
+              <p className="text-xs text-muted mb-2">
+                Carica su Firestore tutte le {HISTORICAL_SEASONS.length} stagioni storiche. Serve per la pagina Annali.
+              </p>
+              <button className="btn btn-ghost btn-full" onClick={handleSeedHistory} disabled={seeding}>
+                {seeding ? '⏳ Importazione...' : '📥 Importa Stagioni Storiche'}
+              </button>
+            </div>
+
+            <div style={{ height: '1px', background: '#2D3748' }} />
+
+            {/* Fix Goal Minutes */}
+            <div>
+              <div style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: '0.25rem', color: '#FC814A' }}>🛠️ Correggi Minuti Gol</div>
+              <p className="text-xs text-muted mb-2">
+                Ricalcola i minuti dei gol usando i timestamp assoluti degli eventi e l'ora di avvio del timer.
+              </p>
+              <button
+                className="btn btn-full"
+                style={{ background: 'rgba(252,129,74,0.1)', color: '#FC814A', border: '1px solid rgba(252,129,74,0.3)' }}
+                onClick={handleFixGoalMinutes}
+                disabled={fixingMinutes}
+              >
+                {fixingMinutes ? '⏳ Correzione...' : '🛠️ Correggi Minuti Gol'}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
