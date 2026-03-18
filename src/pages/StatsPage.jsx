@@ -222,19 +222,46 @@ export default function StatsPage() {
     return map;
   }, [players, finishedMatches]);
 
+  // Live match counts (wins/draws/losses/total) per player from Firestore match docs.
+  // Used for all-time presenze so that it's consistent with the Classifica "P" column.
+  const liveMatchCounts = useMemo(() => {
+    const counts = {};
+    for (const m of finishedMatches) {
+      const redScore = m.redScore ?? 0;
+      const blueScore = m.blueScore ?? 0;
+      for (const pl of (m.redTeam || [])) {
+        if (!pl.id) continue;
+        if (!counts[pl.id]) counts[pl.id] = { matches: 0, wins: 0, draws: 0 };
+        counts[pl.id].matches++;
+        if (redScore > blueScore) counts[pl.id].wins++;
+        else if (redScore === blueScore) counts[pl.id].draws++;
+      }
+      for (const pl of (m.blueTeam || [])) {
+        if (!pl.id) continue;
+        if (!counts[pl.id]) counts[pl.id] = { matches: 0, wins: 0, draws: 0 };
+        counts[pl.id].matches++;
+        if (blueScore > redScore) counts[pl.id].wins++;
+        else if (blueScore === redScore) counts[pl.id].draws++;
+      }
+    }
+    return counts;
+  }, [finishedMatches]);
+
   // withStats: computed from period-filtered matches or all-time aggregated
   const withStats = useMemo(() => {
     if (period === 'all') {
       return players.map(p => {
         const as = p.stats || {};
         const gk = gkFromEvents[p.id] || {};
+        // Use live counts from Firestore match docs for presenze (consistent with Classifica "P")
+        const lc = liveMatchCounts[p.id] || { matches: 0, wins: 0, draws: 0 };
         return {
           ...p,
           totalGoals:   as.goals   || 0,
           totalAssists: as.assists || 0,
-          totalMatches: as.matches || 0,
-          totalWins:    as.wins    || 0,
-          totalDraws:   as.draws   || 0,
+          totalMatches: lc.matches,
+          totalWins:    lc.wins,
+          totalDraws:   lc.draws,
           gkMatches:    gk.gkMatches || 0,
           gkGoalsConceded: gk.gkGoalsConceded || 0,
         };
@@ -245,7 +272,7 @@ export default function StatsPage() {
       : getSeasonStartMs();
     const filtered = finishedMatches.filter(m => getMs(m.date) >= cutoff);
     return computeStatsFromMatches(players, filtered);
-  }, [period, players, finishedMatches]);
+  }, [period, players, finishedMatches, liveMatchCounts]);
 
   // Classifica: computed from matches (GF/GS not in p.stats)
   const standingsStats = useMemo(() => {
