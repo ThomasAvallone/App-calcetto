@@ -194,32 +194,6 @@ export default function PlayersPage() {
     return stats;
   }, [players, finishedMatches, seasonStartMs]);
 
-  // Live match counts from Firestore match docs (consistent with Classifica "P" and Presenze tab)
-  const liveMatchCounts = useMemo(() => {
-    const counts = {};
-    for (const m of finishedMatches) {
-      const redScore = m.redScore ?? 0;
-      const blueScore = m.blueScore ?? 0;
-      for (const pl of (m.redTeam || [])) {
-        if (!pl.id) continue;
-        if (!counts[pl.id]) counts[pl.id] = { matches: 0, wins: 0, draws: 0, losses: 0 };
-        counts[pl.id].matches++;
-        if (redScore > blueScore) counts[pl.id].wins++;
-        else if (redScore === blueScore) counts[pl.id].draws++;
-        else counts[pl.id].losses++;
-      }
-      for (const pl of (m.blueTeam || [])) {
-        if (!pl.id) continue;
-        if (!counts[pl.id]) counts[pl.id] = { matches: 0, wins: 0, draws: 0, losses: 0 };
-        counts[pl.id].matches++;
-        if (blueScore > redScore) counts[pl.id].wins++;
-        else if (blueScore === redScore) counts[pl.id].draws++;
-        else counts[pl.id].losses++;
-      }
-    }
-    return counts;
-  }, [finishedMatches]);
-
   const playerFormMap = useMemo(() => {
     const forms = {};
     for (const p of players) {
@@ -361,15 +335,14 @@ export default function PlayersPage() {
     const playerRank = ranking.findIndex(r => r.id === p.id);
 
     const as = p.stats || {};
-    const lc = liveMatchCounts[p.id] || { matches: 0, wins: 0, draws: 0, losses: 0 };
     const total = {
       goals: as.goals || 0,
       assists: as.assists || 0,
       autogoals: as.autogoals || 0,
-      matches: lc.matches,
-      wins: lc.wins,
-      draws: lc.draws,
-      losses: lc.losses,
+      matches: as.matches || 0,
+      wins: as.wins || 0,
+      draws: as.draws || 0,
+      losses: as.losses || 0,
       gkMatches: as.gkMatches || 0,
       gkGoalsConceded: as.gkGoalsConceded || 0,
     };

@@ -222,47 +222,20 @@ export default function StatsPage() {
     return map;
   }, [players, finishedMatches]);
 
-  // Live match counts (wins/draws/losses/total) per player from Firestore match docs.
-  // Used for all-time presenze so that it's consistent with the Classifica "P" column.
-  const liveMatchCounts = useMemo(() => {
-    const counts = {};
-    for (const m of finishedMatches) {
-      const redScore = m.redScore ?? 0;
-      const blueScore = m.blueScore ?? 0;
-      for (const pl of (m.redTeam || [])) {
-        if (!pl.id) continue;
-        if (!counts[pl.id]) counts[pl.id] = { matches: 0, wins: 0, draws: 0 };
-        counts[pl.id].matches++;
-        if (redScore > blueScore) counts[pl.id].wins++;
-        else if (redScore === blueScore) counts[pl.id].draws++;
-      }
-      for (const pl of (m.blueTeam || [])) {
-        if (!pl.id) continue;
-        if (!counts[pl.id]) counts[pl.id] = { matches: 0, wins: 0, draws: 0 };
-        counts[pl.id].matches++;
-        if (blueScore > redScore) counts[pl.id].wins++;
-        else if (blueScore === redScore) counts[pl.id].draws++;
-      }
-    }
-    return counts;
-  }, [finishedMatches]);
-
   // withStats: computed from period-filtered matches or all-time aggregated
   const withStats = useMemo(() => {
     if (period === 'all') {
       return players.map(p => {
         const as = p.stats || {};
         const gk = gkFromEvents[p.id] || {};
-        // Use live counts from Firestore match docs for presenze (consistent with Classifica "P")
-        const lc = liveMatchCounts[p.id] || { matches: 0, wins: 0, draws: 0 };
         return {
           ...p,
-          totalGoals:   as.goals   || 0,
-          totalAssists: as.assists || 0,
-          totalMatches: lc.matches,
-          totalWins:    lc.wins,
-          totalDraws:   lc.draws,
-          gkMatches:    gk.gkMatches || 0,
+          totalGoals:      as.goals   || 0,
+          totalAssists:    as.assists || 0,
+          totalMatches:    as.matches || 0,
+          totalWins:       as.wins    || 0,
+          totalDraws:      as.draws   || 0,
+          gkMatches:       gk.gkMatches || 0,
           gkGoalsConceded: gk.gkGoalsConceded || 0,
         };
       });
@@ -272,14 +245,20 @@ export default function StatsPage() {
       : getSeasonStartMs();
     const filtered = finishedMatches.filter(m => getMs(m.date) >= cutoff);
     return computeStatsFromMatches(players, filtered);
-  }, [period, players, finishedMatches, liveMatchCounts]);
+  }, [period, players, finishedMatches, gkFromEvents]);
 
   // Classifica: computed from matches (GF/GS not in p.stats)
+  // For all-time: excludes isHistorical match docs (those come from p.historicalStats)
+  // to be consistent with p.stats.* which uses recalculatePlayerStats logic.
   const standingsStats = useMemo(() => {
     const cutoff = period === '30d'
       ? Date.now() - 30 * 24 * 60 * 60 * 1000
       : period === 'season' ? getSeasonStartMs() : 0;
-    const filtered = cutoff === 0 ? finishedMatches : finishedMatches.filter(m => getMs(m.date) >= cutoff);
+    // Always exclude historical match docs: for all-time we add p.historicalStats instead
+    // (same approach as recalculatePlayerStats → ensures P == p.stats.matches).
+    // For season/30d historical docs fall outside the date cutoff anyway.
+    const appMatches = finishedMatches.filter(m => !m.isHistorical);
+    const filtered = cutoff === 0 ? appMatches : appMatches.filter(m => getMs(m.date) >= cutoff);
     return players
       .map(p => {
         let v = 0, x = 0, s = 0, gf = 0, gs = 0;
@@ -293,6 +272,13 @@ export default function StatsPage() {
           if (my > their) v++;
           else if (my < their) s++;
           else x++;
+        }
+        // For all-time, add historical stats so that P = p.stats.matches
+        if (period === 'all' && p.historicalStats) {
+          v += p.historicalStats.wins   || 0;
+          x += p.historicalStats.draws  || 0;
+          s += p.historicalStats.losses || 0;
+          // GF/GS not available in historicalStats – remain app-only (acceptable)
         }
         return { ...p, pt: v * 3 + x, p: v + x + s, v, x, s, gf, gs, dr: gf - gs };
       })
