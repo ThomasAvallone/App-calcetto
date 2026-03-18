@@ -19,6 +19,8 @@ const CHANGELOG = [
       { type: 'new', text: 'Tab "Squadre" (Classifiche): seleziona due gruppi di giocatori e vedi lo storico delle sfide tra quelle formazioni' },
       { type: 'new', text: 'GK stats avanzate: clean sheet, win rate in porta (vittorie/partite da GK)' },
       { type: 'new', text: 'Statistiche relazionali nel profilo giocatore: Spalla (più vittorie insieme), Nemesi, Vittima GK, Chi ti assiste' },
+      { type: 'new', text: 'Widget meteo nella Dashboard: previsioni live per la prossima partita programmata (Open-Meteo API)' },
+      { type: 'new', text: 'Banner "Prossima partita" cliccabile: porta direttamente alla pagina dettaglio della partita programmata' },
       { type: 'fix', text: 'Clean sheet e gkMatches ora corretti nella vista Stagione (le partite fuori dal cutoff di data non escludevano più dati GK)' },
     ],
   },

@@ -9,6 +9,7 @@ import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 import { safeDate } from '../utils/dateUtils';
+import { fetchWeatherForDate } from '../services/weatherService';
 
 function getCountdown(dateStr) {
   if (!dateStr) return null;
@@ -32,6 +33,7 @@ export default function DashboardPage() {
 
   const allMatches = useMatchesSubscription();
   const [showStartPicker, setShowStartPicker] = useState(false);
+  const [nextMatchWeather, setNextMatchWeather] = useState(null);
 
   const recentMatches = allMatches.filter(m => m.status !== 'scheduled').slice(0, 5);
   const finishedMatches = allMatches.filter(m => m.status === 'finished');
@@ -47,6 +49,18 @@ export default function DashboardPage() {
     return d && d.getTime() > Date.now();
   });
   const totalGoals = finishedMatches.reduce((s, m) => s + (m.redScore || 0) + (m.blueScore || 0), 0);
+
+  // Fetch weather for nearest scheduled match
+  useEffect(() => {
+    if (!nearestScheduled) { setNextMatchWeather(null); return; }
+    const d = safeDate(nearestScheduled.date);
+    if (!d) return;
+    // Use saved weather from match doc if available, fetch live otherwise
+    if (nearestScheduled.weather?.condition) {
+      setNextMatchWeather(nearestScheduled.weather);
+    }
+    fetchWeatherForDate(d).then(w => { if (w) setNextMatchWeather(w); });
+  }, [nearestScheduled?.id]);
 
   // Players with at least 1 match in the current football season (starts Sep 1)
   const seasonStartMs = (() => {
@@ -175,12 +189,15 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Scheduled match countdown */}
+      {/* Scheduled match countdown + weather */}
       {nearestScheduled && nearestDate && nearestCountdown && (
         <div className="card mb-4" style={{
           background: 'linear-gradient(135deg, rgba(246,224,94,0.1) 0%, rgba(246,173,85,0.05) 100%)',
           border: '1px solid rgba(246,224,94,0.4)',
-        }}>
+          cursor: 'pointer',
+        }}
+          onClick={() => navigate(`/history/scheduled/${nearestScheduled.id}`)}
+        >
           <div className="flex items-center gap-3">
             <div style={{ fontSize: '1.5rem' }}>📅</div>
             <div style={{ flex: 1 }}>
@@ -199,6 +216,30 @@ export default function DashboardPage() {
                 🔵 {(nearestScheduled.blueTeam || []).map(p => p.name).join(', ')}
               </div>
             </div>
+            {nextMatchWeather && (
+              <div style={{
+                textAlign: 'center', padding: '0.4rem 0.6rem', borderRadius: '10px',
+                background: 'rgba(246,224,94,0.1)', border: '1px solid rgba(246,224,94,0.2)',
+                minWidth: '56px',
+              }}>
+                <div style={{ fontSize: '1.4rem', lineHeight: 1 }}>
+                  {{ sunny: '☀️', cloudy: '☁️', rainy: '🌧️', cold: '🥶', hot: '🔥', wind: '💨' }[nextMatchWeather.condition] || '🌤️'}
+                </div>
+                {nextMatchWeather.temp && (
+                  <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#F6E05E', marginTop: '0.2rem' }}>
+                    {nextMatchWeather.temp}°
+                  </div>
+                )}
+                {nextMatchWeather.description && (
+                  <div style={{ fontSize: '0.55rem', color: '#A0AEC0', marginTop: '0.1rem', lineHeight: 1.2 }}>
+                    {nextMatchWeather.description}
+                  </div>
+                )}
+              </div>
+            )}
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F6E05E" strokeWidth={2} style={{ flexShrink: 0 }}>
+              <path d="M9 18l6-6-6-6"/>
+            </svg>
           </div>
         </div>
       )}
