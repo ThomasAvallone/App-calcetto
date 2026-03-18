@@ -196,6 +196,24 @@ export default function PlayersPage() {
     return stats;
   }, [players, finishedMatches, seasonStartMs]);
 
+  // All-time clean sheets per player (matches where team conceded 0)
+  const playerCleanSheets = useMemo(() => {
+    const cs = {};
+    for (const p of players) cs[p.id] = 0;
+    for (const m of finishedMatches) {
+      const redCS = (m.blueScore ?? 0) === 0;
+      const blueCS = (m.redScore ?? 0) === 0;
+      if (!redCS && !blueCS) continue;
+      for (const pl of (m.redTeam || [])) {
+        if (pl.id && cs[pl.id] !== undefined && redCS) cs[pl.id]++;
+      }
+      for (const pl of (m.blueTeam || [])) {
+        if (pl.id && cs[pl.id] !== undefined && blueCS) cs[pl.id]++;
+      }
+    }
+    return cs;
+  }, [players, finishedMatches]);
+
   const playerFormMap = useMemo(() => {
     const forms = {};
     for (const p of players) {
@@ -337,13 +355,6 @@ export default function PlayersPage() {
     const playerRank = ranking.findIndex(r => r.id === p.id);
 
     const as = p.stats || {};
-    const allTimeCleanSheets = finishedMatches.reduce((acc, m) => {
-      const inRed = (m.redTeam || []).some(pl => pl.id === p.id);
-      const inBlue = (m.blueTeam || []).some(pl => pl.id === p.id);
-      if (!inRed && !inBlue) return acc;
-      const their = inRed ? (m.blueScore ?? 0) : (m.redScore ?? 0);
-      return their === 0 ? acc + 1 : acc;
-    }, 0);
     const total = {
       goals: as.goals || 0,
       assists: as.assists || 0,
@@ -354,7 +365,7 @@ export default function PlayersPage() {
       losses: as.losses || 0,
       gkMatches: as.gkMatches || 0,
       gkGoalsConceded: as.gkGoalsConceded || 0,
-      cleanSheets: allTimeCleanSheets,
+      cleanSheets: playerCleanSheets[p.id] || 0,
     };
     const hasHistory = (p.historicalNames || []).length > 0;
     const pForm = playerFormMap[p.id];
