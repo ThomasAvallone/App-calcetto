@@ -33,6 +33,80 @@ function getMatchAssistants(m) {
     .filter(Boolean);
 }
 
+function hashStr(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (Math.imul(31, h) + str.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+function getMatchBadges(m) {
+  if (m.isHistorical) return [];
+  const badges = [];
+  const allPlayers = [...(m.redTeam || []), ...(m.blueTeam || [])];
+
+  // Bestie (admin-assigned)
+  if (m.bestieId) {
+    const bestiePlayer = allPlayers.find(p => p.id === m.bestieId);
+    const name = bestiePlayer?.name || m.bestiePlayerName;
+    if (name) badges.push({ icon: '🙏', label: 'Bestie', playerName: name });
+  }
+
+  // Per-player match stats
+  const playerGoals = {};
+  const playerAssists = {};
+  for (const ev of (m.events || [])) {
+    if (ev.type === 'goal') {
+      if (ev.scorerId) {
+        if (!playerGoals[ev.scorerId]) playerGoals[ev.scorerId] = [];
+        playerGoals[ev.scorerId].push(ev);
+      }
+      if (ev.assistId) {
+        playerAssists[ev.assistId] = (playerAssists[ev.assistId] || 0) + 1;
+      }
+    }
+  }
+
+  for (const pl of allPlayers) {
+    const pid = pl.id;
+    const goals = playerGoals[pid] || [];
+    const assistCount = playerAssists[pid] || 0;
+
+    if (goals.length >= 5) {
+      badges.push({ icon: '✨', label: 'Pokémon Leggendario', playerName: pl.name });
+    } else if (goals.length >= 3) {
+      badges.push({ icon: '☄️', label: 'Meteorite', playerName: pl.name });
+    }
+
+    if (goals.length >= 2 && goals.every(ev => !ev.assistId)) {
+      badges.push({ icon: '🤠', label: 'Lone Ranger', playerName: pl.name });
+    }
+
+    if (assistCount >= 3) {
+      badges.push({ icon: '🔔', label: "Che io t'assista", playerName: pl.name });
+    }
+  }
+
+  // Bulldozer — team badge (no specific player)
+  const margin = Math.abs((m.redScore || 0) - (m.blueScore || 0));
+  if (margin >= 5) {
+    badges.push({ icon: '🌪️', label: 'Bulldozer', playerName: null });
+  }
+
+  // Giancarlo — deterministic per match
+  if (allPlayers.length > 0) {
+    const giancarlo = allPlayers[hashStr(m.id || String(m.date) || '') % allPlayers.length];
+    if (giancarlo) badges.push({ icon: '🎲', label: 'Giancarlo', playerName: giancarlo.name });
+  }
+
+  // Miglior Luciano — 10% chance per match for Luciano
+  const luciano = allPlayers.find(pl => pl.name?.toLowerCase().includes('luciano'));
+  if (luciano && hashStr(m.id || String(m.date) || '') % 10 === 0) {
+    badges.push({ icon: '🥇', label: 'Miglior Luciano', playerName: luciano.name });
+  }
+
+  return badges;
+}
+
 export default function HistoryPage() {
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -432,6 +506,7 @@ function MatchCard({ match: m, onClick }) {
   const d = safeDate(m.date);
   const goals = (m.events || []).filter(e => e.type === 'goal');
   const autogoals = (m.events || []).filter(e => e.type === 'autogoal');
+  const matchBadges = m.status === 'finished' ? getMatchBadges(m) : [];
 
   // Lookup nome giocatore per le partite storiche (che hanno solo scorerId, non scorerName)
   const playerById = Object.fromEntries(
@@ -505,6 +580,30 @@ function MatchCard({ match: m, onClick }) {
           {Object.keys(redMap).length > 0 && <span>🔴 {fmt(redMap)}</span>}
           {Object.keys(redMap).length > 0 && Object.keys(blueMap).length > 0 && <span style={{ color: '#4A5568' }}> · </span>}
           {Object.keys(blueMap).length > 0 && <span>🔵 {fmt(blueMap)}</span>}
+        </div>
+      )}
+      {matchBadges.length > 0 && (
+        <div style={{ marginTop: '0.45rem', display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
+          {matchBadges.map((b, i) => (
+            <span
+              key={i}
+              title={b.label}
+              style={{
+                fontSize: '0.68rem',
+                background: 'rgba(159,122,234,0.12)',
+                border: '1px solid rgba(159,122,234,0.3)',
+                borderRadius: '999px',
+                padding: '2px 8px',
+                color: '#B794F4',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '3px',
+                lineHeight: 1.4,
+              }}
+            >
+              {b.icon} {b.playerName ? b.playerName.toUpperCase() : b.label}
+            </span>
+          ))}
         </div>
       )}
     </div>
