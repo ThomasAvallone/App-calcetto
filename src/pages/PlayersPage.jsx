@@ -152,7 +152,7 @@ export default function PlayersPage() {
     const seasonMatches = finishedMatches.filter(m => getMs(m.date) >= seasonStartMs);
     const stats = {};
     for (const p of players) {
-      const s = { goals: 0, assists: 0, autogoals: 0, matches: 0, wins: 0, draws: 0, losses: 0, gkMatches: 0, gkGoalsConceded: 0 };
+      const s = { goals: 0, assists: 0, autogoals: 0, matches: 0, wins: 0, draws: 0, losses: 0, gkMatches: 0, gkGoalsConceded: 0, cleanSheets: 0 };
       const histBySeason = {};
       for (const m of seasonMatches) {
         const inRed = (m.redTeam || []).some(pl => pl.id === p.id);
@@ -164,13 +164,14 @@ export default function PlayersPage() {
         if (my > their) s.wins++;
         else if (my < their) s.losses++;
         else s.draws++;
+        if (their === 0) s.cleanSheets++;
         for (const ev of m.events || []) {
           if (ev.type === 'goal') {
             if (ev.scorerId === p.id) s.goals++;
             if (ev.assistId === p.id) s.assists++;
           }
           if (ev.type === 'autogoal' && ev.scorerId === p.id) s.autogoals++;
-          if (ev.gkConcededId === p.id) s.gkGoalsConceded++;
+          if (ev.gkConcededId === p.id) { s.gkGoalsConceded++; }
         }
         // Track historical matches by season for assist proration
         if (m.isHistorical) {
@@ -336,6 +337,13 @@ export default function PlayersPage() {
     const playerRank = ranking.findIndex(r => r.id === p.id);
 
     const as = p.stats || {};
+    const allTimeCleanSheets = finishedMatches.reduce((acc, m) => {
+      const inRed = (m.redTeam || []).some(pl => pl.id === p.id);
+      const inBlue = (m.blueTeam || []).some(pl => pl.id === p.id);
+      if (!inRed && !inBlue) return acc;
+      const their = inRed ? (m.blueScore ?? 0) : (m.redScore ?? 0);
+      return their === 0 ? acc + 1 : acc;
+    }, 0);
     const total = {
       goals: as.goals || 0,
       assists: as.assists || 0,
@@ -346,6 +354,7 @@ export default function PlayersPage() {
       losses: as.losses || 0,
       gkMatches: as.gkMatches || 0,
       gkGoalsConceded: as.gkGoalsConceded || 0,
+      cleanSheets: allTimeCleanSheets,
     };
     const hasHistory = (p.historicalNames || []).length > 0;
     const pForm = playerFormMap[p.id];
@@ -549,6 +558,7 @@ export default function PlayersPage() {
             { label: 'Vittorie', value: displaySt.wins || 0, icon: '✅' },
             { label: 'Pareggi', value: displaySt.draws || 0, icon: '🤝' },
             { label: 'Sconfitte', value: displaySt.losses || 0, icon: '❌' },
+            { label: 'Clean Sheet', value: displaySt.cleanSheets || 0, icon: '🧹' },
             { label: 'Gol Subiti (GK)', value: displaySt.gkGoalsConceded || 0, icon: '🧤' },
             {
               label: 'Media Gol/Turno GK',

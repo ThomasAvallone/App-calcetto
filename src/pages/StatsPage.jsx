@@ -14,6 +14,7 @@ const LEADERBOARD_TABS = [
   { key: 'classifica', label: '📋 Classifica' },
   { key: 'duo',     label: '👥 Duo' },
   { key: 'h2h',     label: '⚔️ H2H' },
+  { key: 'squadre', label: '🆚 Squadre' },
 ];
 
 const PERIODS = [
@@ -146,7 +147,7 @@ function getSeasonId(dateVal) {
 
 function computeStatsFromMatches(players, matches) {
   return players.map(p => {
-    const s = { goals: 0, assists: 0, wins: 0, draws: 0, losses: 0, matches: 0, gkMatches: 0, gkGoalsConceded: 0 };
+    const s = { goals: 0, assists: 0, wins: 0, draws: 0, losses: 0, matches: 0, gkMatches: 0, gkGoalsConceded: 0, cleanSheets: 0 };
     // historicalMatches per season → count of games played (for assist prorating)
     const histBySeason = {};
 
@@ -160,6 +161,7 @@ function computeStatsFromMatches(players, matches) {
       if (my > their) s.wins++;
       else if (my < their) s.losses++;
       else s.draws++;
+      if (their === 0) s.cleanSheets++;
       let wasGkThisMatch = false;
       for (const ev of (m.events || [])) {
         if (ev.type === 'goal') {
@@ -189,7 +191,7 @@ function computeStatsFromMatches(players, matches) {
       s.assists += Math.round(pData.assist * (countInPeriod / pData.presenze));
     }
 
-    return { ...p, totalGoals: s.goals, totalAssists: s.assists, totalMatches: s.matches, totalWins: s.wins, totalDraws: s.draws, gkMatches: s.gkMatches, gkGoalsConceded: s.gkGoalsConceded };
+    return { ...p, totalGoals: s.goals, totalAssists: s.assists, totalMatches: s.matches, totalWins: s.wins, totalDraws: s.draws, gkMatches: s.gkMatches, gkGoalsConceded: s.gkGoalsConceded, cleanSheets: s.cleanSheets };
   });
 }
 
@@ -200,6 +202,8 @@ export default function StatsPage() {
   const allMatches = useMatchesSubscription();
   const [h2hP1, setH2hP1] = useState('');
   const [h2hP2, setH2hP2] = useState('');
+  const [squadreA, setSquadreA] = useState([]);
+  const [squadreB, setSquadreB] = useState([]);
 
   const finishedMatches = useMemo(() => allMatches.filter(m => m.status === 'finished'), [allMatches]);
 
@@ -207,6 +211,9 @@ export default function StatsPage() {
   const gkFromEvents = useMemo(() => {
     const map = {};
     for (const p of players) map[p.id] = { gkGoalsConceded: 0, gkMatches: 0 };
+    // Clean sheets: per-player count of matches where their team conceded 0 goals
+    const cleanSheetsMap = {};
+    for (const p of players) cleanSheetsMap[p.id] = 0;
     for (const m of finishedMatches) {
       const gkInMatch = new Set();
       for (const ev of (m.events || [])) {
@@ -218,6 +225,19 @@ export default function StatsPage() {
       for (const pid of gkInMatch) {
         if (map[pid]) map[pid].gkMatches++;
       }
+      // Count clean sheets for all players in this match
+      const redCS = (m.blueScore ?? 0) === 0;
+      const blueCS = (m.redScore ?? 0) === 0;
+      for (const pl of (m.redTeam || [])) {
+        if (pl.id && cleanSheetsMap[pl.id] !== undefined && redCS) cleanSheetsMap[pl.id]++;
+      }
+      for (const pl of (m.blueTeam || [])) {
+        if (pl.id && cleanSheetsMap[pl.id] !== undefined && blueCS) cleanSheetsMap[pl.id]++;
+      }
+    }
+    // Merge cleanSheets into map
+    for (const pid of Object.keys(map)) {
+      map[pid].cleanSheets = cleanSheetsMap[pid] || 0;
     }
     return map;
   }, [players, finishedMatches]);
@@ -237,6 +257,7 @@ export default function StatsPage() {
           totalDraws:      as.draws   || 0,
           gkMatches:       gk.gkMatches || 0,
           gkGoalsConceded: gk.gkGoalsConceded || 0,
+          cleanSheets:     gk.cleanSheets || 0,
         };
       });
     }
@@ -396,6 +417,39 @@ export default function StatsPage() {
     return { p1name, p2name, together, against, p1Goals, p2Goals };
   }, [finishedMatches, h2hP1, h2hP2, players]);
 
+  // Squadre: team vs team historical comparison
+  const squadreStats = useMemo(() => {
+    if (squadreA.length === 0 || squadreB.length === 0) return null;
+    const setA = new Set(squadreA);
+    const setB = new Set(squadreB);
+    const matchResults = [];
+    let aWins = 0, bWins = 0, draws = 0;
+    for (const m of finishedMatches) {
+      const redIds = (m.redTeam || []).map(p => p.id);
+      const blueIds = (m.blueTeam || []).map(p => p.id);
+      const aInRed  = redIds.filter(id => setA.has(id)).length;
+      const aInBlue = blueIds.filter(id => setA.has(id)).length;
+      const bInRed  = redIds.filter(id => setB.has(id)).length;
+      const bInBlue = blueIds.filter(id => setB.has(id)).length;
+      // A and B must be on opposite sides, each with at least 1 player overlap
+      const aRedBBlue  = aInRed  >= 1 && bInBlue >= 1;
+      const aBlueBRed  = aInBlue >= 1 && bInRed  >= 1;
+      if (!aRedBBlue && !aBlueBRed) continue;
+      const aScore = aRedBBlue ? (m.redScore ?? 0) : (m.blueScore ?? 0);
+      const bScore = aRedBBlue ? (m.blueScore ?? 0) : (m.redScore ?? 0);
+      if (aScore > bScore) aWins++;
+      else if (aScore < bScore) bWins++;
+      else draws++;
+      const dateVal = m.date;
+      const dateStr = dateVal?.toMillis
+        ? new Date(dateVal.toMillis()).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit' })
+        : new Date(dateVal).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit' });
+      matchResults.push({ aScore, bScore, date: dateStr, id: m.id });
+    }
+    matchResults.sort((a, b) => b.date.localeCompare(a.date));
+    return { aWins, bWins, draws, total: aWins + bWins + draws, matches: matchResults.slice(0, 20) };
+  }, [finishedMatches, squadreA, squadreB]);
+
   // Leaderboard helpers
   const getRanked = (arr, sortFn, filterFn) =>
     [...arr].filter(filterFn || (() => true)).sort(sortFn).slice(0, 10);
@@ -425,12 +479,12 @@ export default function StatsPage() {
     assists: { accent: '#63B3ED', getVal: p => p.totalAssists, getLabel: () => 'assist', getSub: p => `${p.totalMatches} partite` },
     winrate: { accent: CLR_DRAW, getVal: p => `${Math.round((p.totalWins + p.totalDraws * 0.5) / p.totalMatches * 100)}`, getLabel: () => '%', getSub: p => `${p.totalWins}V · ${p.totalDraws}P · ${p.totalMatches - p.totalWins - p.totalDraws}S su ${p.totalMatches} partite` },
     matches: { accent: '#A0AEC0', getVal: p => p.totalMatches, getLabel: () => 'pt', getSub: p => `${p.totalWins}V · ${p.totalDraws}P · ${p.totalMatches - p.totalWins - p.totalDraws}S` },
-    gk:      { accent: CLR_WIN, getVal: p => p.gkGoalsConceded, getLabel: () => 'gs', getSub: p => p.gkMatches > 0 ? `${p.gkMatches} partite in porta · media ${(p.gkGoalsConceded / p.gkMatches).toFixed(1)} gs/pt` : `${p.gkGoalsConceded} gol subiti` },
+    gk:      { accent: CLR_WIN, getVal: p => p.gkGoalsConceded, getLabel: () => 'gs', getSub: p => p.gkMatches > 0 ? `${p.gkMatches} pt in porta · ${(p.gkGoalsConceded / p.gkMatches).toFixed(1)} gs/pt · 🧹 ${p.cleanSheets ?? 0} clean sheet` : `${p.gkGoalsConceded} gol subiti` },
   };
 
   const cfg = tabConfig[tab];
   const list = rankings[tab] || [];
-  const isSpecialTab = tab === 'duo' || tab === 'h2h';
+  const isSpecialTab = tab === 'duo' || tab === 'h2h' || tab === 'squadre';
   const currentAccent = cfg?.accent || '#4FD1C5';
 
   return (
@@ -441,7 +495,7 @@ export default function StatsPage() {
       <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '1rem', overflowX: 'auto', paddingBottom: '0.25rem' }}>
         {LEADERBOARD_TABS.map(t => {
           const isActive = tab === t.key;
-          const accent = t.key === 'duo' ? '#B794F4' : t.key === 'h2h' ? '#F6AD55' : t.key === 'classifica' ? '#F6E05E' : tabConfig[t.key]?.accent || '#4FD1C5';
+          const accent = t.key === 'duo' ? '#B794F4' : t.key === 'h2h' ? '#F6AD55' : t.key === 'classifica' ? '#F6E05E' : t.key === 'squadre' ? '#FC8181' : tabConfig[t.key]?.accent || '#4FD1C5';
           return (
             <button
               key={t.key}
@@ -709,6 +763,123 @@ export default function StatsPage() {
           ) : null}
         </div>
       )}
+
+      {/* Squadre tab */}
+      {tab === 'squadre' && (() => {
+        const togglePlayer = (pid, side) => {
+          if (side === 'A') {
+            setSquadreA(prev => prev.includes(pid) ? prev.filter(x => x !== pid) : [...prev, pid]);
+          } else {
+            setSquadreB(prev => prev.includes(pid) ? prev.filter(x => x !== pid) : [...prev, pid]);
+          }
+        };
+        const chipStyle = (selected, color) => ({
+          padding: '0.3rem 0.65rem', borderRadius: '999px', fontSize: '0.78rem', fontWeight: 600,
+          cursor: 'pointer', border: `1px solid ${selected ? color : 'rgba(74,85,104,0.5)'}`,
+          background: selected ? color + '28' : 'rgba(74,85,104,0.2)',
+          color: selected ? color : '#A0AEC0',
+          transition: 'all 0.12s',
+          userSelect: 'none',
+        });
+        return (
+          <div>
+            <div className="card mb-3" style={{ border: '1px solid rgba(252,129,129,0.25)' }}>
+              <h3 className="mb-2" style={{ fontSize: '0.88rem', color: '#FC8181' }}>🔴 Squadra A</h3>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                {players
+                  .filter(p => !squadreB.includes(p.id))
+                  .map(p => (
+                    <span key={p.id} style={chipStyle(squadreA.includes(p.id), '#FC8181')}
+                      onClick={() => togglePlayer(p.id, 'A')}>
+                      {p.name}
+                    </span>
+                  ))}
+              </div>
+            </div>
+
+            <div className="card mb-4" style={{ border: '1px solid rgba(99,179,237,0.25)' }}>
+              <h3 className="mb-2" style={{ fontSize: '0.88rem', color: '#63B3ED' }}>🔵 Squadra B</h3>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                {players
+                  .filter(p => !squadreA.includes(p.id))
+                  .map(p => (
+                    <span key={p.id} style={chipStyle(squadreB.includes(p.id), '#63B3ED')}
+                      onClick={() => togglePlayer(p.id, 'B')}>
+                      {p.name}
+                    </span>
+                  ))}
+              </div>
+            </div>
+
+            {squadreA.length === 0 || squadreB.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '2rem 1rem', color: '#718096' }}>
+                <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🆚</div>
+                <p className="text-sm">Seleziona almeno un giocatore per squadra</p>
+              </div>
+            ) : squadreStats && squadreStats.total === 0 ? (
+              <div style={{ textAlign: 'center', padding: '2rem 1rem', color: '#718096' }}>
+                <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📭</div>
+                <p className="text-sm">Nessuna partita trovata con queste formazioni</p>
+              </div>
+            ) : squadreStats ? (
+              <div>
+                <div className="card mb-3" style={{ border: '1px solid rgba(252,129,129,0.25)' }}>
+                  <h3 className="mb-3" style={{ fontSize: '0.9rem', color: '#FC8181' }}>📊 Storico scontri ({squadreStats.total} partite)</h3>
+                  <div className="flex items-center gap-2 mb-3">
+                    <div style={{ flex: 1, textAlign: 'center' }}>
+                      <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#FC8181', marginBottom: '0.25rem' }}>Squadra A</div>
+                      <div style={{ fontSize: '2.4rem', fontWeight: 900, color: CLR_WIN }}>{squadreStats.aWins}</div>
+                      <div style={{ fontSize: '0.65rem', color: '#718096' }}>vittorie</div>
+                    </div>
+                    <div style={{ textAlign: 'center', minWidth: 44 }}>
+                      <div style={{ fontSize: '1.3rem', color: CLR_DRAW, fontWeight: 700 }}>{squadreStats.draws}</div>
+                      <div style={{ fontSize: '0.62rem', color: '#718096' }}>pareggi</div>
+                    </div>
+                    <div style={{ flex: 1, textAlign: 'center' }}>
+                      <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#63B3ED', marginBottom: '0.25rem' }}>Squadra B</div>
+                      <div style={{ fontSize: '2.4rem', fontWeight: 900, color: CLR_WIN }}>{squadreStats.bWins}</div>
+                      <div style={{ fontSize: '0.65rem', color: '#718096' }}>vittorie</div>
+                    </div>
+                  </div>
+                  {squadreStats.total > 0 && (
+                    <div style={{ textAlign: 'center', fontSize: '0.78rem', color: '#A0AEC0' }}>
+                      Win rate A: <strong style={{ color: '#FC8181' }}>
+                        {Math.round((squadreStats.aWins + squadreStats.draws * 0.5) / squadreStats.total * 100)}%
+                      </strong>
+                    </div>
+                  )}
+                </div>
+
+                {squadreStats.matches.length > 0 && (
+                  <div className="card">
+                    <h3 className="mb-2" style={{ fontSize: '0.85rem', color: '#718096' }}>Ultime partite trovate</h3>
+                    {squadreStats.matches.map((mr, i) => {
+                      const aWon = mr.aScore > mr.bScore;
+                      const bWon = mr.bScore > mr.aScore;
+                      return (
+                        <div key={i} className="flex items-center justify-between"
+                          style={{ padding: '0.45rem 0', borderBottom: '1px solid #2D3748', fontSize: '0.82rem' }}>
+                          <span style={{ color: '#718096', minWidth: 60 }}>{mr.date}</span>
+                          <span style={{ fontWeight: 800, color: aWon ? CLR_WIN : bWon ? CLR_LOSS : CLR_DRAW, fontSize: '1rem' }}>
+                            {mr.aScore}
+                          </span>
+                          <span style={{ color: '#4A5568', fontSize: '0.75rem' }}>–</span>
+                          <span style={{ fontWeight: 800, color: bWon ? CLR_WIN : aWon ? CLR_LOSS : CLR_DRAW, fontSize: '1rem' }}>
+                            {mr.bScore}
+                          </span>
+                          <span style={{ fontSize: '0.72rem', color: aWon ? CLR_WIN : bWon ? CLR_LOSS : CLR_DRAW, minWidth: 30, textAlign: 'right' }}>
+                            {aWon ? 'A' : bWon ? 'B' : '—'}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            ) : null}
+          </div>
+        );
+      })()}
     </div>
   );
 }
