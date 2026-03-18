@@ -901,10 +901,16 @@ function PiTrendChart({ allMatches, playerId }) {
 
     if (played.length < 2) return [];
 
-    return played.map((_, idx) => {
-      const slice = played.slice(0, idx + 1);
+    // Rolling window di 4 partite: ogni punto = PI calcolato sulle ultime 4 partite
+    // fino a quel momento. Mostriamo gli ultimi 4 punti (≈ 1 mese).
+    const WINDOW = 4;
+    const startIdx = Math.max(0, played.length - WINDOW);
+    return played.slice(startIdx).map((_, relIdx) => {
+      const absIdx = startIdx + relIdx;
+      const winStart = Math.max(0, absIdx - WINDOW + 1);
+      const window = played.slice(winStart, absIdx + 1);
       const s = { goals: 0, assists: 0, autogoals: 0, gkGoalsConceded: 0, gkMatches: 0, wins: 0, losses: 0, draws: 0, matches: 0 };
-      for (const m of slice) {
+      for (const m of window) {
         const inRed = (m.redTeam || []).some(p => p.id === playerId);
         s.matches++;
         const my = inRed ? m.redScore : m.blueScore;
@@ -918,8 +924,8 @@ function PiTrendChart({ allMatches, playerId }) {
         }
         if (wasGk) s.gkMatches++;
       }
-      return { pi: computePowerIndex(s), date: played[idx].date };
-    }).slice(-4); // ultimo mese ≈ 4 partite settimanali
+      return { pi: computePowerIndex(s), date: played[absIdx].date };
+    });
   }, [allMatches, playerId]);
 
   if (points.length < 2) return null;
@@ -1021,7 +1027,7 @@ function PiTrendChart({ allMatches, playerId }) {
         ))}
       </svg>
       <div style={{ fontSize: '0.62rem', color: FLAT, marginTop: '0.25rem' }}>
-        Ultime {points.length} partite · andamento settimanale
+        Ultime {points.length} partite · PI calcolato su finestra mobile di 4 match
       </div>
     </div>
   );
