@@ -587,7 +587,7 @@ function MatchCard({ match: m, onClick }) {
           {matchBadges.map((b, i) => (
             <span
               key={i}
-              title={b.label}
+              title={b.playerName ? `${b.label} — ${b.playerName}` : b.label}
               style={{
                 fontSize: '0.68rem',
                 background: 'rgba(159,122,234,0.12)',
@@ -601,7 +601,7 @@ function MatchCard({ match: m, onClick }) {
                 lineHeight: 1.4,
               }}
             >
-              {b.icon} {b.playerName ? b.playerName.toUpperCase() : b.label}
+              {b.icon} {b.label}{b.playerName ? <span style={{ color: '#D6BCFA', fontWeight: 700 }}> · {b.playerName.toUpperCase()}</span> : null}
             </span>
           ))}
         </div>
