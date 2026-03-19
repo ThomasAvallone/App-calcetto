@@ -525,6 +525,16 @@ function MatchCard({ match: m, onClick }) {
   const fmt = map => Object.entries(map).sort((a, b) => b[1] - a[1])
     .map(([n, c]) => c > 1 ? `${n} x${c}` : n).join(', ');
 
+  // Autogol con parziale progressivo
+  const allGoalEvents = (m.events || []).filter(e => e.type === 'goal' || e.type === 'autogoal');
+  let rr = 0, bb = 0;
+  const eventsWithPartial = allGoalEvents.map(ev => {
+    if (ev.type === 'goal') { if (ev.team === 'red') rr++; else bb++; }
+    else if (ev.type === 'autogoal') { if (ev.team === 'red') bb++; else rr++; }
+    return { ...ev, partialRed: rr, partialBlue: bb };
+  });
+  const autogoalEvents = eventsWithPartial.filter(e => e.type === 'autogoal');
+
   const handleShare = (e) => {
     e.stopPropagation();
     const players = [...(m.redTeam || []), ...(m.blueTeam || [])];
@@ -575,11 +585,32 @@ function MatchCard({ match: m, onClick }) {
           <path d="M9 18l6-6-6-6"/>
         </svg>
       </div>
+      {/* Marcatori aggregati */}
       {(Object.keys(redMap).length > 0 || Object.keys(blueMap).length > 0) && (
         <div className="text-xs text-secondary">
           {Object.keys(redMap).length > 0 && <span>🔴 {fmt(redMap)}</span>}
           {Object.keys(redMap).length > 0 && Object.keys(blueMap).length > 0 && <span style={{ color: '#4A5568' }}> · </span>}
           {Object.keys(blueMap).length > 0 && <span>🔵 {fmt(blueMap)}</span>}
+        </div>
+      )}
+      {/* Autogol evidenziati con parziale progressivo */}
+      {autogoalEvents.length > 0 && (
+        <div style={{ marginTop: '0.3rem', display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
+          {autogoalEvents.map((ev, i) => {
+            const name = ev.scorerName || playerById[ev.scorerId];
+            return (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.7rem' }}>
+                <span style={{ color: '#FC8181', fontWeight: 700 }}>🤦 {name}</span>
+                <span style={{ color: '#FC8181', fontSize: '0.63rem', fontWeight: 700 }}>(autogol)</span>
+                {ev.minute && <span style={{ color: '#718096' }}>{ev.minute}'</span>}
+                <span style={{ marginLeft: 'auto', fontWeight: 700 }}>
+                  <span style={{ color: '#FC8181' }}>{ev.partialRed}</span>
+                  <span style={{ color: '#4A5568' }}>–</span>
+                  <span style={{ color: '#63B3ED' }}>{ev.partialBlue}</span>
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
       {matchBadges.length > 0 && (

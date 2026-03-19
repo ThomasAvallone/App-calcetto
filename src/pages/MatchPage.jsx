@@ -380,15 +380,35 @@ export default function MatchPage() {
               <div style={{ textAlign: 'center', fontSize: '0.8rem', fontWeight: 700, color: winner === 'red' ? '#FC8181' : winner === 'blue' ? '#63B3ED' : '#F6E05E', marginBottom: '0.75rem' }}>
                 {winner === 'red' ? '🏆 Vittoria Rosso' : winner === 'blue' ? '🏆 Vittoria Blu' : '🤝 Pareggio'}
               </div>
-              {/* Scorers */}
+              {/* Scorers with progressive partial */}
               {goals.length > 0 && (
                 <div style={{ fontSize: '0.72rem', color: '#A0AEC0', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '0.6rem' }}>
-                  {goals.map((g, i) => (
-                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.15rem 0' }}>
-                      <span>{g.team === 'red' ? '🔴' : '🔵'} {g.type === 'autogoal' ? `🤦 ${g.scorerName} (autogol)` : g.scorerName}{g.type !== 'autogoal' && g.assistName ? ` (${g.assistName})` : ''}</span>
-                      <span style={{ color: '#718096' }}>{g.minute ? `${g.minute}'` : ''}</span>
-                    </div>
-                  ))}
+                  {(() => {
+                    let r = 0, b = 0;
+                    return goals.map((g, i) => {
+                      if (g.type === 'goal') { if (g.team === 'red') r++; else b++; }
+                      else if (g.type === 'autogoal') { if (g.team === 'red') b++; else r++; }
+                      const pr = r, pb = b;
+                      const isAutogoal = g.type === 'autogoal';
+                      return (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.2rem 0', gap: '0.5rem' }}>
+                          <span style={{ flex: 1 }}>
+                            {g.team === 'red' ? '🔴' : '🔵'}
+                            {isAutogoal && <span style={{ color: '#FC8181', fontWeight: 700, marginLeft: '0.25rem' }}>🤦</span>}
+                            {' '}{g.scorerName}
+                            {isAutogoal && <span style={{ color: '#FC8181', fontWeight: 700, fontSize: '0.65rem', marginLeft: '0.2rem' }}>(autogol)</span>}
+                            {!isAutogoal && g.assistName && g.assistName !== 'Nessuno' && <span style={{ color: '#718096' }}> ({g.assistName})</span>}
+                          </span>
+                          <span style={{ color: '#718096', whiteSpace: 'nowrap' }}>{g.minute ? `${g.minute}'` : ''}</span>
+                          <span style={{ fontWeight: 700, whiteSpace: 'nowrap', minWidth: '36px', textAlign: 'right' }}>
+                            <span style={{ color: '#FC8181' }}>{pr}</span>
+                            <span style={{ color: '#4A5568' }}>–</span>
+                            <span style={{ color: '#63B3ED' }}>{pb}</span>
+                          </span>
+                        </div>
+                      );
+                    });
+                  })()}
                 </div>
               )}
               {/* MVP */}
