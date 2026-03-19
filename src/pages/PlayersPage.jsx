@@ -394,6 +394,8 @@ export default function PlayersPage() {
           )}
         </div>
 
+        <AiNicknameCard player={p} />
+
         {p.photoURL && <PlayerMedia url={p.photoURL} name={p.name} />}
         <div className="card mb-4" style={{ textAlign: 'center', padding: '1.75rem', ...(p.photoURL ? { borderRadius: '0 0 12px 12px', borderTop: 'none' } : {}) }}>
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '0.75rem' }}>
@@ -593,7 +595,6 @@ export default function PlayersPage() {
 
         <PiTrendChart allMatches={allMatches} playerId={p.id} playerPi={p.powerIndex} />
 
-        <AiNicknameCard player={p} seasonStats={playerSeasonStats[p.id]} />
         <AiTrendCard player={p} allMatches={allMatches} />
 
         <PlayerRecords allMatches={allMatches} player={p} />
@@ -1148,22 +1149,21 @@ function AiTrendCard({ player, allMatches }) {
   );
 }
 
-function AiNicknameCard({ player, seasonStats }) {
-  const [nickname, setNickname] = useState(null);
+function AiNicknameCard({ player }) {
   const [loading, setLoading] = useState(false);
+  const cached = player.aiNickname;
 
   const generate = async () => {
-    if (nickname) { setNickname(null); return; }
     setLoading(true);
     try {
       const as = player.stats || {};
       const stats = {
-        goals:       as.goals    || 0,
-        assists:     as.assists  || 0,
+        goals:       as.goals     || 0,
+        assists:     as.assists   || 0,
         autogoals:   as.autogoals || 0,
-        matches:     as.matches  || 0,
-        wins:        as.wins     || 0,
-        losses:      as.losses   || 0,
+        matches:     as.matches   || 0,
+        wins:        as.wins      || 0,
+        losses:      as.losses    || 0,
         primaryRole: player.primaryRole || '',
         powerIndex:  player.powerIndex  || 50,
         streak:      player.streak      || null,
@@ -1171,9 +1171,11 @@ function AiNicknameCard({ player, seasonStats }) {
       const raw = await generatePlayerNickname(player, stats);
       // Parse "Soprannome: X\nMotivazione: Y"
       const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
-      const sopr = lines.find(l => l.toLowerCase().startsWith('soprannome:'))?.replace(/^soprannome:\s*/i, '') || raw;
-      const motiv = lines.find(l => l.toLowerCase().startsWith('motivazione:'))?.replace(/^motivazione:\s*/i, '') || '';
-      setNickname({ soprannome: sopr, motivazione: motiv });
+      const soprannome = lines.find(l => l.toLowerCase().startsWith('soprannome:'))?.replace(/^soprannome:\s*/i, '') || raw;
+      const motivazione = lines.find(l => l.toLowerCase().startsWith('motivazione:'))?.replace(/^motivazione:\s*/i, '') || '';
+      await updatePlayer(player.id, {
+        aiNickname: { soprannome, motivazione, generatedAt: new Date().toISOString() },
+      });
     } catch (e) {
       toast.error('Soprannome AI: ' + e.message);
     } finally {
@@ -1181,7 +1183,7 @@ function AiNicknameCard({ player, seasonStats }) {
     }
   };
 
-  if (!nickname) {
+  if (!cached) {
     return (
       <div className="card mb-4" style={{ textAlign: 'center', border: '1px dashed rgba(246,173,85,0.35)', background: 'rgba(246,173,85,0.03)' }}>
         <button onClick={generate} disabled={loading}
@@ -1196,13 +1198,16 @@ function AiNicknameCard({ player, seasonStats }) {
     <div className="card mb-4" style={{ border: '1px solid rgba(246,173,85,0.4)', background: 'rgba(246,173,85,0.05)', textAlign: 'center' }}>
       <div className="flex items-center justify-between mb-2">
         <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#F6AD55' }}>🏷️ Soprannome AI</span>
-        <button onClick={generate} style={{ fontSize: '0.7rem', color: '#718096', background: 'none', border: 'none', cursor: 'pointer' }}>↺ Rigenera</button>
+        <button onClick={generate} disabled={loading}
+          style={{ fontSize: '0.7rem', color: '#718096', background: 'none', border: 'none', cursor: loading ? 'default' : 'pointer' }}>
+          {loading ? '⏳' : '↺ Rigenera'}
+        </button>
       </div>
       <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#F6AD55', marginBottom: '0.4rem', letterSpacing: '0.02em' }}>
-        "{nickname.soprannome}"
+        "{cached.soprannome}"
       </div>
-      {nickname.motivazione && (
-        <div style={{ fontSize: '0.78rem', color: '#A0AEC0', fontStyle: 'italic' }}>{nickname.motivazione}</div>
+      {cached.motivazione && (
+        <div style={{ fontSize: '0.78rem', color: '#A0AEC0', fontStyle: 'italic' }}>{cached.motivazione}</div>
       )}
     </div>
   );
