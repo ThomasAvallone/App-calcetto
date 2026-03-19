@@ -385,7 +385,7 @@ export default function MatchPage() {
                 <div style={{ fontSize: '0.72rem', color: '#A0AEC0', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '0.6rem' }}>
                   {goals.map((g, i) => (
                     <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.15rem 0' }}>
-                      <span>{g.team === 'red' ? '🔴' : '🔵'} {g.type === 'autogoal' ? `✗ ${g.scorerName}` : g.scorerName}{g.assistName ? ` (${g.assistName})` : ''}</span>
+                      <span>{g.team === 'red' ? '🔴' : '🔵'} {g.type === 'autogoal' ? `🤦 ${g.scorerName} (autogol)` : g.scorerName}{g.type !== 'autogoal' && g.assistName ? ` (${g.assistName})` : ''}</span>
                       <span style={{ color: '#718096' }}>{g.minute ? `${g.minute}'` : ''}</span>
                     </div>
                   ))}
@@ -510,27 +510,45 @@ export default function MatchPage() {
           <p className="text-muted text-sm text-center" style={{ padding: '0.75rem' }}>Nessun evento registrato</p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-            {[...(match.events || [])].reverse().map(ev => (
-              <div key={ev.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem 0', borderBottom: '1px solid #2D3748' }}>
-                <span style={{ fontSize: '0.8rem', color: '#718096', minWidth: '28px' }}>{ev.minute}'</span>
-                <span style={{ fontSize: '1rem' }}>
-                  {ev.type === 'goal' ? (ev.team === 'red' ? '🔴⚽' : '🔵⚽') : '🤦'}
-                </span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: '0.9rem', fontWeight: 500 }}>{ev.scorerName}</div>
-                  {ev.assistName && ev.assistName !== 'Nessuno' && (
-                    <div style={{ fontSize: '0.75rem', color: '#718096' }}>assist: {ev.assistName}</div>
-                  )}
-                  {ev.gkConcededName && (
-                    <div style={{ fontSize: '0.75rem', color: '#718096' }}>🧤 {ev.gkConcededName}</div>
+            {(() => {
+              // Calcola parziale progressivo per ogni evento
+              const events = match.events || [];
+              let r = 0, b = 0;
+              const withScore = events.map(ev => {
+                if (ev.type === 'goal') { if (ev.team === 'red') r++; else b++; }
+                else if (ev.type === 'autogoal') { if (ev.team === 'red') b++; else r++; }
+                return { ...ev, partialRed: r, partialBlue: b };
+              });
+              return [...withScore].reverse().map(ev => (
+                <div key={ev.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem 0', borderBottom: '1px solid #2D3748' }}>
+                  <span style={{ fontSize: '0.8rem', color: '#718096', minWidth: '28px' }}>{ev.minute}'</span>
+                  <span style={{ fontSize: '1rem' }}>
+                    {ev.type === 'goal' ? (ev.team === 'red' ? '🔴⚽' : '🔵⚽') : (ev.team === 'red' ? '🔴🤦' : '🔵🤦')}
+                  </span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '0.9rem', fontWeight: 500 }}>
+                      {ev.type === 'autogoal' && <span style={{ color: '#FC8181', fontSize: '0.72rem', fontWeight: 700, marginRight: '0.3rem' }}>AUTO</span>}
+                      {ev.scorerName}
+                    </div>
+                    {ev.assistName && ev.assistName !== 'Nessuno' && (
+                      <div style={{ fontSize: '0.75rem', color: '#718096' }}>assist: {ev.assistName}</div>
+                    )}
+                    {ev.gkConcededName && (
+                      <div style={{ fontSize: '0.75rem', color: '#718096' }}>🧤 {ev.gkConcededName}</div>
+                    )}
+                  </div>
+                  <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#A0AEC0', whiteSpace: 'nowrap' }}>
+                    <span style={{ color: '#FC8181' }}>{ev.partialRed}</span>
+                    <span style={{ color: '#4A5568' }}>–</span>
+                    <span style={{ color: '#63B3ED' }}>{ev.partialBlue}</span>
+                  </span>
+                  {isAdmin && (
+                    <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#FC8181', padding: '4px', fontSize: '0.8rem' }}
+                      onClick={() => deleteEvent(ev.id).then(() => toast.success('Evento eliminato'))}>✕</button>
                   )}
                 </div>
-                {isAdmin && (
-                  <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#FC8181', padding: '4px', fontSize: '0.8rem' }}
-                    onClick={() => deleteEvent(ev.id).then(() => toast.success('Evento eliminato'))}>✕</button>
-                )}
-              </div>
-            ))}
+              ));
+            })()}
           </div>
         )}
       </div>
