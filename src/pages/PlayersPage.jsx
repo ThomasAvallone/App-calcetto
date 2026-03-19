@@ -140,6 +140,20 @@ export default function PlayersPage() {
 
   const finishedMatches = useMemo(() => allMatches.filter(m => m.status === 'finished'), [allMatches]);
 
+  // Pre-compute per-player finished matches (avoids 6+ components independently filtering allMatches)
+  const playerMatchesMap = useMemo(() => {
+    const map = {};
+    for (const m of finishedMatches) {
+      for (const pl of [...(m.redTeam || []), ...(m.blueTeam || [])]) {
+        if (pl.id) {
+          if (!map[pl.id]) map[pl.id] = [];
+          map[pl.id].push(m);
+        }
+      }
+    }
+    return map;
+  }, [finishedMatches]);
+
   // Current season start: September 1st of the current football season
   const seasonStartMs = useMemo(() => {
     const now = new Date();
@@ -469,7 +483,7 @@ export default function PlayersPage() {
         {/* Nemesi / Spalla / Vittima GK */}
         {(() => {
           const pid = p.id;
-          const finished = allMatches.filter(m => m.status === 'finished');
+          const finished = playerMatchesMap[pid] || [];
           // Conta partner/avversari: giocate insieme con vittoria, sconfitte contro, gol su quel GK
           const winsWith = {};    // pid → vittorie condivise
           const lossesTo = {};    // pid → sconfitte contro quell'avversario
@@ -593,13 +607,13 @@ export default function PlayersPage() {
           ))}
         </div>
 
-        <PiTrendChart allMatches={allMatches} playerId={p.id} playerPi={p.powerIndex} />
+        <PiTrendChart playerMatches={playerMatchesMap[p.id] || []} playerId={p.id} playerPi={p.powerIndex} />
 
-        <AiTrendCard player={p} allMatches={allMatches} />
+        <AiTrendCard player={p} playerMatches={playerMatchesMap[p.id] || []} />
 
-        <PlayerRecords allMatches={allMatches} player={p} />
+        <PlayerRecords playerMatches={playerMatchesMap[p.id] || []} player={p} />
 
-        <PlayerBadges player={p} seasonStats={playerSeasonStats[p.id]} allMatches={allMatches} />
+        <PlayerBadges player={p} seasonStats={playerSeasonStats[p.id]} allMatches={finishedMatches} />
 
         {hasHistory && (
           <div className="card mb-4" style={{ background: 'rgba(246,224,94,0.05)', border: '1px solid rgba(246,224,94,0.2)' }}>
@@ -622,7 +636,7 @@ export default function PlayersPage() {
           </div>
         )}
 
-        <PlayerMatchHistory matches={allMatches} playerId={p.id} />
+        <PlayerMatchHistory playerMatches={playerMatchesMap[p.id] || []} playerId={p.id} />
       </div>
       </SwipeBack>
     );
@@ -891,14 +905,10 @@ function HistoricalLinkSection({ linkedNames, suggestions, showAll, allNames, hi
   );
 }
 
-function PiTrendChart({ allMatches, playerId, playerPi }) {
+function PiTrendChart({ playerMatches, playerId, playerPi }) {
   const points = useMemo(() => {
-    const played = allMatches
-      .filter(m =>
-        m.status === 'finished' &&
-        !m.isHistorical &&
-        [...(m.redTeam || []), ...(m.blueTeam || [])].some(p => p.id === playerId)
-      )
+    const played = playerMatches
+      .filter(m => !m.isHistorical)
       .sort((a, b) => getMs(a.date) - getMs(b.date));
 
     if (played.length < 2) return [];
@@ -935,7 +945,7 @@ function PiTrendChart({ allMatches, playerId, playerPi }) {
     }
 
     return computed;
-  }, [allMatches, playerId, playerPi]);
+  }, [playerMatches, playerId, playerPi]);
 
   if (points.length < 2) return null;
 
@@ -1042,21 +1052,17 @@ function PiTrendChart({ allMatches, playerId, playerPi }) {
   );
 }
 
-function AiTrendCard({ player, allMatches }) {
+function AiTrendCard({ player, playerMatches }) {
   const [loading, setLoading] = useState(false);
   // Optimistic local state: bridges the gap between updatePlayer and Firestore subscription
   const [pendingText, setPendingText] = useState(null);
 
   // Most recent non-historical finished match for this player
   const mostRecentMatch = useMemo(() => {
-    return allMatches
-      .filter(m =>
-        m.status === 'finished' &&
-        !m.isHistorical &&
-        [...(m.redTeam || []), ...(m.blueTeam || [])].some(p => p.id === player.id)
-      )
+    return playerMatches
+      .filter(m => !m.isHistorical)
       .sort((a, b) => getMs(b.date) - getMs(a.date))[0] || null;
-  }, [allMatches, player.id]);
+  }, [playerMatches]);
 
   const cached = player.aiFormAnalysis;
   // Clear optimistic state once Firestore subscription catches up
@@ -1071,12 +1077,8 @@ function AiTrendCard({ player, allMatches }) {
   const generate = async () => {
     setLoading(true);
     try {
-      const played = allMatches
-        .filter(m =>
-          m.status === 'finished' &&
-          !m.isHistorical &&
-          [...(m.redTeam || []), ...(m.blueTeam || [])].some(p => p.id === player.id)
-        )
+      const played = playerMatches
+        .filter(m => !m.isHistorical)
         .sort((a, b) => getMs(a.date) - getMs(b.date))
         .slice(-4);
 
@@ -1272,13 +1274,9 @@ function PlayerAvatar({ name, size = 36 }) {
   );
 }
 
-function PlayerMatchHistory({ matches, playerId }) {
+function PlayerMatchHistory({ playerMatches: rawPlayerMatches, playerId }) {
   const getMs = d => d?.toMillis ? d.toMillis() : d ? new Date(d).getTime() : 0;
-  const playerMatches = matches
-    .filter(m =>
-      m.status === 'finished' &&
-      [...(m.redTeam || []), ...(m.blueTeam || [])].some(p => p.id === playerId)
-    )
+  const playerMatches = [...rawPlayerMatches]
     .sort((a, b) => getMs(b.date) - getMs(a.date))
     .slice(0, 8);
 
@@ -1330,14 +1328,9 @@ function PlayerMatchHistory({ matches, playerId }) {
   );
 }
 
-function PlayerRecords({ allMatches, player }) {
+function PlayerRecords({ playerMatches: rawPlayerMatches, player }) {
   const pid = player.id;
-  const playerMatches = allMatches
-    .filter(m =>
-      m.status === 'finished' &&
-      [...(m.redTeam || []), ...(m.blueTeam || [])].some(p => p.id === pid)
-    )
-    .sort((a, b) => getMs(a.date) - getMs(b.date)); // oldest first
+  const playerMatches = [...rawPlayerMatches].sort((a, b) => getMs(a.date) - getMs(b.date)); // oldest first
 
   if (playerMatches.length === 0) return null;
 

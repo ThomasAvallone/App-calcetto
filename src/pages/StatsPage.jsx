@@ -276,7 +276,22 @@ export default function StatsPage() {
     return map;
   }, [players, finishedMatches]);
 
-  // withStats: computed from period-filtered matches or all-time aggregated
+  // Pre-filter matches per period (stable refs unless finishedMatches change)
+  const seasonFilteredMatches = useMemo(() => {
+    const cutoff = getSeasonStartMs();
+    return finishedMatches.filter(m => getMs(m.date) >= cutoff);
+  }, [finishedMatches]);
+
+  const thirtyDayFilteredMatches = useMemo(() => {
+    const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    return finishedMatches.filter(m => getMs(m.date) >= cutoff);
+  }, [finishedMatches]);
+
+  // Pre-compute stats per period (avoids recomputing on period tab switch)
+  const seasonComputedStats = useMemo(() => computeStatsFromMatches(players, seasonFilteredMatches), [players, seasonFilteredMatches]);
+  const thirtyDayComputedStats = useMemo(() => computeStatsFromMatches(players, thirtyDayFilteredMatches), [players, thirtyDayFilteredMatches]);
+
+  // withStats: selects pre-computed data based on current period
   const withStats = useMemo(() => {
     if (period === 'all') {
       return players.map(p => {
@@ -295,11 +310,7 @@ export default function StatsPage() {
         };
       });
     }
-    const cutoff = period === '30d'
-      ? Date.now() - 30 * 24 * 60 * 60 * 1000
-      : getSeasonStartMs();
-    const filtered = finishedMatches.filter(m => getMs(m.date) >= cutoff);
-    const computed = computeStatsFromMatches(players, filtered);
+    const computed = period === '30d' ? thirtyDayComputedStats : seasonComputedStats;
     // GK stats (gkMatches, gkGoalsConceded, cleanSheets) use all matches since
     // GK/clean-sheet tracking started this season → no date filtering needed.
     return computed.map(p => {
@@ -311,7 +322,7 @@ export default function StatsPage() {
         cleanSheets:     gk.cleanSheets || 0,
       };
     });
-  }, [period, players, finishedMatches, gkFromEvents]);
+  }, [period, players, gkFromEvents, seasonComputedStats, thirtyDayComputedStats]);
 
   // Classifica: computed from matches (GF/GS not in p.stats)
   // For all-time: excludes isHistorical match docs (those come from p.historicalStats)

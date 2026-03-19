@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useSyncExternalStore } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getMatches, getPlayers, seedHistoricalSeasons, createPlayer, importHistoricalMatches, recalculatePlayerStats, updateMatch, fixLastMatchGoalMinutes } from '../firebase/firestore';
 import { syncAllHistoryToSheets } from '../services/sheetsService';
@@ -7,9 +7,19 @@ import { doc, getDocs, collection, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { HISTORICAL_SEASONS, getCurrentRosterPlayers, computeCumulativeStats } from '../data/historicalData';
 import useAuthStore, { selectIsAdmin } from '../store/authStore';
+import { getAICallCount, onAICallCountChange } from '../services/geminiService';
 import toast from 'react-hot-toast';
 
 const CHANGELOG = [
+  {
+    version: '2.8.1',
+    date: 'Marzo 2026',
+    entries: [
+      { type: 'new', text: 'Contatore sessione chiamate AI nel pannello admin — mostra quante chiamate Gemini sono state fatte dalla sessione corrente' },
+      { type: 'perf', text: 'StatsPage: memoizzazione pre-computata delle statistiche per periodo (stagione/30d) — il cambio tab non ricalcola più le stats, seleziona solo i dati già pronti' },
+      { type: 'perf', text: 'PlayersPage: mappa pre-computata partite per giocatore — i 6+ sottocomponenti del dettaglio giocatore non filtrano più indipendentemente tutti i match' },
+    ],
+  },
   {
     version: '2.8.0',
     date: 'Marzo 2026',
@@ -114,8 +124,9 @@ const CHANGELOG = [
 ];
 
 const TYPE_STYLE = {
-  new: { label: 'NEW', color: '#4FD1C5', bg: 'rgba(79,209,197,0.12)' },
-  fix: { label: 'FIX', color: '#FC814A', bg: 'rgba(252,129,74,0.12)' },
+  new:  { label: 'NEW',  color: '#4FD1C5', bg: 'rgba(79,209,197,0.12)' },
+  fix:  { label: 'FIX',  color: '#FC814A', bg: 'rgba(252,129,74,0.12)' },
+  perf: { label: 'PERF', color: '#F6E05E', bg: 'rgba(246,224,94,0.12)' },
 };
 
 export default function AdminPage() {
@@ -133,6 +144,9 @@ export default function AdminPage() {
   const [importing, setImporting] = useState(false);
   const [fixingMinutes, setFixingMinutes] = useState(false);
   const [importProgress, setImportProgress] = useState(null);
+
+  // AI call counter (session-level, resets on reload)
+  const aiCallCount = useSyncExternalStore(onAICallCountChange, getAICallCount);
   const [importingMatches, setImportingMatches] = useState(false);
   const [importMatchProgress, setImportMatchProgress] = useState(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -336,7 +350,7 @@ export default function AdminPage() {
       <p className="text-sm text-muted mb-4">Gestione avanzata e dati</p>
 
       {/* Stats overview */}
-      <div className="grid-3 mb-4">
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem', marginBottom: '1rem' }}>
         <div className="card" style={{ textAlign: 'center', padding: '1rem' }}>
           <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#4FD1C5' }}>{players.length}</div>
           <div style={{ fontSize: '0.7rem', color: '#718096' }}>Giocatori</div>
@@ -348,6 +362,10 @@ export default function AdminPage() {
         <div className="card" style={{ textAlign: 'center', padding: '1rem' }}>
           <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#4FD1C5' }}>{totalGoals}</div>
           <div style={{ fontSize: '0.7rem', color: '#718096' }}>Gol Totali</div>
+        </div>
+        <div className="card" style={{ textAlign: 'center', padding: '1rem' }}>
+          <div style={{ fontSize: '1.6rem', fontWeight: 800, color: aiCallCount > 0 ? '#F6AD55' : '#4FD1C5' }}>{aiCallCount}</div>
+          <div style={{ fontSize: '0.7rem', color: '#718096' }}>AI Calls</div>
         </div>
       </div>
 

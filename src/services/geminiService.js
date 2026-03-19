@@ -7,6 +7,12 @@ const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 const MODEL   = 'gemini-3.1-flash-lite-preview';
 const BASE_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 
+// Session AI call counter (resets on page reload)
+let _aiCallCount = 0;
+const _aiCallListeners = new Set();
+export function getAICallCount() { return _aiCallCount; }
+export function onAICallCountChange(fn) { _aiCallListeners.add(fn); return () => _aiCallListeners.delete(fn); }
+
 async function callGemini(prompt, { temperature = 0.85, maxTokens = 600 } = {}) {
   if (!API_KEY) throw new Error('Chiave Gemini non configurata (VITE_GEMINI_API_KEY)');
 
@@ -25,6 +31,8 @@ async function callGemini(prompt, { temperature = 0.85, maxTokens = 600 } = {}) 
   }
 
   const data = await res.json();
+  _aiCallCount++;
+  _aiCallListeners.forEach(fn => fn(_aiCallCount));
   return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
 }
 
