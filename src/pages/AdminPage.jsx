@@ -17,7 +17,12 @@ const CHANGELOG = [
       { type: 'new', text: 'Soprannome AI: persistito in Firestore sul profilo giocatore — non viene più rigenerato ad ogni visita, rimane salvato fino alla prossima rigenerazione manuale' },
       { type: 'new', text: 'Soprannome AI: spostato in cima alla scheda giocatore, sopra foto e Power Index, per dare subito identità al giocatore' },
       { type: 'new', text: 'Analisi AI momento di forma: cachata in Firestore con il riferimento all\'ultima partita — mostra badge ⚠️ "Nuova partita" quando il giocatore ha giocato dopo l\'ultima generazione' },
+      { type: 'new', text: 'Report AI stagionale/mensile: cachato in Firestore per periodo — si carica automaticamente al cambio tab senza chiamate API, con badge ⚠️ quando ci sono nuove partite' },
+      { type: 'new', text: 'Hall of Fame/Shame: cerimonia AI cachata in Firestore — visibile subito con pulsante ↺ Rigenera e badge ⚠️ "Nuova partita"' },
+      { type: 'new', text: 'Rivalità H2H: narrazione AI cachata per coppia di giocatori — si carica in automatico selezionando due giocatori, senza dover rigenerare ogni volta' },
       { type: 'fix', text: 'Report AI: corretta anomalia per cui un giocatore assente dalla stagione corrente poteva essere citato come miglior/peggior streak (le streak venivano lette da tutti i giocatori invece che solo da quelli con partite nel periodo selezionato)' },
+      { type: 'fix', text: 'Corretti flash UI dopo generazione AI (soprannome e analisi): aggiunto stato ottimistico locale per evitare il flickering del pulsante "Genera" tra la fine della chiamata e l\'aggiornamento Firestore' },
+      { type: 'fix', text: 'Corretta race condition nel caricamento cache Report AI e rivalità H2H: risposte fuori ordine ignorate quando l\'utente cambia selezione velocemente' },
     ],
   },
   {
