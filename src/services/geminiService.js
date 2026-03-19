@@ -7,10 +7,12 @@ const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 const MODEL   = 'gemini-3.1-flash-lite-preview';
 const BASE_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 
-// Session AI call counter (resets on page reload)
-let _aiCallCount = 0;
+// AI call counter — persistito in localStorage, non si azzera al refresh
+const _AI_CALL_KEY = 'calcetto_ai_call_count';
+let _aiCallCount = parseInt(localStorage.getItem(_AI_CALL_KEY) || '0', 10);
 const _aiCallListeners = new Set();
 export function getAICallCount() { return _aiCallCount; }
+export function resetAICallCount() { _aiCallCount = 0; localStorage.setItem(_AI_CALL_KEY, '0'); _aiCallListeners.forEach(fn => fn(_aiCallCount)); }
 export function onAICallCountChange(fn) { _aiCallListeners.add(fn); return () => _aiCallListeners.delete(fn); }
 
 async function callGemini(prompt, { temperature = 0.85, maxTokens = 600 } = {}) {
@@ -32,6 +34,7 @@ async function callGemini(prompt, { temperature = 0.85, maxTokens = 600 } = {}) 
 
   const data = await res.json();
   _aiCallCount++;
+  localStorage.setItem(_AI_CALL_KEY, String(_aiCallCount));
   _aiCallListeners.forEach(fn => fn(_aiCallCount));
   return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
 }

@@ -7,10 +7,18 @@ import { doc, getDocs, collection, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { HISTORICAL_SEASONS, getCurrentRosterPlayers, computeCumulativeStats } from '../data/historicalData';
 import useAuthStore, { selectIsAdmin } from '../store/authStore';
-import { getAICallCount, onAICallCountChange } from '../services/geminiService';
+import { getAICallCount, onAICallCountChange, resetAICallCount } from '../services/geminiService';
 import toast from 'react-hot-toast';
 
 const CHANGELOG = [
+  {
+    version: '2.9.1',
+    date: 'Marzo 2026',
+    entries: [
+      { type: 'fix', text: 'Verdetto Finale: parziale progressivo [X–Y] aggiunto dopo ogni gol/autogol nella cronaca testuale (era già presente nella card visiva ma mancava nel testo condivisibile)' },
+      { type: 'fix', text: 'Contatore AI Calls: ora persistito in localStorage — non si azzera più al refresh della pagina' },
+    ],
+  },
   {
     version: '2.9.0',
     date: 'Marzo 2026',
@@ -372,7 +380,8 @@ export default function AdminPage() {
           <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#4FD1C5' }}>{totalGoals}</div>
           <div style={{ fontSize: '0.7rem', color: '#718096' }}>Gol Totali</div>
         </div>
-        <div className="card" style={{ textAlign: 'center', padding: '1rem' }}>
+        <div className="card" style={{ textAlign: 'center', padding: '1rem', cursor: 'pointer', position: 'relative' }}
+          title="Click per azzerare" onClick={() => { if (window.confirm('Azzerare il contatore AI Calls?')) resetAICallCount(); }}>
           <div style={{ fontSize: '1.6rem', fontWeight: 800, color: aiCallCount > 0 ? '#F6AD55' : '#4FD1C5' }}>{aiCallCount}</div>
           <div style={{ fontSize: '0.7rem', color: '#718096' }}>AI Calls</div>
         </div>
