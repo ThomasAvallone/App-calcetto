@@ -5,6 +5,7 @@ import { HISTORICAL_SEASONS } from '../data/historicalData';
 import { getMs } from '../utils/dateUtils';
 import { RESULT_COLORS, CLR_WIN, CLR_DRAW, CLR_LOSS, AVATAR_COLORS } from '../constants/colors';
 import { generatePeriodReport, generateHallOfFame, generateRivalryNarrative } from '../services/geminiService';
+import { getAICache, setAICache } from '../firebase/firestore';
 import toast from 'react-hot-toast';
 
 const LEADERBOARD_TABS = [
@@ -210,6 +211,7 @@ export default function StatsPage() {
   const [squadreB, setSquadreB] = useState([]);
   const [rivalryText, setRivalryText] = useState('');
   const [rivalryLoading, setRivalryLoading] = useState(false);
+  const [rivalryStale, setRivalryStale] = useState(false);
   const [reportText, setReportText] = useState('');
   const [reportLoading, setReportLoading] = useState(false);
   const [reportPeriod, setReportPeriod] = useState('30d');
@@ -217,6 +219,24 @@ export default function StatsPage() {
   const [hallLoading, setHallLoading] = useState(false);
 
   const finishedMatches = useMemo(() => allMatches.filter(m => m.status === 'finished'), [allMatches]);
+
+  // ID dell'ultima partita conclusa — usato per rilevare staleness delle cache AI
+  const lastMatchId = finishedMatches[0]?.id ?? null;
+
+  // Carica cache rivalità H2H quando cambiano i giocatori selezionati
+  useEffect(() => {
+    if (!h2hP1 || !h2hP2) { setRivalryText(''); setRivalryStale(false); return; }
+    const key = `rivalry_${[h2hP1, h2hP2].sort().join('_')}`;
+    getAICache(key).then(data => {
+      if (data?.text) {
+        setRivalryText(data.text);
+        setRivalryStale(!!lastMatchId && data.lastMatchId !== lastMatchId);
+      } else {
+        setRivalryText('');
+        setRivalryStale(false);
+      }
+    }).catch(() => {});
+  }, [h2hP1, h2hP2]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // GK stats always computed live from events (Firestore p.stats can be stale for GK fields)
   const gkFromEvents = useMemo(() => {
@@ -787,6 +807,9 @@ export default function StatsPage() {
                       try {
                         const text = await generateRivalryNarrative(h2hStats.p1name, h2hStats.p2name, { together: h2hStats.together, against: h2hStats.against, p1Goals: h2hStats.p1Goals, p2Goals: h2hStats.p2Goals });
                         setRivalryText(text);
+                        setRivalryStale(false);
+                        const key = `rivalry_${[h2hP1, h2hP2].sort().join('_')}`;
+                        setAICache(key, { text, lastMatchId, generatedAt: new Date().toISOString() });
                       } catch (e) { toast.error('Rivalità AI: ' + e.message); }
                       finally { setRivalryLoading(false); }
                     }}
@@ -797,10 +820,32 @@ export default function StatsPage() {
                   </button>
                 </div>
               ) : (
-                <div className="card" style={{ border: '1px solid rgba(246,173,85,0.4)', background: 'rgba(246,173,85,0.04)' }}>
+                <div className="card" style={{ border: `1px solid ${rivalryStale ? 'rgba(246,173,85,0.6)' : 'rgba(246,173,85,0.4)'}`, background: 'rgba(246,173,85,0.04)' }}>
                   <div className="flex items-center justify-between mb-2">
-                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#F6AD55' }}>⚔️ La loro storia</span>
-                    <button onClick={() => setRivalryText('')} style={{ fontSize: '0.7rem', color: '#718096', background: 'none', border: 'none', cursor: 'pointer' }}>↺ Rigenera</button>
+                    <div className="flex items-center gap-2">
+                      <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#F6AD55' }}>⚔️ La loro storia</span>
+                      {rivalryStale && (
+                        <span style={{ fontSize: '0.68rem', color: '#F6AD55', background: 'rgba(246,173,85,0.15)', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                          ⚠️ Nuova partita
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      onClick={async () => {
+                        setRivalryLoading(true);
+                        try {
+                          const text = await generateRivalryNarrative(h2hStats.p1name, h2hStats.p2name, { together: h2hStats.together, against: h2hStats.against, p1Goals: h2hStats.p1Goals, p2Goals: h2hStats.p2Goals });
+                          setRivalryText(text);
+                          setRivalryStale(false);
+                          const key = `rivalry_${[h2hP1, h2hP2].sort().join('_')}`;
+                          setAICache(key, { text, lastMatchId, generatedAt: new Date().toISOString() });
+                        } catch (e) { toast.error('Rivalità AI: ' + e.message); }
+                        finally { setRivalryLoading(false); }
+                      }}
+                      disabled={rivalryLoading}
+                      style={{ fontSize: '0.7rem', color: '#718096', background: 'none', border: 'none', cursor: rivalryLoading ? 'default' : 'pointer' }}>
+                      {rivalryLoading ? '⏳' : '↺ Rigenera'}
+                    </button>
                   </div>
                   <p style={{ fontSize: '0.83rem', color: '#CBD5E0', lineHeight: 1.75, margin: 0, whiteSpace: 'pre-wrap' }}>{rivalryText}</p>
                 </div>
@@ -828,6 +873,7 @@ export default function StatsPage() {
           setReportLoading={setReportLoading}
           reportPeriod={reportPeriod}
           setReportPeriod={setReportPeriod}
+          lastMatchId={lastMatchId}
         />
       )}
 
@@ -840,6 +886,7 @@ export default function StatsPage() {
           setHallText={setHallText}
           hallLoading={hallLoading}
           setHallLoading={setHallLoading}
+          lastMatchId={lastMatchId}
         />
       )}
 
@@ -970,7 +1017,20 @@ const REPORT_PERIODS = [
   { key: 'all',    label: 'All-time' },
 ];
 
-function ReportAITab({ finishedMatches, players, reportText, setReportText, reportLoading, setReportLoading, reportPeriod, setReportPeriod }) {
+function ReportAITab({ finishedMatches, players, reportText, setReportText, reportLoading, setReportLoading, reportPeriod, setReportPeriod, lastMatchId }) {
+  const [reportStale, setReportStale] = useState(false);
+
+  // Carica cache al cambio di periodo
+  useEffect(() => {
+    setReportText('');
+    setReportStale(false);
+    getAICache(`report_${reportPeriod}`).then(data => {
+      if (data?.text) {
+        setReportText(data.text);
+        setReportStale(!!lastMatchId && data.lastMatchId !== lastMatchId);
+      }
+    }).catch(() => {});
+  }, [reportPeriod]); // eslint-disable-line react-hooks/exhaustive-deps
   const buildStats = (period) => {
     const now = Date.now();
     const cutoff = period === '30d'
@@ -1040,6 +1100,8 @@ function ReportAITab({ finishedMatches, players, reportText, setReportText, repo
       if (stats.matchCount === 0) { toast('Nessuna partita nel periodo selezionato'); setReportLoading(false); return; }
       const text = await generatePeriodReport(periodLabel, stats);
       setReportText(text);
+      setReportStale(false);
+      setAICache(`report_${reportPeriod}`, { text, lastMatchId, generatedAt: new Date().toISOString() });
     } catch (e) {
       toast.error('Report AI: ' + e.message);
     } finally {
@@ -1050,10 +1112,17 @@ function ReportAITab({ finishedMatches, players, reportText, setReportText, repo
   return (
     <div>
       <div className="card mb-4" style={{ border: '1px solid rgba(104,211,145,0.25)' }}>
-        <h3 className="mb-3" style={{ fontSize: '0.95rem', color: '#68D391' }}>📝 Report AI</h3>
+        <div className="flex items-center gap-2 mb-3">
+          <h3 style={{ fontSize: '0.95rem', color: '#68D391', margin: 0 }}>📝 Report AI</h3>
+          {reportStale && (
+            <span style={{ fontSize: '0.68rem', color: '#F6AD55', background: 'rgba(246,173,85,0.15)', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>
+              ⚠️ Nuova partita
+            </span>
+          )}
+        </div>
         <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
           {REPORT_PERIODS.map(p => (
-            <button key={p.key} onClick={() => { setReportPeriod(p.key); setReportText(''); }}
+            <button key={p.key} onClick={() => setReportPeriod(p.key)}
               style={{
                 padding: '0.3rem 0.75rem', borderRadius: '999px', border: 'none', cursor: 'pointer',
                 fontWeight: 600, fontSize: '0.8rem',
@@ -1068,16 +1137,16 @@ function ReportAITab({ finishedMatches, players, reportText, setReportText, repo
           onClick={handleGenerate}
           disabled={reportLoading}
           style={{
-            width: '100%', padding: '0.65rem', border: '1px solid rgba(104,211,145,0.4)',
+            width: '100%', padding: '0.65rem', border: `1px solid ${reportStale ? 'rgba(246,173,85,0.5)' : 'rgba(104,211,145,0.4)'}`,
             borderRadius: '8px', background: 'rgba(104,211,145,0.08)',
-            color: '#68D391', fontWeight: 700, fontSize: '0.9rem', cursor: reportLoading ? 'default' : 'pointer',
+            color: reportStale ? '#F6AD55' : '#68D391', fontWeight: 700, fontSize: '0.9rem', cursor: reportLoading ? 'default' : 'pointer',
           }}>
           {reportLoading ? '⏳ Generando il report...' : reportText ? '↺ Rigenera Report' : '✨ Genera Report'}
         </button>
       </div>
 
       {reportText && (
-        <div className="card" style={{ border: '1px solid rgba(104,211,145,0.3)', background: 'rgba(104,211,145,0.04)' }}>
+        <div className="card" style={{ border: `1px solid ${reportStale ? 'rgba(246,173,85,0.4)' : 'rgba(104,211,145,0.3)'}`, background: 'rgba(104,211,145,0.04)' }}>
           <p style={{ fontSize: '0.84rem', color: '#CBD5E0', lineHeight: 1.8, margin: 0, whiteSpace: 'pre-wrap' }}>{reportText}</p>
         </div>
       )}
@@ -1086,7 +1155,18 @@ function ReportAITab({ finishedMatches, players, reportText, setReportText, repo
 }
 
 // ─── Hall of Fame / Shame Component ──────────────────────────────────────────
-function HallTab({ finishedMatches, players, hallText, setHallText, hallLoading, setHallLoading }) {
+function HallTab({ finishedMatches, players, hallText, setHallText, hallLoading, setHallLoading, lastMatchId }) {
+  const [hallStale, setHallStale] = useState(false);
+
+  // Carica cache al mount
+  useEffect(() => {
+    getAICache('hall').then(data => {
+      if (data?.text) {
+        setHallText(data.text);
+        setHallStale(!!lastMatchId && data.lastMatchId !== lastMatchId);
+      }
+    }).catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const buildHallStats = () => {
     const ps = {};
     for (const p of players) ps[p.id] = { name: p.name, goals: 0, assists: 0, autogoals: 0, gkGoals: 0, matches: 0, wins: 0, losses: 0 };
@@ -1145,6 +1225,8 @@ function HallTab({ finishedMatches, players, hallText, setHallText, hallLoading,
       if (!stats) { toast('Servono almeno 5 partite per giocatore'); setHallLoading(false); return; }
       const text = await generateHallOfFame(stats);
       setHallText(text);
+      setHallStale(false);
+      setAICache('hall', { text, lastMatchId, generatedAt: new Date().toISOString() });
     } catch (e) {
       toast.error('Hall of Fame AI: ' + e.message);
     } finally {
@@ -1181,20 +1263,35 @@ function HallTab({ finishedMatches, players, hallText, setHallText, hallLoading,
         </div>
       )}
 
-      <div className="card mb-4" style={{ textAlign: 'center', border: '1px dashed rgba(251,211,141,0.35)', background: 'rgba(251,211,141,0.03)' }}>
-        <button
-          onClick={handleGenerate}
-          disabled={hallLoading}
-          style={{ background: 'none', border: 'none', cursor: hallLoading ? 'default' : 'pointer', color: '#FBD38D', fontSize: '0.9rem', padding: '0.75rem 0', width: '100%', fontWeight: 600 }}
-        >
-          {hallLoading ? '⏳ Preparando la cerimonia...' : hallText ? '↺ Ripeti la Cerimonia' : '🎖️ Genera Cerimonia AI'}
-        </button>
-      </div>
+      {!hallText && (
+        <div className="card mb-4" style={{ textAlign: 'center', border: '1px dashed rgba(251,211,141,0.35)', background: 'rgba(251,211,141,0.03)' }}>
+          <button
+            onClick={handleGenerate}
+            disabled={hallLoading}
+            style={{ background: 'none', border: 'none', cursor: hallLoading ? 'default' : 'pointer', color: '#FBD38D', fontSize: '0.9rem', padding: '0.75rem 0', width: '100%', fontWeight: 600 }}
+          >
+            {hallLoading ? '⏳ Preparando la cerimonia...' : '🎖️ Genera Cerimonia AI'}
+          </button>
+        </div>
+      )}
 
       {hallText && (
-        <div className="card" style={{ border: '1px solid rgba(251,211,141,0.35)', background: 'rgba(251,211,141,0.04)' }}>
+        <div className="card" style={{ border: `1px solid ${hallStale ? 'rgba(246,173,85,0.5)' : 'rgba(251,211,141,0.35)'}`, background: 'rgba(251,211,141,0.04)' }}>
           <div className="flex items-center justify-between mb-3">
-            <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#FBD38D' }}>🎖️ La Cerimonia</span>
+            <div className="flex items-center gap-2">
+              <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#FBD38D' }}>🎖️ La Cerimonia</span>
+              {hallStale && (
+                <span style={{ fontSize: '0.68rem', color: '#F6AD55', background: 'rgba(246,173,85,0.15)', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                  ⚠️ Nuova partita
+                </span>
+              )}
+            </div>
+            <button
+              onClick={handleGenerate}
+              disabled={hallLoading}
+              style={{ fontSize: '0.7rem', color: '#718096', background: 'none', border: 'none', cursor: hallLoading ? 'default' : 'pointer' }}>
+              {hallLoading ? '⏳' : '↺ Rigenera'}
+            </button>
           </div>
           <p style={{ fontSize: '0.84rem', color: '#CBD5E0', lineHeight: 1.8, margin: 0, whiteSpace: 'pre-wrap' }}>{hallText}</p>
         </div>

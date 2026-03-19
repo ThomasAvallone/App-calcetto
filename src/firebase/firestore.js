@@ -384,6 +384,22 @@ export async function fixLastMatchGoalMinutes() {
   return { matchId: match.id, fixedEvents, preview, startTimestamp };
 }
 
+// ─── AI CACHE (settings collection) ──────────────────────────────────────────
+// key: stringa arbitraria (es. 'report_season', 'hall', 'rivalry_id1_id2')
+// data: { text, lastMatchId, generatedAt }
+
+export async function getAICache(key) {
+  const snap = await getDoc(doc(db, 'settings', `aiCache_${key}`));
+  return snap.exists() ? snap.data() : null;
+}
+
+export async function setAICache(key, data) {
+  await setDoc(doc(db, 'settings', `aiCache_${key}`), {
+    ...data,
+    updatedAt: serverTimestamp(),
+  });
+}
+
 // ─── SCHEDULED MATCH ─────────────────────────────────────────────────────────
 
 export async function setScheduledMatch(date, note) {
