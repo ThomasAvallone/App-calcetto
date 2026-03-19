@@ -11,6 +11,16 @@ import toast from 'react-hot-toast';
 
 const CHANGELOG = [
   {
+    version: '2.8.0',
+    date: 'Marzo 2026',
+    entries: [
+      { type: 'new', text: 'Soprannome AI: persistito in Firestore sul profilo giocatore — non viene più rigenerato ad ogni visita, rimane salvato fino alla prossima rigenerazione manuale' },
+      { type: 'new', text: 'Soprannome AI: spostato in cima alla scheda giocatore, sopra foto e Power Index, per dare subito identità al giocatore' },
+      { type: 'new', text: 'Analisi AI momento di forma: cachata in Firestore con il riferimento all\'ultima partita — mostra badge ⚠️ "Nuova partita" quando il giocatore ha giocato dopo l\'ultima generazione' },
+      { type: 'fix', text: 'Report AI: corretta anomalia per cui un giocatore assente dalla stagione corrente poteva essere citato come miglior/peggior streak (le streak venivano lette da tutti i giocatori invece che solo da quelli con partite nel periodo selezionato)' },
+    ],
+  },
+  {
     version: '2.7.0',
     date: 'Marzo 2026',
     entries: [
