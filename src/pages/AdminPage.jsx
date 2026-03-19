@@ -12,6 +12,15 @@ import toast from 'react-hot-toast';
 
 const CHANGELOG = [
   {
+    version: '2.9.0',
+    date: 'Marzo 2026',
+    entries: [
+      { type: 'new', text: 'Timer partita: conta in avanti da 00:00 (con supporto supplementari) invece che in conto alla rovescia' },
+      { type: 'new', text: 'Cronaca in-match: parziale progressivo e autogol evidenziati con stile dedicato per una lettura più immediata' },
+      { type: 'fix', text: 'Label stato timer corretta durante la pausa nei supplementari' },
+    ],
+  },
+  {
     version: '2.8.1',
     date: 'Marzo 2026',
     entries: [
