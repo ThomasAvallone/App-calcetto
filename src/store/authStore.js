@@ -39,7 +39,10 @@ const useAuthStore = create((set, get) => ({
 
 // Selectors — funzionano sempre, perché leggono dallo state corrente
 export const selectIsAdmin = (s) => s.role === 'admin' || s.role === 'superadmin';
+// Usa il ruolo Firestore come fonte di verità, con fallback all'email env per la
+// migrazione iniziale (quando il documento utente non ha ancora role='superadmin').
 export const selectIsSuperAdmin = (s) =>
-  SUPER_ADMIN_EMAIL !== '' && s.user?.email === SUPER_ADMIN_EMAIL;
+  s.role === 'superadmin' ||
+  (SUPER_ADMIN_EMAIL !== '' && s.user?.email === SUPER_ADMIN_EMAIL && s.role === 'admin');
 
 export default useAuthStore;

@@ -477,7 +477,7 @@ export async function importHistoricalMatches(historicalMatches, players, onProg
         const found = lookupPlayer(p.name);
         if (found && p.goals > 0) {
           for (let g = 0; g < p.goals; g++) {
-            events.push({ type: 'goal', scorerId: found.id, team: 'red' });
+            events.push({ type: 'goal', scorerId: found.id, scorerName: found.name, team: 'red' });
           }
         }
       }
@@ -485,7 +485,7 @@ export async function importHistoricalMatches(historicalMatches, players, onProg
         const found = lookupPlayer(p.name);
         if (found && p.goals > 0) {
           for (let g = 0; g < p.goals; g++) {
-            events.push({ type: 'goal', scorerId: found.id, team: 'blue' });
+            events.push({ type: 'goal', scorerId: found.id, scorerName: found.name, team: 'blue' });
           }
         }
       }
@@ -495,7 +495,7 @@ export async function importHistoricalMatches(historicalMatches, players, onProg
         if (found) {
           // The scorer's team is the opposite of the benefited team
           const scorerTeam = ag.benefitedTeam === 'right' ? 'red' : 'blue';
-          events.push({ type: 'autogoal', scorerId: found.id, team: scorerTeam });
+          events.push({ type: 'autogoal', scorerId: found.id, scorerName: found.name, team: scorerTeam });
         }
       }
 

@@ -60,7 +60,10 @@ export default function MatchPage() {
   }, [match?.redScore, match?.blueScore]);
 
   useEffect(() => {
-    if (id !== activeMatchId) loadMatch(id);
+    // Always load when match is null (e.g. after page refresh, persist restores
+    // activeMatchId but not the match object itself) or when navigating to a
+    // different match. This also re-establishes the Firestore onSnapshot subscription.
+    if (!match || id !== activeMatchId) loadMatch(id);
     return () => unloadMatch();
   }, [id]);
 
