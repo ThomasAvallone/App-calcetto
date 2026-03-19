@@ -80,8 +80,8 @@ export const BADGE_DEFS = [
     desc: 'Media GK < 1.5 gol/turno in stagione (min 5 presenze)',
     positive: true,
     check: (s) =>
-      (s.matches || 0) >= 5 &&
-      (s.gkGoalsConceded || 0) / ((s.matches || 1) * 2) < 1.5,
+      (s.gkMatches || 0) >= 5 &&
+      (s.gkGoalsConceded || 0) / (s.gkMatches || 1) < 1.5,
   },
   {
     id: 'veterano',
@@ -424,8 +424,8 @@ export const BADGE_DEFS = [
     desc: 'Media GK > 3 gol/turno in stagione (min 5 presenze)',
     positive: false,
     check: (s) =>
-      (s.matches || 0) >= 5 &&
-      (s.gkGoalsConceded || 0) / ((s.matches || 1) * 2) > 3,
+      (s.gkMatches || 0) >= 5 &&
+      (s.gkGoalsConceded || 0) / (s.gkMatches || 1) > 3,
   },
   {
     id: 'gufo',
@@ -434,8 +434,8 @@ export const BADGE_DEFS = [
     desc: 'Media GK > 4 gol/turno (min 3 presenze) — porta sfiga dalla porta',
     positive: false,
     check: (s) =>
-      (s.matches || 0) >= 3 &&
-      (s.gkGoalsConceded || 0) / ((s.matches || 1) * 2) > 4,
+      (s.gkMatches || 0) >= 3 &&
+      (s.gkGoalsConceded || 0) / (s.gkMatches || 1) > 4,
   },
   {
     id: 'fantasma',
