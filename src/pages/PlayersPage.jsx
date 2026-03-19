@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import usePlayersStore from '../store/playersStore';
 import useAuthStore, { selectIsAdmin } from '../store/authStore';
-import { computeCombinedPowerIndex, recalculatePlayerStats, computePowerIndex } from '../firebase/firestore';
+import { computeCombinedPowerIndex, recalculatePlayerStats, computePowerIndex, updatePlayer } from '../firebase/firestore';
 import { useMatchesSubscription } from '../hooks/useMatchesSubscription';
 import { HISTORICAL_SEASONS, suggestHistoricalNames, computeCumulativeStats, getUnlinkedNames } from '../data/historicalData';
 import { computeBadges } from '../utils/badges';
@@ -1042,8 +1042,23 @@ function PiTrendChart({ allMatches, playerId, playerPi }) {
 }
 
 function AiTrendCard({ player, allMatches }) {
-  const [analysis, setAnalysis] = useState(null);
   const [loading, setLoading] = useState(false);
+
+  // Most recent non-historical finished match for this player
+  const mostRecentMatch = useMemo(() => {
+    return allMatches
+      .filter(m =>
+        m.status === 'finished' &&
+        !m.isHistorical &&
+        [...(m.redTeam || []), ...(m.blueTeam || [])].some(p => p.id === player.id)
+      )
+      .sort((a, b) => getMs(b.date) - getMs(a.date))[0] || null;
+  }, [allMatches, player.id]);
+
+  const cached = player.aiFormAnalysis;
+  const hasAnalysis = !!cached?.text;
+  // Analysis is stale if a new match was played after the last generation
+  const isStale = hasAnalysis && mostRecentMatch && cached.lastMatchId !== mostRecentMatch.id;
 
   const generate = async () => {
     setLoading(true);
@@ -1077,7 +1092,14 @@ function AiTrendCard({ player, allMatches }) {
       });
 
       const text = await generatePlayerTrendAnalysis(player, recentData);
-      setAnalysis(text);
+      const latestMatch = played[played.length - 1];
+      await updatePlayer(player.id, {
+        aiFormAnalysis: {
+          text,
+          lastMatchId: latestMatch.id,
+          generatedAt: new Date().toISOString(),
+        },
+      });
     } catch (e) {
       toast.error('Errore AI: ' + e.message);
     } finally {
@@ -1085,7 +1107,7 @@ function AiTrendCard({ player, allMatches }) {
     }
   };
 
-  if (!analysis) {
+  if (!hasAnalysis) {
     return (
       <div className="card mb-4" style={{ textAlign: 'center', border: '1px dashed rgba(159,122,234,0.35)', background: 'rgba(102,126,234,0.03)' }}>
         <button onClick={generate} disabled={loading}
@@ -1097,16 +1119,30 @@ function AiTrendCard({ player, allMatches }) {
   }
 
   return (
-    <div className="card mb-4" style={{ border: '1px solid rgba(159,122,234,0.4)', background: 'rgba(102,126,234,0.05)' }}>
+    <div className="card mb-4" style={{ border: `1px solid ${isStale ? 'rgba(246,173,85,0.5)' : 'rgba(159,122,234,0.4)'}`, background: 'rgba(102,126,234,0.05)' }}>
       <div className="flex items-center justify-between mb-3">
-        <h3 style={{ fontSize: '0.95rem', margin: 0 }}>✨ Analisi AI</h3>
-        <button onClick={() => setAnalysis(null)}
-          style={{ fontSize: '0.7rem', color: '#718096', background: 'none', border: 'none', cursor: 'pointer' }}>
-          ↺ Rigenera
+        <div className="flex items-center gap-2">
+          <h3 style={{ fontSize: '0.95rem', margin: 0 }}>✨ Analisi AI</h3>
+          {isStale && (
+            <span style={{ fontSize: '0.68rem', color: '#F6AD55', background: 'rgba(246,173,85,0.15)', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>
+              ⚠️ Nuova partita
+            </span>
+          )}
+        </div>
+        <button
+          onClick={generate}
+          disabled={loading}
+          style={{ fontSize: '0.7rem', color: '#718096', background: 'none', border: 'none', cursor: loading ? 'default' : 'pointer' }}>
+          {loading ? '⏳' : '↺ Rigenera'}
         </button>
       </div>
+      {cached.generatedAt && (
+        <div style={{ fontSize: '0.65rem', color: '#4A5568', marginBottom: '0.75rem' }}>
+          Aggiornata il {new Date(cached.generatedAt).toLocaleDateString('it-IT')}
+        </div>
+      )}
       <p style={{ fontSize: '0.84rem', color: '#CBD5E0', lineHeight: 1.75, margin: 0, whiteSpace: 'pre-wrap' }}>
-        {analysis}
+        {cached.text}
       </p>
     </div>
   );

@@ -1014,8 +1014,8 @@ function ReportAITab({ finishedMatches, players, reportText, setReportText, repo
     const topWinRate  = withMinMatches.length > 0
       ? [...withMinMatches].sort((a, b) => (b.wins / b.matches) - (a.wins / a.matches))[0]
       : null;
-    // Streaks from player objects
-    const streaks = players.filter(p => p.streak?.count >= 3);
+    // Streaks from player objects – only for players who actually played in this period
+    const streaks = players.filter(p => p.streak?.count >= 3 && ps[p.id]?.matches > 0);
     const bestStreak  = streaks.filter(p => p.streak.type === 'win').sort((a, b) => b.streak.count - a.streak.count)[0] || null;
     const worstStreak = streaks.filter(p => p.streak.type === 'loss').sort((a, b) => b.streak.count - a.streak.count)[0] || null;
 
