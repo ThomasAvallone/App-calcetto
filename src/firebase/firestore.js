@@ -360,6 +360,11 @@ export function subscribeToMatchState(matchId, callback) {
 }
 
 // ─── ONE-TIME FIX: ricalcola minuti gol usando timestamps assoluti ────────────
+// NOTA: questa funzione funziona correttamente SOLO per partite mai messe in pausa.
+// Se il timer è stato messo in pausa e riavviato, startTimestamp corrisponde
+// all'ultimo resume e i gol segnati prima della pausa avranno minuti errati.
+// Per partite con pause multiple sarebbe necessario registrare la cronologia
+// completa dei cicli pausa/riavvio nel matchState, funzionalità non ancora implementata.
 export async function fixLastMatchGoalMinutes() {
   // 1. Prendi l'ultima partita
   const snap = await getDocs(query(collection(db, 'matches'), orderBy('date', 'desc'), limit(1)));

@@ -337,7 +337,12 @@ export default function MatchPage() {
     const winner = ms ? (ms.redScore > ms.blueScore ? 'red' : ms.blueScore > ms.redScore ? 'blue' : null) : null;
     const mvpEntry = ms ? (() => {
       const cnt = {};
-      ms.events.forEach(e => { if (e.type === 'goal' && e.scorerId) cnt[e.scorerId] = (cnt[e.scorerId] || { name: e.scorerName, n: 0 }), cnt[e.scorerId].n++; });
+      ms.events.forEach(e => {
+        if (e.type === 'goal' && e.scorerId) {
+          if (!cnt[e.scorerId]) cnt[e.scorerId] = { name: e.scorerName, n: 0 };
+          cnt[e.scorerId].n++;
+        }
+      });
       return Object.values(cnt).sort((a, b) => b.n - a.n)[0] || null;
     })() : null;
 

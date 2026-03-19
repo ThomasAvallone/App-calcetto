@@ -23,9 +23,9 @@ const useAuthStore = create((set, get) => ({
   async login() {
     set({ error: null });
     try {
-      const user = await loginWithGoogle();
-      const role = await getUserRole(user.uid);
-      set(s => ({ ...s, role }));
+      await loginWithGoogle();
+      // Il ruolo viene impostato dal callback subscribeToAuth in init(),
+      // che si attiva automaticamente al cambio di stato auth di Firebase.
     } catch (e) {
       set({ error: e.message });
     }

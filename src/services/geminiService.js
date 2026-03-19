@@ -33,10 +33,12 @@ async function callGemini(prompt, { temperature = 0.85, maxTokens = 600 } = {}) 
   }
 
   const data = await res.json();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+  if (!text) throw new Error('Risposta AI vuota o bloccata dal filtro di sicurezza');
   _aiCallCount++;
   localStorage.setItem(_AI_CALL_KEY, String(_aiCallCount));
   _aiCallListeners.forEach(fn => fn(_aiCallCount));
-  return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+  return text;
 }
 
 function fmtMatchDate(d) {
