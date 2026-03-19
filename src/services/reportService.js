@@ -190,6 +190,14 @@ export function generateMatchReport(match, players) {
   // Scorers timeline (le partite storiche non hanno minute, le mettiamo in coda)
   const timeline = [...goals, ...autogoals].sort((a, b) => (a.minute ?? 999) - (b.minute ?? 999));
 
+  // Pre-calcola parziale progressivo per la cronaca
+  let _r = 0, _b = 0;
+  const timelineWithPartial = timeline.map(ev => {
+    if (ev.type === 'goal') { if (ev.team === 'red') _r++; else _b++; }
+    else if (ev.type === 'autogoal') { if (ev.team === 'red') _b++; else _r++; }
+    return { ...ev, pr: _r, pb: _b };
+  });
+
   const dateStr = match.date
     ? new Date(match.date?.toDate ? match.date.toDate() : match.date)
         .toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
@@ -206,14 +214,15 @@ ${winner}
 🔴 Rossi ${match.redScore} — ${match.blueScore} Blu 🔵
 
 📋 CRONACA GOL
-${timeline.length === 0 ? '  Nessun gol (un capolavoro di inutilità)' : timeline.map(ev => {
+${timelineWithPartial.length === 0 ? '  Nessun gol (un capolavoro di inutilità)' : timelineWithPartial.map(ev => {
     const min = ev.minute != null ? `${String(ev.minute).padStart(2, '0')}'` : '  ';
     const team = ev.team === 'red' ? '🔴' : '🔵';
+    const partial = `[${ev.pr}–${ev.pb}]`;
     if (ev.type === 'goal') {
       const assist = ev.assistName && ev.assistName !== 'Nessuno' ? ` (assist: ${ev.assistName})` : '';
-      return `  ${min} ${team} ⚽ ${resolveName(ev)}${assist}`;
+      return `  ${min} ${team} ⚽ ${resolveName(ev)}${assist} ${partial}`;
     } else {
-      return `  ${min} ${team} 🤦 AUTOGOL ${resolveName(ev)}`;
+      return `  ${min} ${team} 🤦 AUTOGOL ${resolveName(ev)} ${partial}`;
     }
   }).join('\n')}
 
