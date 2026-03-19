@@ -4,6 +4,8 @@ import { useMatchesSubscription } from '../hooks/useMatchesSubscription';
 import { HISTORICAL_SEASONS } from '../data/historicalData';
 import { getMs } from '../utils/dateUtils';
 import { RESULT_COLORS, CLR_WIN, CLR_DRAW, CLR_LOSS, AVATAR_COLORS } from '../constants/colors';
+import { generatePeriodReport, generateHallOfFame, generateRivalryNarrative } from '../services/geminiService';
+import toast from 'react-hot-toast';
 
 const LEADERBOARD_TABS = [
   { key: 'goals',   label: '⚽ Gol' },
@@ -15,6 +17,8 @@ const LEADERBOARD_TABS = [
   { key: 'duo',     label: '👥 Duo' },
   { key: 'h2h',     label: '⚔️ H2H' },
   { key: 'squadre', label: '🆚 Squadre' },
+  { key: 'report',  label: '📝 Report AI' },
+  { key: 'hall',    label: '🏛️ Hall' },
 ];
 
 const PERIODS = [
@@ -204,6 +208,13 @@ export default function StatsPage() {
   const [h2hP2, setH2hP2] = useState('');
   const [squadreA, setSquadreA] = useState([]);
   const [squadreB, setSquadreB] = useState([]);
+  const [rivalryText, setRivalryText] = useState('');
+  const [rivalryLoading, setRivalryLoading] = useState(false);
+  const [reportText, setReportText] = useState('');
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportPeriod, setReportPeriod] = useState('30d');
+  const [hallText, setHallText] = useState('');
+  const [hallLoading, setHallLoading] = useState(false);
 
   const finishedMatches = useMemo(() => allMatches.filter(m => m.status === 'finished'), [allMatches]);
 
@@ -495,7 +506,7 @@ export default function StatsPage() {
 
   const cfg = tabConfig[tab];
   const list = rankings[tab] || [];
-  const isSpecialTab = tab === 'duo' || tab === 'h2h' || tab === 'squadre';
+  const isSpecialTab = tab === 'duo' || tab === 'h2h' || tab === 'squadre' || tab === 'report' || tab === 'hall';
   const currentAccent = cfg?.accent || '#4FD1C5';
 
   return (
@@ -506,7 +517,7 @@ export default function StatsPage() {
       <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '1rem', overflowX: 'auto', paddingBottom: '0.25rem' }}>
         {LEADERBOARD_TABS.map(t => {
           const isActive = tab === t.key;
-          const accent = t.key === 'duo' ? '#B794F4' : t.key === 'h2h' ? '#F6AD55' : t.key === 'classifica' ? '#F6E05E' : t.key === 'squadre' ? '#FC8181' : tabConfig[t.key]?.accent || '#4FD1C5';
+          const accent = t.key === 'duo' ? '#B794F4' : t.key === 'h2h' ? '#F6AD55' : t.key === 'classifica' ? '#F6E05E' : t.key === 'squadre' ? '#FC8181' : t.key === 'report' ? '#68D391' : t.key === 'hall' ? '#FBD38D' : tabConfig[t.key]?.accent || '#4FD1C5';
           return (
             <button
               key={t.key}
@@ -668,13 +679,13 @@ export default function StatsPage() {
           <div className="card mb-4">
             <h3 className="mb-3" style={{ fontSize: '0.95rem' }}>Seleziona 2 giocatori da confrontare</h3>
             <div className="grid-2" style={{ gap: '0.75rem' }}>
-              <select className="input" value={h2hP1} onChange={e => setH2hP1(e.target.value)}>
+              <select className="input" value={h2hP1} onChange={e => { setH2hP1(e.target.value); setRivalryText(''); }}>
                 <option value="">Giocatore 1</option>
                 {players.map(p => (
                   <option key={p.id} value={p.id} disabled={p.id === h2hP2}>{p.name}</option>
                 ))}
               </select>
-              <select className="input" value={h2hP2} onChange={e => setH2hP2(e.target.value)}>
+              <select className="input" value={h2hP2} onChange={e => { setH2hP2(e.target.value); setRivalryText(''); }}>
                 <option value="">Giocatore 2</option>
                 {players.map(p => (
                   <option key={p.id} value={p.id} disabled={p.id === h2hP1}>{p.name}</option>
@@ -766,6 +777,37 @@ export default function StatsPage() {
             </div>
           )}
 
+          {h2hStats && (
+            <div className="mt-3">
+              {!rivalryText ? (
+                <div className="card" style={{ textAlign: 'center', border: '1px dashed rgba(246,173,85,0.35)', background: 'rgba(246,173,85,0.03)' }}>
+                  <button
+                    onClick={async () => {
+                      setRivalryLoading(true);
+                      try {
+                        const text = await generateRivalryNarrative(h2hStats.p1name, h2hStats.p2name, { together: h2hStats.together, against: h2hStats.against, p1Goals: h2hStats.p1Goals, p2Goals: h2hStats.p2Goals });
+                        setRivalryText(text);
+                      } catch (e) { toast.error('Rivalità AI: ' + e.message); }
+                      finally { setRivalryLoading(false); }
+                    }}
+                    disabled={rivalryLoading}
+                    style={{ background: 'none', border: 'none', cursor: rivalryLoading ? 'default' : 'pointer', color: '#F6AD55', fontSize: '0.88rem', padding: '0.6rem 0', width: '100%' }}
+                  >
+                    {rivalryLoading ? '⏳ Generando la storia...' : '⚔️ AI Racconta la Rivalità'}
+                  </button>
+                </div>
+              ) : (
+                <div className="card" style={{ border: '1px solid rgba(246,173,85,0.4)', background: 'rgba(246,173,85,0.04)' }}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#F6AD55' }}>⚔️ La loro storia</span>
+                    <button onClick={() => setRivalryText('')} style={{ fontSize: '0.7rem', color: '#718096', background: 'none', border: 'none', cursor: 'pointer' }}>↺ Rigenera</button>
+                  </div>
+                  <p style={{ fontSize: '0.83rem', color: '#CBD5E0', lineHeight: 1.75, margin: 0, whiteSpace: 'pre-wrap' }}>{rivalryText}</p>
+                </div>
+              )}
+            </div>
+          )}
+
           {!h2hP1 || !h2hP2 ? (
             <div style={{ textAlign: 'center', padding: '2rem 1rem', color: '#718096' }}>
               <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>⚔️</div>
@@ -773,6 +815,32 @@ export default function StatsPage() {
             </div>
           ) : null}
         </div>
+      )}
+
+      {/* Report AI tab */}
+      {tab === 'report' && (
+        <ReportAITab
+          finishedMatches={finishedMatches}
+          players={players}
+          reportText={reportText}
+          setReportText={setReportText}
+          reportLoading={reportLoading}
+          setReportLoading={setReportLoading}
+          reportPeriod={reportPeriod}
+          setReportPeriod={setReportPeriod}
+        />
+      )}
+
+      {/* Hall of Fame/Shame tab */}
+      {tab === 'hall' && (
+        <HallTab
+          finishedMatches={finishedMatches}
+          players={players}
+          hallText={hallText}
+          setHallText={setHallText}
+          hallLoading={hallLoading}
+          setHallLoading={setHallLoading}
+        />
       )}
 
       {/* Squadre tab */}
@@ -891,6 +959,253 @@ export default function StatsPage() {
           </div>
         );
       })()}
+    </div>
+  );
+}
+
+// ─── Report AI Component ──────────────────────────────────────────────────────
+const REPORT_PERIODS = [
+  { key: '30d',    label: 'Ultimo mese' },
+  { key: 'season', label: 'Stagione' },
+  { key: 'all',    label: 'All-time' },
+];
+
+function ReportAITab({ finishedMatches, players, reportText, setReportText, reportLoading, setReportLoading, reportPeriod, setReportPeriod }) {
+  const buildStats = (period) => {
+    const now = Date.now();
+    const cutoff = period === '30d'
+      ? now - 30 * 24 * 60 * 60 * 1000
+      : period === 'season'
+        ? (() => { const n = new Date(); const y = n.getMonth() >= 8 ? n.getFullYear() : n.getFullYear() - 1; return new Date(y, 8, 1).getTime(); })()
+        : 0;
+    const filtered = cutoff === 0 ? finishedMatches : finishedMatches.filter(m => getMs(m.date) >= cutoff);
+    const matchCount = filtered.length;
+    const totalGoals = filtered.reduce((s, m) => s + (m.redScore || 0) + (m.blueScore || 0), 0);
+
+    const ps = {};
+    for (const p of players) ps[p.id] = { name: p.name, goals: 0, assists: 0, autogoals: 0, gkGoals: 0, matches: 0, wins: 0, losses: 0 };
+    for (const m of filtered) {
+      for (const side of ['redTeam', 'blueTeam']) {
+        for (const pl of (m[side] || [])) {
+          if (!ps[pl.id]) continue;
+          ps[pl.id].matches++;
+          const my = side === 'redTeam' ? (m.redScore ?? 0) : (m.blueScore ?? 0);
+          const their = side === 'redTeam' ? (m.blueScore ?? 0) : (m.redScore ?? 0);
+          if (my > their) ps[pl.id].wins++;
+          else if (my < their) ps[pl.id].losses++;
+        }
+      }
+      for (const ev of (m.events || [])) {
+        if (ev.type === 'goal') {
+          if (ev.scorerId && ps[ev.scorerId]) ps[ev.scorerId].goals++;
+          if (ev.assistId && ps[ev.assistId]) ps[ev.assistId].assists++;
+        }
+        if (ev.type === 'autogoal' && ev.scorerId && ps[ev.scorerId]) ps[ev.scorerId].autogoals++;
+        if (ev.gkConcededId && ps[ev.gkConcededId]) ps[ev.gkConcededId].gkGoals++;
+      }
+    }
+    const list = Object.values(ps).filter(p => p.matches > 0);
+    const topScorer   = list.filter(p => p.goals > 0).sort((a, b) => b.goals - a.goals)[0] || null;
+    const topAssist   = list.filter(p => p.assists > 0).sort((a, b) => b.assists - a.assists)[0] || null;
+    const topAutogoal = list.filter(p => p.autogoals > 0).sort((a, b) => b.autogoals - a.autogoals)[0] || null;
+    const worstGk     = list.filter(p => p.gkGoals >= 2).sort((a, b) => b.gkGoals - a.gkGoals)[0] || null;
+    const mostMatches = list.sort((a, b) => b.matches - a.matches)[0] || null;
+    const withMinMatches = list.filter(p => p.matches >= 5);
+    const topWinRate  = withMinMatches.length > 0
+      ? [...withMinMatches].sort((a, b) => (b.wins / b.matches) - (a.wins / a.matches))[0]
+      : null;
+    // Streaks from player objects
+    const streaks = players.filter(p => p.streak?.count >= 3);
+    const bestStreak  = streaks.filter(p => p.streak.type === 'win').sort((a, b) => b.streak.count - a.streak.count)[0] || null;
+    const worstStreak = streaks.filter(p => p.streak.type === 'loss').sort((a, b) => b.streak.count - a.streak.count)[0] || null;
+
+    return {
+      matchCount, totalGoals,
+      topScorer: topScorer ? { name: topScorer.name, goals: topScorer.goals } : null,
+      topAssist: topAssist ? { name: topAssist.name, assists: topAssist.assists } : null,
+      topAutogoal: topAutogoal ? { name: topAutogoal.name, autogoals: topAutogoal.autogoals } : null,
+      worstGk: worstGk ? { name: worstGk.name, goals: worstGk.gkGoals } : null,
+      mostMatches: mostMatches ? { name: mostMatches.name, matches: mostMatches.matches } : null,
+      topWinRate: topWinRate ? { name: topWinRate.name, pct: Math.round((topWinRate.wins / topWinRate.matches) * 100) } : null,
+      bestStreak: bestStreak ? { name: bestStreak.name, count: bestStreak.streak.count } : null,
+      worstStreak: worstStreak ? { name: worstStreak.name, count: worstStreak.streak.count } : null,
+    };
+  };
+
+  const handleGenerate = async () => {
+    setReportLoading(true);
+    try {
+      const periodLabel = REPORT_PERIODS.find(p => p.key === reportPeriod)?.label || reportPeriod;
+      const stats = buildStats(reportPeriod);
+      if (stats.matchCount === 0) { toast('Nessuna partita nel periodo selezionato'); setReportLoading(false); return; }
+      const text = await generatePeriodReport(periodLabel, stats);
+      setReportText(text);
+    } catch (e) {
+      toast.error('Report AI: ' + e.message);
+    } finally {
+      setReportLoading(false);
+    }
+  };
+
+  return (
+    <div>
+      <div className="card mb-4" style={{ border: '1px solid rgba(104,211,145,0.25)' }}>
+        <h3 className="mb-3" style={{ fontSize: '0.95rem', color: '#68D391' }}>📝 Report AI</h3>
+        <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+          {REPORT_PERIODS.map(p => (
+            <button key={p.key} onClick={() => { setReportPeriod(p.key); setReportText(''); }}
+              style={{
+                padding: '0.3rem 0.75rem', borderRadius: '999px', border: 'none', cursor: 'pointer',
+                fontWeight: 600, fontSize: '0.8rem',
+                background: reportPeriod === p.key ? 'rgba(104,211,145,0.25)' : 'rgba(74,85,104,0.4)',
+                color: reportPeriod === p.key ? '#68D391' : '#A0AEC0',
+              }}>
+              {p.label}
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={handleGenerate}
+          disabled={reportLoading}
+          style={{
+            width: '100%', padding: '0.65rem', border: '1px solid rgba(104,211,145,0.4)',
+            borderRadius: '8px', background: 'rgba(104,211,145,0.08)',
+            color: '#68D391', fontWeight: 700, fontSize: '0.9rem', cursor: reportLoading ? 'default' : 'pointer',
+          }}>
+          {reportLoading ? '⏳ Generando il report...' : reportText ? '↺ Rigenera Report' : '✨ Genera Report'}
+        </button>
+      </div>
+
+      {reportText && (
+        <div className="card" style={{ border: '1px solid rgba(104,211,145,0.3)', background: 'rgba(104,211,145,0.04)' }}>
+          <p style={{ fontSize: '0.84rem', color: '#CBD5E0', lineHeight: 1.8, margin: 0, whiteSpace: 'pre-wrap' }}>{reportText}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Hall of Fame / Shame Component ──────────────────────────────────────────
+function HallTab({ finishedMatches, players, hallText, setHallText, hallLoading, setHallLoading }) {
+  const buildHallStats = () => {
+    const ps = {};
+    for (const p of players) ps[p.id] = { name: p.name, goals: 0, assists: 0, autogoals: 0, gkGoals: 0, matches: 0, wins: 0, losses: 0 };
+    for (const m of finishedMatches) {
+      for (const side of ['redTeam', 'blueTeam']) {
+        for (const pl of (m[side] || [])) {
+          if (!ps[pl.id]) continue;
+          ps[pl.id].matches++;
+          const my = side === 'redTeam' ? (m.redScore ?? 0) : (m.blueScore ?? 0);
+          const their = side === 'redTeam' ? (m.blueScore ?? 0) : (m.redScore ?? 0);
+          if (my > their) ps[pl.id].wins++;
+          else if (my < their) ps[pl.id].losses++;
+        }
+      }
+      for (const ev of (m.events || [])) {
+        if (ev.type === 'goal') {
+          if (ev.scorerId && ps[ev.scorerId]) ps[ev.scorerId].goals++;
+          if (ev.assistId && ps[ev.assistId]) ps[ev.assistId].assists++;
+        }
+        if (ev.type === 'autogoal' && ev.scorerId && ps[ev.scorerId]) ps[ev.scorerId].autogoals++;
+        if (ev.gkConcededId && ps[ev.gkConcededId]) ps[ev.gkConcededId].gkGoals++;
+      }
+    }
+    const list = Object.values(ps).filter(p => p.matches >= 5);
+    if (list.length === 0) return null;
+
+    const sortBy = (fn) => [...list].sort(fn)[0];
+    const topScorer    = sortBy((a, b) => b.goals - a.goals);
+    const topAssist    = sortBy((a, b) => b.assists - a.assists);
+    const topWinRate   = [...list].sort((a, b) => (b.wins / b.matches) - (a.wins / a.matches))[0];
+    const mostPresent  = sortBy((a, b) => b.matches - a.matches);
+    const topAutogoal  = list.filter(p => p.autogoals > 0).sort((a, b) => b.autogoals - a.autogoals)[0];
+    const worstWinRate = [...list].sort((a, b) => (a.wins / a.matches) - (b.wins / b.matches))[0];
+    const worstGk      = list.filter(p => p.gkGoals > 0).sort((a, b) => b.gkGoals - a.gkGoals)[0];
+
+    const fame = [
+      topScorer  && { name: topScorer.name,   reason: `${topScorer.goals} gol segnati` },
+      topAssist  && { name: topAssist.name,    reason: `${topAssist.assists} assist` },
+      topWinRate && { name: topWinRate.name,   reason: `${Math.round(topWinRate.wins / topWinRate.matches * 100)}% win rate` },
+      mostPresent && { name: mostPresent.name, reason: `${mostPresent.matches} presenze` },
+    ].filter(Boolean);
+
+    const shame = [
+      topAutogoal  && { name: topAutogoal.name,  reason: `${topAutogoal.autogoals} autogol` },
+      worstWinRate && { name: worstWinRate.name,  reason: `${Math.round(worstWinRate.wins / worstWinRate.matches * 100)}% win rate` },
+      worstGk      && { name: worstGk.name,       reason: `${worstGk.gkGoals} gol subiti in porta` },
+    ].filter(Boolean);
+
+    return { fame, shame };
+  };
+
+  const handleGenerate = async () => {
+    setHallLoading(true);
+    try {
+      const stats = buildHallStats();
+      if (!stats) { toast('Servono almeno 5 partite per giocatore'); setHallLoading(false); return; }
+      const text = await generateHallOfFame(stats);
+      setHallText(text);
+    } catch (e) {
+      toast.error('Hall of Fame AI: ' + e.message);
+    } finally {
+      setHallLoading(false);
+    }
+  };
+
+  const stats = useMemo(() => {
+    try { return buildHallStats(); } catch { return null; }
+  }, [finishedMatches, players]);
+
+  return (
+    <div>
+      {stats && (
+        <div className="grid-2 mb-4" style={{ gap: '0.75rem' }}>
+          <div className="card" style={{ border: '1px solid rgba(104,211,145,0.3)' }}>
+            <h3 className="mb-2" style={{ fontSize: '0.85rem', color: '#68D391' }}>🏆 Hall of Fame</h3>
+            {stats.fame.map(p => (
+              <div key={p.name} style={{ padding: '0.3rem 0', borderBottom: '1px solid #2D3748', fontSize: '0.8rem' }}>
+                <span style={{ fontWeight: 600 }}>{p.name}</span>
+                <span style={{ color: '#718096', display: 'block', fontSize: '0.7rem' }}>{p.reason}</span>
+              </div>
+            ))}
+          </div>
+          <div className="card" style={{ border: '1px solid rgba(252,129,129,0.3)' }}>
+            <h3 className="mb-2" style={{ fontSize: '0.85rem', color: '#FC8181' }}>💀 Hall of Shame</h3>
+            {stats.shame.map(p => (
+              <div key={p.name} style={{ padding: '0.3rem 0', borderBottom: '1px solid #2D3748', fontSize: '0.8rem' }}>
+                <span style={{ fontWeight: 600 }}>{p.name}</span>
+                <span style={{ color: '#718096', display: 'block', fontSize: '0.7rem' }}>{p.reason}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="card mb-4" style={{ textAlign: 'center', border: '1px dashed rgba(251,211,141,0.35)', background: 'rgba(251,211,141,0.03)' }}>
+        <button
+          onClick={handleGenerate}
+          disabled={hallLoading}
+          style={{ background: 'none', border: 'none', cursor: hallLoading ? 'default' : 'pointer', color: '#FBD38D', fontSize: '0.9rem', padding: '0.75rem 0', width: '100%', fontWeight: 600 }}
+        >
+          {hallLoading ? '⏳ Preparando la cerimonia...' : hallText ? '↺ Ripeti la Cerimonia' : '🎖️ Genera Cerimonia AI'}
+        </button>
+      </div>
+
+      {hallText && (
+        <div className="card" style={{ border: '1px solid rgba(251,211,141,0.35)', background: 'rgba(251,211,141,0.04)' }}>
+          <div className="flex items-center justify-between mb-3">
+            <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#FBD38D' }}>🎖️ La Cerimonia</span>
+          </div>
+          <p style={{ fontSize: '0.84rem', color: '#CBD5E0', lineHeight: 1.8, margin: 0, whiteSpace: 'pre-wrap' }}>{hallText}</p>
+        </div>
+      )}
+
+      {!stats && (
+        <div style={{ textAlign: 'center', padding: '2rem 1rem', color: '#718096' }}>
+          <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>🏛️</div>
+          <p className="text-sm">Servono almeno 5 partite per giocatore per la Hall</p>
+        </div>
+      )}
     </div>
   );
 }

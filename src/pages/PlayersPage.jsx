@@ -9,7 +9,7 @@ import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 import { getMs } from '../utils/dateUtils';
-import { generatePlayerTrendAnalysis } from '../services/geminiService';
+import { generatePlayerTrendAnalysis, generatePlayerNickname } from '../services/geminiService';
 import { RESULT_COLORS, CLR_WIN, CLR_DRAW, CLR_LOSS, AVATAR_COLORS, CLR_MUTED, MEDAL_COLORS } from '../constants/colors';
 
 const ROLES = ['Portiere', 'Difensore', 'Centrocampista', 'Attaccante'];
@@ -593,6 +593,7 @@ export default function PlayersPage() {
 
         <PiTrendChart allMatches={allMatches} playerId={p.id} playerPi={p.powerIndex} />
 
+        <AiNicknameCard player={p} seasonStats={playerSeasonStats[p.id]} />
         <AiTrendCard player={p} allMatches={allMatches} />
 
         <PlayerRecords allMatches={allMatches} player={p} />
@@ -1107,6 +1108,66 @@ function AiTrendCard({ player, allMatches }) {
       <p style={{ fontSize: '0.84rem', color: '#CBD5E0', lineHeight: 1.75, margin: 0, whiteSpace: 'pre-wrap' }}>
         {analysis}
       </p>
+    </div>
+  );
+}
+
+function AiNicknameCard({ player, seasonStats }) {
+  const [nickname, setNickname] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const generate = async () => {
+    if (nickname) { setNickname(null); return; }
+    setLoading(true);
+    try {
+      const as = player.stats || {};
+      const stats = {
+        goals:       as.goals    || 0,
+        assists:     as.assists  || 0,
+        autogoals:   as.autogoals || 0,
+        matches:     as.matches  || 0,
+        wins:        as.wins     || 0,
+        losses:      as.losses   || 0,
+        primaryRole: player.primaryRole || '',
+        powerIndex:  player.powerIndex  || 50,
+        streak:      player.streak      || null,
+      };
+      const raw = await generatePlayerNickname(player, stats);
+      // Parse "Soprannome: X\nMotivazione: Y"
+      const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+      const sopr = lines.find(l => l.toLowerCase().startsWith('soprannome:'))?.replace(/^soprannome:\s*/i, '') || raw;
+      const motiv = lines.find(l => l.toLowerCase().startsWith('motivazione:'))?.replace(/^motivazione:\s*/i, '') || '';
+      setNickname({ soprannome: sopr, motivazione: motiv });
+    } catch (e) {
+      toast.error('Soprannome AI: ' + e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!nickname) {
+    return (
+      <div className="card mb-4" style={{ textAlign: 'center', border: '1px dashed rgba(246,173,85,0.35)', background: 'rgba(246,173,85,0.03)' }}>
+        <button onClick={generate} disabled={loading}
+          style={{ background: 'none', border: 'none', cursor: loading ? 'default' : 'pointer', color: '#F6AD55', fontSize: '0.88rem', padding: '0.6rem 0', width: '100%' }}>
+          {loading ? '⏳ Generando soprannome...' : '🏷️ Genera soprannome AI'}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card mb-4" style={{ border: '1px solid rgba(246,173,85,0.4)', background: 'rgba(246,173,85,0.05)', textAlign: 'center' }}>
+      <div className="flex items-center justify-between mb-2">
+        <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#F6AD55' }}>🏷️ Soprannome AI</span>
+        <button onClick={generate} style={{ fontSize: '0.7rem', color: '#718096', background: 'none', border: 'none', cursor: 'pointer' }}>↺ Rigenera</button>
+      </div>
+      <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#F6AD55', marginBottom: '0.4rem', letterSpacing: '0.02em' }}>
+        "{nickname.soprannome}"
+      </div>
+      {nickname.motivazione && (
+        <div style={{ fontSize: '0.78rem', color: '#A0AEC0', fontStyle: 'italic' }}>{nickname.motivazione}</div>
+      )}
     </div>
   );
 }

@@ -149,6 +149,137 @@ Rispondi ESCLUSIVAMENTE con un JSON valido (niente testo prima o dopo):
   return { red, blue, reasoning: parsed.reasoning || '' };
 }
 
+// ─── Previsione risultato pre-partita ─────────────────────────────────────────
+export async function generateMatchPrediction(redTeam, blueTeam) {
+  const fmt = team => team.map(p => {
+    const pi = (p.powerIndex || 50).toFixed(1);
+    const role = p.primaryRole || 'N/A';
+    const streakStr = p.streak?.count >= 2
+      ? ` [streak ${p.streak.count} ${p.streak.type === 'win' ? 'V' : 'S'}]`
+      : '';
+    return `${p.name} (PI:${pi}, ${role}${streakStr})`;
+  }).join(', ');
+  const redPI = redTeam.reduce((s, p) => s + (p.powerIndex || 50), 0).toFixed(1);
+  const bluePI = blueTeam.reduce((s, p) => s + (p.powerIndex || 50), 0).toFixed(1);
+
+  const prompt = `Sei un pronosticatore calcistico saccente e spesso sbagliato. \
+Analizza le due squadre di calcetto e fai un pronostico divertente e sarcastico in italiano, \
+circa 3 paragrafi. Cita i nomi dei giocatori, fai battute, esagera difetti e pregi. \
+Concludi con un risultato finale "pronosticato" (tipo "3-2 per i Rossi" o "0-0 imbarazzante"). \
+Non usare markdown, solo prosa.
+
+SQUADRA ROSSA (PI totale: ${redPI}):
+${fmt(redTeam)}
+
+SQUADRA BLU (PI totale: ${bluePI}):
+${fmt(blueTeam)}
+
+Scrivi il pronostico ora:`;
+
+  return callGemini(prompt, { temperature: 0.95, maxTokens: 500 });
+}
+
+// ─── Report mensile/stagionale AI ─────────────────────────────────────────────
+export async function generatePeriodReport(periodLabel, topStats) {
+  const { topScorer, topAssist, topWinRate, mostMatches, topAutogoal, worstGk, matchCount, totalGoals, bestStreak, worstStreak } = topStats;
+  const line = (label, val) => val ? `\n- ${label}: ${val}` : '';
+
+  const prompt = `Sei il cronista ufficiale di un torneo di calcetto amatoriale tra amici. \
+Scrivi un report del periodo "${periodLabel}" in italiano, nello stile di un giornale sportivo: \
+drammatico, ironico, con aneddoti sui giocatori più significativi. \
+Circa 4 paragrafi. No markdown, solo prosa.
+
+STATISTICHE DEL PERIODO:
+- Partite disputate: ${matchCount}
+- Gol totali: ${totalGoals}${line('Capocannoniere', topScorer ? `${topScorer.name} con ${topScorer.goals} gol` : null)}${line('Top Assistman', topAssist ? `${topAssist.name} con ${topAssist.assists} assist` : null)}${line('Miglior Win Rate', topWinRate ? `${topWinRate.name} (${topWinRate.pct}%, min 5 partite)` : null)}${line('Più presente', mostMatches ? `${mostMatches.name} con ${mostMatches.matches} partite` : null)}${line('Re degli Autogol', topAutogoal ? `${topAutogoal.name} con ${topAutogoal.autogoals} autogol` : null)}${line('Peggior Portiere', worstGk ? `${worstGk.name} con ${worstGk.goals} gol subiti` : null)}${line('Streak migliore', bestStreak ? `${bestStreak.name}: ${bestStreak.count} vittorie consecutive` : null)}${line('Streak peggiore', worstStreak ? `${worstStreak.name}: ${worstStreak.count} sconfitte consecutive` : null)}
+
+Scrivi il report ora:`;
+
+  return callGemini(prompt, { temperature: 0.9, maxTokens: 650 });
+}
+
+// ─── Hall of Fame / Hall of Shame AI ─────────────────────────────────────────
+export async function generateHallOfFame(hallStats) {
+  const { fame, shame } = hallStats;
+  const fmtFame  = fame.map(p  => `${p.name} (${p.reason})`).join('; ');
+  const fmtShame = shame.map(p => `${p.name} (${p.reason})`).join('; ');
+
+  const prompt = `Sei il presidente di un circolo calcistico amatoriale che tiene il discorso \
+annuale di premiazione (e di umiliazione pubblica). \
+Scrivi la cerimonia in italiano: prima celebra i campioni nella "Hall of Fame", \
+poi "consegna" i premi della vergogna nella "Hall of Shame". \
+Sii cerimonioso, esagerato, ironico, comico. Circa 5 paragrafi. No markdown.
+
+HALL OF FAME (i migliori di sempre):
+${fmtFame || 'Nessuno abbastanza degno'}
+
+HALL OF SHAME (i peggiori di sempre):
+${fmtShame || 'Tutti si sono comportati decentemente (miracolo)'}
+
+Scrivi la cerimonia ora:`;
+
+  return callGemini(prompt, { temperature: 0.93, maxTokens: 750 });
+}
+
+// ─── Rivalità tra giocatori AI ────────────────────────────────────────────────
+export async function generateRivalryNarrative(p1name, p2name, rivalryStats) {
+  const { together, against, p1Goals, p2Goals } = rivalryStats;
+
+  const prompt = `Sei un telecronista appassionato che racconta la grande rivalità/amicizia \
+tra due giocatori di calcetto amatoriale. \
+Scrivi una narrazione drammatica in italiano: circa 3-4 paragrafi. \
+Usa toni epici ma ironici, come se fosse una rivalità da Champions League tra amici del quartiere. \
+No markdown, solo prosa.
+
+PROTAGONISTI: ${p1name} vs ${p2name}
+
+QUANDO HANNO GIOCATO INSIEME (${together.matches} partite):
+- Vittorie: ${together.wins} | Pareggi: ${together.draws} | Sconfitte: ${together.losses}
+- Assist reciproci: ${together.mutualAssists || 0}
+
+QUANDO SI SONO AFFRONTATI (${against.matches} partite):
+- Vittorie ${p1name}: ${against.p1wins}
+- Vittorie ${p2name}: ${against.p2wins}
+- Pareggi: ${against.draws}
+
+GOL TOTALI NELLE PARTITE CONDIVISE:
+- ${p1name}: ${p1Goals} gol
+- ${p2name}: ${p2Goals} gol
+
+Racconta la loro storia ora:`;
+
+  return callGemini(prompt, { temperature: 0.93, maxTokens: 550 });
+}
+
+// ─── Soprannome AI ────────────────────────────────────────────────────────────
+export async function generatePlayerNickname(player, stats) {
+  const { goals, assists, autogoals, matches, wins, losses, primaryRole, powerIndex, streak } = stats;
+  const winRate = matches > 0 ? Math.round((wins / matches) * 100) : 0;
+  const streakStr = streak?.count >= 2
+    ? `streak di ${streak.count} ${streak.type === 'win' ? 'vittorie' : 'sconfitte'}`
+    : 'nessuna streak attiva';
+
+  const prompt = `Sei un tifoso creativo che inventa soprannomi calcistici per i giocatori \
+della squadra amatoriale. Inventa UN SOLO soprannome in italiano per il giocatore seguendo queste regole:
+- Deve essere divertente, memorabile, eventualmente irriverente
+- Può essere un gioco di parole col nome, col ruolo, o con le statistiche
+- Massimo 4 parole
+- Poi aggiungi UNA sola riga di motivazione (max 15 parole)
+
+Rispondi ESATTAMENTE in questo formato (due righe, niente altro):
+Soprannome: [il soprannome]
+Motivazione: [breve spiegazione]
+
+DATI GIOCATORE: ${player.name}
+- Ruolo: ${primaryRole || 'N/A'}
+- Power Index: ${(powerIndex || 50).toFixed(1)}/100
+- Partite: ${matches} | Gol: ${goals} | Assist: ${assists} | Autogol: ${autogoals}
+- Win Rate: ${winRate}% | Vittorie: ${wins} | Sconfitte: ${losses}
+- Streak attuale: ${streakStr}`;
+
+  return callGemini(prompt, { temperature: 0.97, maxTokens: 120 });
+}
+
 // ─── Analisi trend giocatore ──────────────────────────────────────────────────
 // recentData: array di max 4 oggetti { result: 'W'|'L'|'D', goals, assists, autogoals }
 export async function generatePlayerTrendAnalysis(player, recentData) {

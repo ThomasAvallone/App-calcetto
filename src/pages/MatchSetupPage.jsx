@@ -4,7 +4,7 @@ import usePlayersStore from '../store/playersStore';
 import useMatchStore from '../store/matchStore';
 import { generateMatchPreview } from '../services/reportService';
 import { fetchWeatherForDate } from '../services/weatherService';
-import { generateAIBalancedTeams } from '../services/geminiService';
+import { generateAIBalancedTeams, generateMatchPrediction } from '../services/geminiService';
 import toast from 'react-hot-toast';
 
 const ROLES = ['Portiere', 'Difensore', 'Centrocampista', 'Attaccante'];
@@ -25,6 +25,8 @@ export default function MatchSetupPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
   const [aiReasoning, setAiReasoning] = useState('');
+  const [prediction, setPrediction] = useState('');
+  const [predictionLoading, setPredictionLoading] = useState(false);
 
   const togglePlayer = (id) => {
     setSelectedIds(prev =>
@@ -55,6 +57,7 @@ export default function MatchSetupPage() {
     const balanced = balanceTeams(selectedIds);
     setTeams(balanced);
     setAiReasoning('');
+    setPrediction('');
     const prev = generateMatchPreview({
       redTeam: balanced.red,
       blueTeam: balanced.blue,
@@ -73,6 +76,7 @@ export default function MatchSetupPage() {
       const { red, blue, reasoning } = await generateAIBalancedTeams(pool);
       setTeams({ red, blue });
       setAiReasoning(reasoning);
+      setPrediction('');
       const prev = generateMatchPreview({
         redTeam: red,
         blueTeam: blue,
@@ -143,6 +147,22 @@ export default function MatchSetupPage() {
       toast.error('Errore: ' + e.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handlePrediction = async () => {
+    if (prediction) { setPrediction(''); return; }
+    setPredictionLoading(true);
+    try {
+      const pool = players.filter(p => [...teams.red, ...teams.blue].some(t => t.id === p.id));
+      const redFull  = teams.red.map(t  => pool.find(p => p.id === t.id) || t);
+      const blueFull = teams.blue.map(t => pool.find(p => p.id === t.id) || t);
+      const text = await generateMatchPrediction(redFull, blueFull);
+      setPrediction(text);
+    } catch (e) {
+      toast.error('Pronostico AI non disponibile: ' + e.message);
+    } finally {
+      setPredictionLoading(false);
     }
   };
 
@@ -277,6 +297,27 @@ export default function MatchSetupPage() {
               <span style={{ fontSize: '0.75rem', color: '#718096' }}>Ragionamento sulla formazione</span>
             </div>
             <p style={{ fontSize: '0.82rem', color: '#A0AEC0', lineHeight: 1.5, margin: 0 }}>{aiReasoning}</p>
+          </div>
+        )}
+
+        {/* AI Prediction */}
+        {!prediction ? (
+          <div className="card mb-3" style={{ textAlign: 'center', border: '1px dashed rgba(246,173,85,0.35)', background: 'rgba(246,173,85,0.03)' }}>
+            <button
+              onClick={handlePrediction}
+              disabled={predictionLoading}
+              style={{ background: 'none', border: 'none', cursor: predictionLoading ? 'default' : 'pointer', color: '#F6AD55', fontSize: '0.88rem', padding: '0.6rem 0', width: '100%' }}
+            >
+              {predictionLoading ? '⏳ Pronostico in corso...' : '🔮 Pronostico AI pre-partita'}
+            </button>
+          </div>
+        ) : (
+          <div className="card mb-3" style={{ border: '1px solid rgba(246,173,85,0.4)', background: 'rgba(246,173,85,0.04)' }}>
+            <div className="flex items-center justify-between mb-2">
+              <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#F6AD55' }}>🔮 Pronostico AI</span>
+              <button onClick={() => setPrediction('')} style={{ fontSize: '0.7rem', color: '#718096', background: 'none', border: 'none', cursor: 'pointer' }}>✕</button>
+            </div>
+            <p style={{ fontSize: '0.82rem', color: '#CBD5E0', lineHeight: 1.7, margin: 0, whiteSpace: 'pre-wrap' }}>{prediction}</p>
           </div>
         )}
 
