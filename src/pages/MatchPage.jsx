@@ -449,7 +449,7 @@ export default function MatchPage() {
           {formatTime(displayTime)}
         </div>
         <div className="text-sm text-muted mb-3">
-          {isFinished ? '⏹ Partita conclusa' : isOvertime ? '⏱ Supplementari...' : isRunning ? '⏱ In corso...' : '⏸ In pausa'}
+          {isFinished ? '⏹ Partita conclusa' : !isRunning ? '⏸ In pausa' : isOvertime ? '⏱ Supplementari...' : '⏱ In corso...'}
         </div>
         <div className="progress-bar mb-4">
           <div className="progress-bar-fill" style={{ width: `${progress}%`, background: isOvertime ? '#FC8181' : isNearEnd ? '#F6E05E' : '#4FD1C5' }} />
