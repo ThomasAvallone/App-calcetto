@@ -83,13 +83,13 @@ export default function MatchPage() {
         setAssistCountdown(prev => {
           if (prev <= 1) {
             clearInterval(interval);
-            handleAssistSelected(null, null);
             return 0;
           }
           return prev - 1;
         });
       }, 1000);
-      return () => clearInterval(interval);
+      const timeout = setTimeout(() => handleAssistSelected(null, null), 5000);
+      return () => { clearInterval(interval); clearTimeout(timeout); };
     }
   }, [pendingAssist]);
 

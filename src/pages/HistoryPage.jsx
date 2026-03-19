@@ -28,9 +28,9 @@ function getMatchAssistants(m) {
     [...(m.redTeam || []), ...(m.blueTeam || [])].filter(p => p.id).map(p => [p.id, p.name])
   );
   return (m.events || [])
-    .filter(e => e.type === 'goal' && (e.assistName || e.assistId))
+    .filter(e => e.type === 'goal' && (e.assistId || (e.assistName && e.assistName !== 'Nessuno')))
     .map(e => (e.assistName || playerById[e.assistId] || '').toUpperCase())
-    .filter(Boolean);
+    .filter(n => n && n !== 'NESSUNO');
 }
 
 function hashStr(str) {
