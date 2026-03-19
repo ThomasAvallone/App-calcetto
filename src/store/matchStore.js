@@ -12,7 +12,6 @@ const DEFAULT_TIMER_STATE = {
   isRunning: false,
   startTimestamp: null,
   elapsedMs: 0,
-  totalMs: 60 * 60 * 1000,
 };
 
 const useMatchStore = create(

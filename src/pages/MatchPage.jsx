@@ -9,7 +9,7 @@ import { exportMatchToSheets } from '../services/sheetsService';
 import { recalculatePlayerStats, updateMatch } from '../firebase/firestore';
 import toast from 'react-hot-toast';
 
-const TOTAL_SECONDS = 60 * 60;
+const MATCH_DURATION = 60 * 60; // durata regolamentare (per progress bar)
 
 function pad(n) { return String(Math.floor(n)).padStart(2, '0'); }
 function formatTime(secs) { return `${pad(secs / 60)}:${pad(secs % 60)}`; }
@@ -108,9 +108,9 @@ export default function MatchPage() {
 
   const isRunning = timerState.isRunning;
   const isFinished = match.status === 'finished';
-  const remaining = Math.max(0, TOTAL_SECONDS - displayTime);
-  const progress = (displayTime / TOTAL_SECONDS) * 100;
-  const isNearEnd = remaining < 5 * 60;
+  const progress = Math.min((displayTime / MATCH_DURATION) * 100, 100);
+  const isOvertime = displayTime >= MATCH_DURATION;
+  const isNearEnd = !isOvertime && displayTime >= (MATCH_DURATION - 5 * 60);
   const redTeam = match.redTeam || [];
   const blueTeam = match.blueTeam || [];
 
@@ -445,14 +445,14 @@ export default function MatchPage() {
 
       {/* Timer */}
       <div className="card mb-4" style={{ textAlign: 'center', padding: '2rem 1.5rem' }}>
-        <div className={`timer-display ${!isRunning ? 'paused' : ''} ${isNearEnd && isRunning ? 'ending' : ''}`}>
-          {formatTime(remaining)}
+        <div className={`timer-display ${!isRunning ? 'paused' : ''} ${isOvertime && isRunning ? 'ending' : ''} ${isNearEnd && isRunning ? 'ending' : ''}`}>
+          {formatTime(displayTime)}
         </div>
         <div className="text-sm text-muted mb-3">
-          {isFinished ? '⏹ Partita conclusa' : isRunning ? '⏱ In corso...' : '⏸ In pausa'}
+          {isFinished ? '⏹ Partita conclusa' : isOvertime ? '⏱ Supplementari...' : isRunning ? '⏱ In corso...' : '⏸ In pausa'}
         </div>
         <div className="progress-bar mb-4">
-          <div className="progress-bar-fill" style={{ width: `${progress}%`, background: isNearEnd ? '#FC8181' : '#4FD1C5' }} />
+          <div className="progress-bar-fill" style={{ width: `${progress}%`, background: isOvertime ? '#FC8181' : isNearEnd ? '#F6E05E' : '#4FD1C5' }} />
         </div>
 
         {/* Score */}
