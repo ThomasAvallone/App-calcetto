@@ -226,8 +226,10 @@ export default function StatsPage() {
   // Carica cache rivalità H2H quando cambiano i giocatori selezionati
   useEffect(() => {
     if (!h2hP1 || !h2hP2) { setRivalryText(''); setRivalryStale(false); return; }
+    let cancelled = false;
     const key = `rivalry_${[h2hP1, h2hP2].sort().join('_')}`;
     getAICache(key).then(data => {
+      if (cancelled) return;
       if (data?.text) {
         setRivalryText(data.text);
         setRivalryStale(!!lastMatchId && data.lastMatchId !== lastMatchId);
@@ -236,6 +238,7 @@ export default function StatsPage() {
         setRivalryStale(false);
       }
     }).catch(() => {});
+    return () => { cancelled = true; };
   }, [h2hP1, h2hP2]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // GK stats always computed live from events (Firestore p.stats can be stale for GK fields)
@@ -797,22 +800,24 @@ export default function StatsPage() {
             </div>
           )}
 
-          {h2hStats && (
+          {h2hStats && (() => {
+            const handleRivalryGenerate = async () => {
+              setRivalryLoading(true);
+              try {
+                const text = await generateRivalryNarrative(h2hStats.p1name, h2hStats.p2name, { together: h2hStats.together, against: h2hStats.against, p1Goals: h2hStats.p1Goals, p2Goals: h2hStats.p2Goals });
+                setRivalryText(text);
+                setRivalryStale(false);
+                const key = `rivalry_${[h2hP1, h2hP2].sort().join('_')}`;
+                setAICache(key, { text, lastMatchId, generatedAt: new Date().toISOString() });
+              } catch (e) { toast.error('Rivalità AI: ' + e.message); }
+              finally { setRivalryLoading(false); }
+            };
+            return (
             <div className="mt-3">
               {!rivalryText ? (
                 <div className="card" style={{ textAlign: 'center', border: '1px dashed rgba(246,173,85,0.35)', background: 'rgba(246,173,85,0.03)' }}>
                   <button
-                    onClick={async () => {
-                      setRivalryLoading(true);
-                      try {
-                        const text = await generateRivalryNarrative(h2hStats.p1name, h2hStats.p2name, { together: h2hStats.together, against: h2hStats.against, p1Goals: h2hStats.p1Goals, p2Goals: h2hStats.p2Goals });
-                        setRivalryText(text);
-                        setRivalryStale(false);
-                        const key = `rivalry_${[h2hP1, h2hP2].sort().join('_')}`;
-                        setAICache(key, { text, lastMatchId, generatedAt: new Date().toISOString() });
-                      } catch (e) { toast.error('Rivalità AI: ' + e.message); }
-                      finally { setRivalryLoading(false); }
-                    }}
+                    onClick={handleRivalryGenerate}
                     disabled={rivalryLoading}
                     style={{ background: 'none', border: 'none', cursor: rivalryLoading ? 'default' : 'pointer', color: '#F6AD55', fontSize: '0.88rem', padding: '0.6rem 0', width: '100%' }}
                   >
@@ -831,17 +836,7 @@ export default function StatsPage() {
                       )}
                     </div>
                     <button
-                      onClick={async () => {
-                        setRivalryLoading(true);
-                        try {
-                          const text = await generateRivalryNarrative(h2hStats.p1name, h2hStats.p2name, { together: h2hStats.together, against: h2hStats.against, p1Goals: h2hStats.p1Goals, p2Goals: h2hStats.p2Goals });
-                          setRivalryText(text);
-                          setRivalryStale(false);
-                          const key = `rivalry_${[h2hP1, h2hP2].sort().join('_')}`;
-                          setAICache(key, { text, lastMatchId, generatedAt: new Date().toISOString() });
-                        } catch (e) { toast.error('Rivalità AI: ' + e.message); }
-                        finally { setRivalryLoading(false); }
-                      }}
+                      onClick={handleRivalryGenerate}
                       disabled={rivalryLoading}
                       style={{ fontSize: '0.7rem', color: '#718096', background: 'none', border: 'none', cursor: rivalryLoading ? 'default' : 'pointer' }}>
                       {rivalryLoading ? '⏳' : '↺ Rigenera'}
@@ -851,7 +846,8 @@ export default function StatsPage() {
                 </div>
               )}
             </div>
-          )}
+            );
+          })()}
 
           {!h2hP1 || !h2hP2 ? (
             <div style={{ textAlign: 'center', padding: '2rem 1rem', color: '#718096' }}>
@@ -1024,12 +1020,15 @@ function ReportAITab({ finishedMatches, players, reportText, setReportText, repo
   useEffect(() => {
     setReportText('');
     setReportStale(false);
+    let cancelled = false;
     getAICache(`report_${reportPeriod}`).then(data => {
+      if (cancelled) return;
       if (data?.text) {
         setReportText(data.text);
         setReportStale(!!lastMatchId && data.lastMatchId !== lastMatchId);
       }
     }).catch(() => {});
+    return () => { cancelled = true; };
   }, [reportPeriod]); // eslint-disable-line react-hooks/exhaustive-deps
   const buildStats = (period) => {
     const now = Date.now();

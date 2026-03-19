@@ -1044,6 +1044,8 @@ function PiTrendChart({ allMatches, playerId, playerPi }) {
 
 function AiTrendCard({ player, allMatches }) {
   const [loading, setLoading] = useState(false);
+  // Optimistic local state: bridges the gap between updatePlayer and Firestore subscription
+  const [pendingText, setPendingText] = useState(null);
 
   // Most recent non-historical finished match for this player
   const mostRecentMatch = useMemo(() => {
@@ -1057,9 +1059,14 @@ function AiTrendCard({ player, allMatches }) {
   }, [allMatches, player.id]);
 
   const cached = player.aiFormAnalysis;
-  const hasAnalysis = !!cached?.text;
-  // Analysis is stale if a new match was played after the last generation
-  const isStale = hasAnalysis && mostRecentMatch && cached.lastMatchId !== mostRecentMatch.id;
+  // Clear optimistic state once Firestore subscription catches up
+  useEffect(() => { if (cached?.text) setPendingText(null); }, [cached?.text]);
+  const displayCached = pendingText
+    ? { text: pendingText, generatedAt: new Date().toISOString() }
+    : cached;
+  const hasAnalysis = !!displayCached?.text;
+  // Analysis is stale if a new match was played after the last generation (not while pending)
+  const isStale = hasAnalysis && !pendingText && mostRecentMatch && cached?.lastMatchId !== mostRecentMatch.id;
 
   const generate = async () => {
     setLoading(true);
@@ -1093,6 +1100,7 @@ function AiTrendCard({ player, allMatches }) {
       });
 
       const text = await generatePlayerTrendAnalysis(player, recentData);
+      setPendingText(text); // Optimistic: show immediately
       const latestMatch = played[played.length - 1];
       await updatePlayer(player.id, {
         aiFormAnalysis: {
@@ -1137,13 +1145,13 @@ function AiTrendCard({ player, allMatches }) {
           {loading ? '⏳' : '↺ Rigenera'}
         </button>
       </div>
-      {cached.generatedAt && (
+      {displayCached.generatedAt && (
         <div style={{ fontSize: '0.65rem', color: '#4A5568', marginBottom: '0.75rem' }}>
-          Aggiornata il {new Date(cached.generatedAt).toLocaleDateString('it-IT')}
+          Aggiornata il {new Date(displayCached.generatedAt).toLocaleDateString('it-IT')}
         </div>
       )}
       <p style={{ fontSize: '0.84rem', color: '#CBD5E0', lineHeight: 1.75, margin: 0, whiteSpace: 'pre-wrap' }}>
-        {cached.text}
+        {displayCached.text}
       </p>
     </div>
   );
@@ -1151,7 +1159,13 @@ function AiTrendCard({ player, allMatches }) {
 
 function AiNicknameCard({ player }) {
   const [loading, setLoading] = useState(false);
+  // Optimistic local state: bridges the gap between updatePlayer and Firestore subscription
+  const [pendingNickname, setPendingNickname] = useState(null);
+
   const cached = player.aiNickname;
+  // Clear optimistic state once Firestore subscription catches up
+  useEffect(() => { if (cached) setPendingNickname(null); }, [cached]);
+  const displayCached = pendingNickname || cached;
 
   const generate = async () => {
     setLoading(true);
@@ -1173,6 +1187,7 @@ function AiNicknameCard({ player }) {
       const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
       const soprannome = lines.find(l => l.toLowerCase().startsWith('soprannome:'))?.replace(/^soprannome:\s*/i, '') || raw;
       const motivazione = lines.find(l => l.toLowerCase().startsWith('motivazione:'))?.replace(/^motivazione:\s*/i, '') || '';
+      setPendingNickname({ soprannome, motivazione }); // Optimistic: show immediately
       await updatePlayer(player.id, {
         aiNickname: { soprannome, motivazione, generatedAt: new Date().toISOString() },
       });
@@ -1183,7 +1198,7 @@ function AiNicknameCard({ player }) {
     }
   };
 
-  if (!cached) {
+  if (!displayCached) {
     return (
       <div className="card mb-4" style={{ textAlign: 'center', border: '1px dashed rgba(246,173,85,0.35)', background: 'rgba(246,173,85,0.03)' }}>
         <button onClick={generate} disabled={loading}
@@ -1204,10 +1219,10 @@ function AiNicknameCard({ player }) {
         </button>
       </div>
       <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#F6AD55', marginBottom: '0.4rem', letterSpacing: '0.02em' }}>
-        "{cached.soprannome}"
+        "{displayCached.soprannome}"
       </div>
-      {cached.motivazione && (
-        <div style={{ fontSize: '0.78rem', color: '#A0AEC0', fontStyle: 'italic' }}>{cached.motivazione}</div>
+      {displayCached.motivazione && (
+        <div style={{ fontSize: '0.78rem', color: '#A0AEC0', fontStyle: 'italic' }}>{displayCached.motivazione}</div>
       )}
     </div>
   );
