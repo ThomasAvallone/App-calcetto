@@ -12,6 +12,17 @@ import toast from 'react-hot-toast';
 
 const CHANGELOG = [
   {
+    version: '3.0.0',
+    date: 'Marzo 2026',
+    entries: [
+      { type: 'new', text: 'Visione live condivisa: tutti gli utenti possono guardare la partita in tempo reale navigando su /match/:id — timer, punteggio ed eventi si sincronizzano via Firestore su tutti i dispositivi' },
+      { type: 'new', text: 'Dashboard: banner LIVE visibile a tutti gli utenti quando c\'è una partita in corso, con punteggio parziale e nomi delle squadre aggiornati in tempo reale' },
+      { type: 'new', text: 'MatchPage: indicatore "LIVE — Stai guardando in diretta" per gli spettatori non-admin durante la partita' },
+      { type: 'new', text: 'Storico meteo: il meteo viene salvato automaticamente per ogni partita — al momento dell\'avvio (MatchSetupPage) e al termine (endMatch), senza intervento manuale' },
+      { type: 'new', text: 'Dettaglio partita: il meteo salvato (icona + descrizione + temperatura) è ora visibile nel card del punteggio per ogni partita completata' },
+    ],
+  },
+  {
     version: '2.9.1',
     date: 'Marzo 2026',
     entries: [
