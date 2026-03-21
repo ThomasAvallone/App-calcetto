@@ -152,6 +152,11 @@ function RatingSection({ match, userId, userName, onRated }) {
   );
 }
 
+function weatherIcon(condition) {
+  const icons = { sunny: '☀️', cloudy: '☁️', rainy: '🌧️', cold: '🥶', hot: '🔥', wind: '💨' };
+  return icons[condition] || '🌤️';
+}
+
 // Estrae l'ID video da qualsiasi formato URL YouTube standard
 function getYoutubeId(url) {
   if (!url) return null;
@@ -564,6 +569,13 @@ export default function MatchDetailPage() {
 
       {/* Score */}
       <div className="card mb-4" style={{ textAlign: 'center' }}>
+        {match.weather?.condition && (
+          <div style={{ fontSize: '0.75rem', color: '#718096', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}>
+            <span>{weatherIcon(match.weather.condition)}</span>
+            <span>{match.weather.description || match.weather.condition}</span>
+            {match.weather.temp && <span>· {match.weather.temp}°C</span>}
+          </div>
+        )}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2rem', padding: '1rem 0' }}>
           <div>
             <div className="score-display score-red">{match.redScore}</div>

@@ -164,30 +164,46 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {/* Active match banner */}
-      {activeMatchId && (
-        <div
-          className="card mb-4"
-          style={{
-            background: 'linear-gradient(135deg, rgba(79,209,197,0.18) 0%, rgba(99,179,237,0.08) 100%)',
-            border: '1px solid rgba(79,209,197,0.5)',
-            boxShadow: '0 0 20px rgba(79,209,197,0.08)',
-            cursor: 'pointer',
-          }}
-          onClick={() => navigate(`/match/${activeMatchId}`)}
-        >
-          <div className="flex items-center gap-3">
-            <div className="animate-pulse" style={{ fontSize: '1.5rem' }}>🔴</div>
-            <div>
-              <div style={{ fontWeight: 700, color: '#4FD1C5' }}>Partita in corso!</div>
-              <div className="text-sm text-secondary">Tocca per tornare alla partita</div>
+      {/* Active match banner — visible to all users */}
+      {(() => {
+        const liveMatch = allMatches.find(m => m.status === 'active');
+        if (!liveMatch) return null;
+        const isMyMatch = activeMatchId === liveMatch.id;
+        return (
+          <div
+            className="card mb-4"
+            style={{
+              background: isMyMatch
+                ? 'linear-gradient(135deg, rgba(79,209,197,0.18) 0%, rgba(99,179,237,0.08) 100%)'
+                : 'linear-gradient(135deg, rgba(252,129,129,0.15) 0%, rgba(99,179,237,0.08) 100%)',
+              border: isMyMatch ? '1px solid rgba(79,209,197,0.5)' : '1px solid rgba(252,129,129,0.5)',
+              boxShadow: isMyMatch ? '0 0 20px rgba(79,209,197,0.08)' : '0 0 20px rgba(252,129,129,0.08)',
+              cursor: 'pointer',
+            }}
+            onClick={() => navigate(`/match/${liveMatch.id}`)}
+          >
+            <div className="flex items-center gap-3">
+              <div className="animate-pulse" style={{ fontSize: '1.5rem' }}>🔴</div>
+              <div>
+                <div style={{ fontWeight: 700, color: isMyMatch ? '#4FD1C5' : '#FC8181' }}>
+                  {isMyMatch ? 'Partita in corso!' : '🔴 LIVE — Partita in corso!'}
+                </div>
+                <div className="text-sm text-secondary">
+                  {isMyMatch ? 'Tocca per tornare alla partita' : 'Guarda in diretta'}
+                </div>
+                {!isMyMatch && (liveMatch.redTeam?.length > 0 || liveMatch.blueTeam?.length > 0) && (
+                  <div style={{ fontSize: '0.72rem', color: '#718096', marginTop: '0.15rem' }}>
+                    🔴 {(liveMatch.redTeam || []).map(p => p.name).join(', ')} · {liveMatch.redScore ?? 0}–{liveMatch.blueScore ?? 0} · 🔵 {(liveMatch.blueTeam || []).map(p => p.name).join(', ')}
+                  </div>
+                )}
+              </div>
+              <svg style={{ marginLeft: 'auto', flexShrink: 0 }} width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={isMyMatch ? '#4FD1C5' : '#FC8181'} strokeWidth={2}>
+                <path d="M9 18l6-6-6-6"/>
+              </svg>
             </div>
-            <svg style={{ marginLeft: 'auto' }} width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4FD1C5" strokeWidth={2}>
-              <path d="M9 18l6-6-6-6"/>
-            </svg>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Scheduled match countdown + weather */}
       {nearestScheduled && nearestDate && nearestCountdown && (

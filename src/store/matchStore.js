@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware';
 import {
   createMatch, updateMatch, getMatch,
   saveMatchTimerState, getMatchTimerState,
-  subscribeToMatch
+  subscribeToMatch, subscribeToMatchState
 } from '../firebase/firestore';
 
 // ─── STORE ────────────────────────────────────────────────────────────────────
@@ -22,6 +22,7 @@ const useMatchStore = create(
       timerState: DEFAULT_TIMER_STATE,
       goalModal: null,
       unsubscribeMatch: null,
+      unsubscribeState: null,
 
       async loadMatch(matchId) {
         const { unsubscribeMatch } = get();
@@ -44,16 +45,29 @@ const useMatchStore = create(
         const unsub = subscribeToMatch(matchId, (updatedMatch) => {
           if (updatedMatch) set({ match: updatedMatch });
         });
-        set({ unsubscribeMatch: unsub });
+        const unsubState = subscribeToMatchState(matchId, (state) => {
+          if (state) {
+            set({
+              timerState: {
+                isRunning: state.isRunning || false,
+                startTimestamp: state.startTimestamp || null,
+                elapsedMs: state.elapsedMs || 0,
+              }
+            });
+          }
+        });
+        set({ unsubscribeMatch: unsub, unsubscribeState: unsubState });
       },
 
       unloadMatch() {
-        const { unsubscribeMatch } = get();
+        const { unsubscribeMatch, unsubscribeState } = get();
         if (unsubscribeMatch) unsubscribeMatch();
+        if (unsubscribeState) unsubscribeState();
         set({
           activeMatchId: null,
           match: null,
           unsubscribeMatch: null,
+          unsubscribeState: null,
           goalModal: null,
           timerState: DEFAULT_TIMER_STATE,
         });

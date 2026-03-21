@@ -108,10 +108,15 @@ export default function MatchSetupPage() {
     setLoading(true);
     try {
       const date = matchDate ? new Date(matchDate) : new Date();
+      let currentWeather = weather;
+      if (!currentWeather.temp) {
+        const fw = await fetchWeatherForDate(new Date()).catch(() => null);
+        if (fw) { currentWeather = fw; setWeather(fw); }
+      }
       const matchId = await createNewMatch({
         redTeam: teams.red.map(p => ({ id: p.id, name: p.name, primaryRole: p.primaryRole || '' })),
         blueTeam: teams.blue.map(p => ({ id: p.id, name: p.name, primaryRole: p.primaryRole || '' })),
-        weather,
+        weather: currentWeather,
         redScore: 0,
         blueScore: 0,
         status: 'active',

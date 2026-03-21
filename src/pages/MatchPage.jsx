@@ -7,6 +7,7 @@ import Confetti from '../components/Confetti';
 import { generateMatchReport } from '../services/reportService';
 import { exportMatchToSheets } from '../services/sheetsService';
 import { recalculatePlayerStats, updateMatch } from '../firebase/firestore';
+import { fetchWeatherForDate } from '../services/weatherService';
 import toast from 'react-hot-toast';
 
 const MATCH_DURATION = 60 * 60; // durata regolamentare (per progress bar)
@@ -195,7 +196,12 @@ export default function MatchPage() {
       await recalculatePlayerStats(allIds);
       await exportMatchToSheets(match, players).catch(e => console.warn('Sheets export failed:', e));
       const report = generateMatchReport(match, players);
-      if (activeMatchId) await updateMatch(activeMatchId, { report });
+      const extraFields = { report };
+      if (!match.weather?.temp) {
+        const w = await fetchWeatherForDate(new Date()).catch(() => null);
+        if (w) extraFields.weather = w;
+      }
+      if (activeMatchId) await updateMatch(activeMatchId, extraFields);
       setReportText(report);
       setMatchSummary(snapshot);
       setShowConfetti(true);
@@ -469,6 +475,19 @@ export default function MatchPage() {
           background: goalFlash === 'red' ? 'rgba(252,129,129,0.25)' : 'rgba(99,179,237,0.25)',
           animation: 'goalFlash 0.6s ease forwards',
         }} />
+      )}
+
+      {/* Viewer LIVE indicator */}
+      {!isAdmin && !isFinished && (
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
+          marginBottom: '0.75rem', padding: '0.4rem 0.75rem', borderRadius: '999px',
+          background: 'rgba(252,129,129,0.12)', border: '1px solid rgba(252,129,129,0.4)',
+          width: 'fit-content', margin: '0 auto 0.75rem',
+        }}>
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#FC8181', display: 'inline-block', animation: 'pulse 1.5s infinite' }} />
+          <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#FC8181' }}>LIVE — Stai guardando in diretta</span>
+        </div>
       )}
 
       {/* Timer */}
