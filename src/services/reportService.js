@@ -80,21 +80,15 @@ ${weather?.temp ? `🌡️ ${weather.temp}°C — ${weather.description || ''}` 
 🎯 OBIETTIVI DEL MATCH
 ${objectivesBlock}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🔴 SQUADRA ROSSA (PI: ${redPI.toFixed(1)})
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-${redTeam.map(p => `  ${getRoleIcon(p.primaryRole)} ${p.name.padEnd(18)} PI: ${(p.powerIndex || 50).toFixed(0)}`).join('\n')}
-${redGoalkeepers.length ? `🧤 GK naturali: ${redGoalkeepers.map(p => p.name).join(', ')}` : ''}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🔵 SQUADRA BLU (PI: ${bluePI.toFixed(1)})
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-${blueTeam.map(p => `  ${getRoleIcon(p.primaryRole)} ${p.name.padEnd(18)} PI: ${(p.powerIndex || 50).toFixed(0)}`).join('\n')}
-${blueGoalkeepers.length ? `🧤 GK naturali: ${blueGoalkeepers.map(p => p.name).join(', ')}` : ''}
-
+▬▬▬▬▬ 🔴 SQUADRA ROSSA ▬▬▬▬▬
+${redTeam.map(p => `  ${p.name}`).join('\n')}
+${redGoalkeepers.length ? `🧤 GK: ${redGoalkeepers.map(p => p.name).join(', ')}` : ''}
+▬▬▬▬▬ 🔵 SQUADRA BLU ▬▬▬▬▬▬
+${blueTeam.map(p => `  ${p.name}`).join('\n')}
+${blueGoalkeepers.length ? `🧤 GK: ${blueGoalkeepers.map(p => p.name).join(', ')}` : ''}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📊 PRONOSTICO
-${favorite} (distacco: ${diff} PI)
+${favorite}
 ⭐ Uomo da tenere d'occhio (Rossi): ${redTopPlayer?.name || '-'}
 ⭐ Uomo da tenere d'occhio (Blu): ${blueTopPlayer?.name || '-'}
 
