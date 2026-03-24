@@ -48,6 +48,19 @@ function fmtMatchDate(d) {
 }
 
 // ─── Commento narrativo post-partita ─────────────────────────────────────────
+const _COMMENTARY_STYLES = [
+  'Sei un vecchio cronista radiofonico anni \'70, incalzante e nostalgico, con esclamazioni improvvise e dettagli pittoreschi. Parli come se stessi raccontando la cosa più importante della settimana.',
+  'Sei un giornalista investigativo convinto che dietro ogni risultato ci sia una storia nascosta. Cerca le cause, i colpevoli, i silenzi. Ogni gol è un indizio.',
+  'Sei un telecronista straniero (magari britannico) che osserva il calcetto italiano con meraviglia antropologica, come se fosse un rituale tribale affascinante e incomprensibile.',
+  'Sei un romanziere che usa la partita come metafora della vita: ogni gol, ogni errore, ogni pausa è simbolo di qualcosa di più grande. Tono letterario, denso, con immagini forti.',
+  'Sei un vecchio filosofo greco che commenta la partita come se fosse una tragedia o una commedia classica: destino, hybris, catarsi. I giocatori sono archetipi.',
+  'Sei un critico cinematografico che recensisce la partita come un film: c\'è un protagonista, un villain, colpi di scena, una regia discutibile, forse un finale insoddisfacente.',
+  'Sei un cantastorie di piazza del sud Italia: ritmo incalzante, iperboli colorate, riferimenti alla famiglia e all\'onore, un umorismo graffiante e affettuoso.',
+  'Sei un commentatore spietato alla Enzo Biagi: frasi secche, tagliente, niente fronzoli. Dici esattamente quello che pensi di ogni giocatore senza pietà, ma con stile.',
+  'Sei un poeta che scrive in prosa lirica: il campo è un palcoscenico, i giocatori sono figure quasi mitologiche, la palla è destino. Usa immagini visive forti e inaspettate.',
+  'Sei un telecronista che ha visto troppo calcio e ormai è cinico, stanco, ma ogni tanto — suo malgrado — si entusiasma per qualcosa. L\'ironia è la tua difesa contro la mediocrità.',
+];
+
 export async function generateMatchCommentary(match, players) {
   const playerById = Object.fromEntries(
     players.filter(p => p.id).map(p => [p.id, p.name])
@@ -79,22 +92,41 @@ export async function generateMatchCommentary(match, players) {
   const winner = match.redScore > match.blueScore ? 'Rossi'
     : match.blueScore > match.redScore ? 'Blu' : 'pareggio';
 
-  const prompt = `Sei il commentatore ufficiale di una partita settimanale di calcetto tra amici. \
-Tutti si conoscono, ci sono rivalità, ironie, drammi. \
-Scrivi un commento post-partita in italiano di circa 200-250 parole, in stile giornalistico sportivo (alla Caressa/Bizzotto): \
-narrativo, drammatico, con ironia e calore umano. Nomina i giocatori che si sono distinti. \
-Non usare markdown, asterischi, titoli o elenchi. Solo prosa narrativa fluente.
+  const style = _COMMENTARY_STYLES[Math.floor(Math.random() * _COMMENTARY_STYLES.length)];
+
+  // Highlight any player who scored 2+ or had an autogoal — give the AI a hook
+  const scorerCounts = {};
+  timeline.forEach(ev => {
+    const name = resolve(ev);
+    if (ev.type === 'goal') scorerCounts[name] = (scorerCounts[name] || 0) + 1;
+  });
+  const protagonists = Object.entries(scorerCounts)
+    .filter(([, n]) => n >= 2)
+    .map(([name, n]) => `${name} (${n} gol)`);
+  const autogolisti = timeline.filter(e => e.type === 'autogoal').map(e => resolve(e));
+  const hookLines = [
+    ...(protagonists.length ? [`Protagonista/i offensivo/i: ${protagonists.join(', ')}`] : []),
+    ...(autogolisti.length  ? [`Autogol: ${autogolisti.join(', ')}`] : []),
+    timeline.length === 0   ? 'NESSUN GOL: usa questo come elemento narrativo centrale (imbarazzo, tatticismo o sfortuna pura).' : '',
+  ].filter(Boolean).join('\n');
+
+  const prompt = `${style}
+
+Scrivi un commento post-partita in italiano di circa 200-250 parole su questa partita di calcetto tra amici. \
+Nomina i giocatori protagonisti. Parti con un'apertura originale e inaspettata — non iniziare con "È stata una partita" o frasi simili. \
+Evita questi cliché: "cuore", "gruppo", "squadra vera", "hanno dato tutto", "partita combattuta", "meritavano di più". \
+Non usare markdown, asterischi, titoli o elenchi. Solo prosa fluente nello stile indicato sopra.
 
 DATI PARTITA:
 Data: ${fmtMatchDate(match.date)}
-Risultato finale: Rossi ${match.redScore} – ${match.blueScore} Blu → ${winner}
+Risultato: Rossi ${match.redScore} – ${match.blueScore} Blu → ${winner}
 Squadra Rossa: ${redNames}
 Squadra Blu: ${blueNames}
 
 CRONACA GOL:
 ${eventsStr}
-
-Scrivi il commento narrativo ora:`;
+${hookLines ? `\nSPUNTI NARRATIVI:\n${hookLines}` : ''}
+Scrivi il commento ora:`;
 
   return callGemini(prompt, { temperature: 0.9, maxTokens: 500 });
 }
