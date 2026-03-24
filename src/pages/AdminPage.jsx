@@ -12,6 +12,25 @@ import toast from 'react-hot-toast';
 
 const CHANGELOG = [
   {
+    version: '3.1.0',
+    date: 'Marzo 2026',
+    entries: [
+      { type: 'new', text: 'Dashboard: redesign futuristico — overlay griglia circuito stampato sul background, glassmorphism sulle card con backdrop-filter blur' },
+      { type: 'new', text: 'Dashboard: animazioni staggered fadeSlideUp (stagger-1…stagger-8) — ogni sezione entra in sequenza al caricamento della pagina' },
+      { type: 'new', text: 'Dashboard: indicatore LIVE sostituito con animazione radar CSS (ring pulsante) invece dell\'emoji statica' },
+      { type: 'new', text: 'Dashboard: badge score prominente sulla live banner — punteggio visibile a colpo d\'occhio senza navigare nella partita' },
+      { type: 'new', text: 'Dashboard: progress bar Power Ranking neon (5px, gradiente con box-shadow glow) — più leggibile e coerente con l\'estetica' },
+      { type: 'new', text: 'Dashboard: indicatore vincitore nelle ultime partite — border-left rosso/blu/giallo identifica il team vincente senza leggere il punteggio' },
+      { type: 'new', text: 'Dashboard: badge iniziali giocatore nelle streak attive per differenziare visivamente i giocatori nella lista' },
+      { type: 'new', text: 'Dashboard: premi Coppa di Latta differenziati — border-left verde per premi positivi (bomber, assistman), rosso per premi ironici (peggior portiere, re autogol)' },
+      { type: 'new', text: 'Dashboard: corner bracket HUD sulle stat card (effetto olografico angolare top-left / bottom-right)' },
+      { type: 'fix', text: 'Hover state aggiunto su tutte le righe cliccabili di lista (partite recenti, scheduled picker, streak) — feedback visivo mancante' },
+      { type: 'fix', text: 'Font size sotto soglia accessibilità corretti: label meteo (0.55rem → 0.65rem), nomi squadra countdown (< 12px → 0.78rem), label premi (0.72rem → section-label)' },
+      { type: 'fix', text: 'Tutti i valori hex hardcoded nel JSX sostituiti con CSS custom properties (var(--teal), var(--text-muted), ecc.) per manutenibilità' },
+      { type: 'fix', text: 'Aggiunto aria-label="Logout" al pulsante logout — prima accessibile solo via title (insufficiente per screen reader)' },
+    ],
+  },
+  {
     version: '3.0.0',
     date: 'Marzo 2026',
     entries: [
