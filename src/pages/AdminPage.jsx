@@ -28,6 +28,7 @@ const CHANGELOG = [
       { type: 'fix', text: 'Font size sotto soglia accessibilità corretti: label meteo (0.55rem → 0.65rem), nomi squadra countdown (< 12px → 0.78rem), label premi (0.72rem → section-label)' },
       { type: 'fix', text: 'Tutti i valori hex hardcoded nel JSX sostituiti con CSS custom properties (var(--teal), var(--text-muted), ecc.) per manutenibilità' },
       { type: 'fix', text: 'Aggiunto aria-label="Logout" al pulsante logout — prima accessibile solo via title (insufficiente per screen reader)' },
+      { type: 'improve', text: 'Commento AI post-partita: ogni generazione pesca casualmente uno tra 10 stili narrativi diversi (cronista radiofonico anni \'70, giornalista investigativo, telecronista straniero, romanziere, filosofo greco, critico cinematografico, cantastorie meridionale, stile Biagi, poetico, cinico disilluso) — aggiunto divieto esplicito dei cliché più abusati e spunti narrativi automatici su doppiette, autogol e 0-0' },
     ],
   },
   {
@@ -171,9 +172,10 @@ const CHANGELOG = [
 ];
 
 const TYPE_STYLE = {
-  new:  { label: 'NEW',  color: '#4FD1C5', bg: 'rgba(79,209,197,0.12)' },
-  fix:  { label: 'FIX',  color: '#FC814A', bg: 'rgba(252,129,74,0.12)' },
-  perf: { label: 'PERF', color: '#F6E05E', bg: 'rgba(246,224,94,0.12)' },
+  new:     { label: 'NEW',     color: '#4FD1C5', bg: 'rgba(79,209,197,0.12)' },
+  fix:     { label: 'FIX',     color: '#FC814A', bg: 'rgba(252,129,74,0.12)' },
+  perf:    { label: 'PERF',    color: '#F6E05E', bg: 'rgba(246,224,94,0.12)' },
+  improve: { label: 'IMPROVE', color: '#B794F4', bg: 'rgba(183,148,244,0.12)' },
 };
 
 export default function AdminPage() {
