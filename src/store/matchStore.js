@@ -78,7 +78,7 @@ const useMatchStore = create(
         if (timerState.isRunning) return;
         const newState = { ...timerState, isRunning: true, startTimestamp: Date.now() };
         set({ timerState: newState });
-        get()._syncTimer(newState);
+        get()._syncTimer(newState).catch(() => {});
       },
 
       pauseTimer() {
@@ -87,7 +87,7 @@ const useMatchStore = create(
         const elapsed = Date.now() - timerState.startTimestamp;
         const newState = { ...timerState, isRunning: false, startTimestamp: null, elapsedMs: timerState.elapsedMs + elapsed };
         set({ timerState: newState });
-        get()._syncTimer(newState);
+        get()._syncTimer(newState).catch(() => {});
       },
 
       getElapsedMs() {

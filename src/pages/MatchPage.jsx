@@ -194,7 +194,9 @@ export default function MatchPage() {
       await endMatch();
       const allIds = [...snapshot.redTeam.map(p => p.id), ...snapshot.blueTeam.map(p => p.id)];
       await recalculatePlayerStats(allIds);
-      await exportMatchToSheets(match, players).catch(e => console.warn('Sheets export failed:', e));
+      await exportMatchToSheets(match, players).catch(() => {
+        toast.error('Export Google Sheets fallito');
+      });
       const report = generateMatchReport(match, players);
       const extraFields = { report };
       if (!match.weather?.temp) {
