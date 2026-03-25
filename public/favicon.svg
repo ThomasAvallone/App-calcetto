@@ -1,27 +1,38 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <!-- Background rounded square -->
-  <rect width="100" height="100" rx="22" fill="#1a6b3a"/>
-
-  <!-- Soccer ball - white base circle -->
-  <circle cx="50" cy="50" r="32" fill="white" stroke="#e0e0e0" stroke-width="0.5"/>
-
-  <!-- Soccer ball black pentagon patches -->
-  <!-- Center top pentagon -->
-  <polygon points="50,22 59,29 56,40 44,40 41,29" fill="#1a1a1a"/>
-  <!-- Bottom left pentagon -->
-  <polygon points="22,58 30,52 38,58 35,70 24,70" fill="#1a1a1a"/>
-  <!-- Bottom right pentagon -->
-  <polygon points="78,58 70,52 62,58 65,70 76,70" fill="#1a1a1a"/>
-  <!-- Top left pentagon -->
-  <polygon points="30,38 22,47 27,58 30,52 38,42" fill="#1a1a1a"/>
-  <!-- Top right pentagon -->
-  <polygon points="70,38 78,47 73,58 70,52 62,42" fill="#1a1a1a"/>
-  <!-- Bottom center pentagon -->
-  <polygon points="50,74 41,68 44,58 56,58 59,68" fill="#1a1a1a"/>
-
-  <!-- Ball outline/circle border -->
-  <circle cx="50" cy="50" r="32" fill="none" stroke="#cccccc" stroke-width="1"/>
-
-  <!-- Shine effect -->
-  <ellipse cx="41" cy="35" rx="8" ry="5" fill="white" opacity="0.35" transform="rotate(-30,41,35)"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <clipPath id="ball-clip">
+      <circle cx="256" cy="256" r="194"/>
+    </clipPath>
+    <radialGradient id="ball-grad" cx="38%" cy="36%" r="65%">
+      <stop offset="0%" stop-color="#f8f8fc"/>
+      <stop offset="100%" stop-color="#dcdee8"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="#0f3791"/>
+  <circle cx="256" cy="256" r="194" fill="url(#ball-grad)" stroke="#8c90a8" stroke-width="3"/>
+  <g clip-path="url(#ball-clip)">
+  <circle cx="400.7" cy="339.5" r="30" fill="#12183a"/>
+  <circle cx="353.9" cy="339.5" r="30" fill="#12183a"/>
+  <circle cx="377.3" cy="299.0" r="30" fill="#12183a"/>
+  <circle cx="256.0" cy="423.1" r="30" fill="#12183a"/>
+  <circle cx="232.6" cy="382.6" r="30" fill="#12183a"/>
+  <circle cx="279.4" cy="382.6" r="30" fill="#12183a"/>
+  <circle cx="111.3" cy="339.5" r="30" fill="#12183a"/>
+  <circle cx="134.7" cy="299.0" r="30" fill="#12183a"/>
+  <circle cx="158.1" cy="339.5" r="30" fill="#12183a"/>
+  <circle cx="111.3" cy="172.5" r="30" fill="#12183a"/>
+  <circle cx="158.1" cy="172.5" r="30" fill="#12183a"/>
+  <circle cx="134.7" cy="213.0" r="30" fill="#12183a"/>
+  <circle cx="256.0" cy="88.9" r="30" fill="#12183a"/>
+  <circle cx="279.4" cy="129.4" r="30" fill="#12183a"/>
+  <circle cx="232.6" cy="129.4" r="30" fill="#12183a"/>
+  <circle cx="400.7" cy="172.5" r="30" fill="#12183a"/>
+  <circle cx="377.3" cy="213.0" r="30" fill="#12183a"/>
+  <circle cx="353.9" cy="172.5" r="30" fill="#12183a"/>
+  </g>
+  <circle cx="256" cy="256" r="194" fill="none" stroke="#8c90a8" stroke-width="3"/>
+  <ellipse cx="217" cy="201"
+           rx="38" ry="21"
+           fill="white" opacity="0.15"
+           transform="rotate(-35 217 201)"/>
 </svg>
