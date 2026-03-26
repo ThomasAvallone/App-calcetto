@@ -23,7 +23,13 @@ export default function Spinner({ fullPage, size = 32 }) {
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         background: '#1A202C', zIndex: 999,
       }}>
-        {spinner}
+        <img
+          src="/loading.gif"
+          alt="Caricamento..."
+          style={{ width: 180, height: 180, objectFit: 'contain' }}
+          onError={e => { e.currentTarget.style.display = 'none'; e.currentTarget.nextSibling.style.display = 'block'; }}
+        />
+        <span style={{ display: 'none' }}>{spinner}</span>
       </div>
     );
   }
