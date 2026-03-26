@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useLayoutEffect } from 'react';
 
 // ─── Tier system ──────────────────────────────────────────────────────────────
 
@@ -180,6 +180,51 @@ function SparkLine({ history, accent, uid }) {
   );
 }
 
+// ─── FitName ──────────────────────────────────────────────────────────────────
+// Measures text at a large probe size, then scales down to fill the container.
+// useLayoutEffect runs synchronously before paint → zero flicker.
+
+function FitName({ name, style }) {
+  const outerRef = useRef(null);
+  const probeRef = useRef(null);
+
+  useLayoutEffect(() => {
+    const outer = outerRef.current;
+    const probe = probeRef.current;
+    if (!outer || !probe) return;
+    const containerW = outer.clientWidth;
+    const probeW     = probe.scrollWidth;
+    if (!containerW || !probeW) return;
+    // Probe is rendered at 10em; compute the em size that exactly fills containerW.
+    // Cap at 5em so very short names don't grow absurdly large.
+    const fitted = Math.min(10 * (containerW / probeW), 5);
+    outer.style.setProperty('--fit-name-size', `${fitted.toFixed(3)}em`);
+  }, [name]);
+
+  return (
+    <div ref={outerRef} style={{ position: 'relative', width: '100%' }}>
+      {/* Invisible probe — renders name at 10em to measure its natural width */}
+      <div ref={probeRef} aria-hidden="true" style={{
+        position: 'absolute', top: 0, left: 0,
+        visibility: 'hidden', pointerEvents: 'none',
+        whiteSpace: 'nowrap',
+        fontSize: '10em', fontWeight: 900,
+        letterSpacing: '0.03em', textTransform: 'uppercase',
+      }}>
+        {name}
+      </div>
+      {/* Visible name — size driven by CSS custom property set above */}
+      <div style={{
+        fontSize: 'var(--fit-name-size, 1.65em)',
+        whiteSpace: 'nowrap', overflow: 'hidden', lineHeight: 1,
+        ...style,
+      }}>
+        {name}
+      </div>
+    </div>
+  );
+}
+
 // ─── FutCard ──────────────────────────────────────────────────────────────────
 
 export default function FutCard({ player, form, seasonStats, rank, onClick }) {
@@ -308,17 +353,16 @@ export default function FutCard({ player, form, seasonStats, rank, onClick }) {
           </div>
         </div>
 
-        {/* Name + role emoji — centre column, truncates with ellipsis */}
+        {/* Name + role emoji — centre column, name dynamically fills full width */}
         <div style={{ flex: 1, minWidth: 0, paddingTop: '2px', lineHeight: 1 }}>
-          <div style={{
-            fontSize: '1.65em', fontWeight: 900,
-            color: cfg.accent,
-            letterSpacing: '0.03em', textTransform: 'uppercase',
-            textShadow: `0 0 14px ${cfg.accent}95, 0 0 28px ${cfg.accent}50`,
-            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          }}>
-            {player.name}
-          </div>
+          <FitName
+            name={player.name}
+            style={{
+              fontWeight: 900, color: cfg.accent,
+              letterSpacing: '0.03em', textTransform: 'uppercase',
+              textShadow: `0 0 14px ${cfg.accent}95, 0 0 28px ${cfg.accent}50`,
+            }}
+          />
           <div style={{ fontSize: '1.5em', marginTop: '5px', lineHeight: 1 }}>
             {ROLE_ICON[role]}
           </div>
