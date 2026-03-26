@@ -12,6 +12,13 @@ import toast from 'react-hot-toast';
 
 const CHANGELOG = [
   {
+    version: '3.1.1',
+    date: 'Marzo 2026',
+    entries: [
+      { type: 'new', text: 'Animazioni staggered fadeSlideUp estese a tutte le pagine (Storico, Giocatori, Classifiche, Annali, Admin, Badge) — ogni sezione entra in sequenza al caricamento, coerente con la Dashboard' },
+    ],
+  },
+  {
     version: '3.1.0',
     date: 'Marzo 2026',
     entries: [
@@ -395,11 +402,13 @@ export default function AdminPage() {
 
   return (
     <div className="page-content">
-      <h2 style={{ paddingTop: '0.5rem', marginBottom: '0.25rem' }}>⚙️ Pannello Admin</h2>
-      <p className="text-sm text-muted mb-4">Gestione avanzata e dati</p>
+      <div className="stagger-1">
+        <h2 style={{ paddingTop: '0.5rem', marginBottom: '0.25rem' }}>⚙️ Pannello Admin</h2>
+        <p className="text-sm text-muted mb-4">Gestione avanzata e dati</p>
+      </div>
 
       {/* Stats overview */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem', marginBottom: '1rem' }}>
+      <div className="stagger-2" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem', marginBottom: '1rem' }}>
         <div className="card" style={{ textAlign: 'center', padding: '1rem' }}>
           <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#4FD1C5' }}>{players.length}</div>
           <div style={{ fontSize: '0.7rem', color: '#718096' }}>Giocatori</div>
@@ -420,7 +429,7 @@ export default function AdminPage() {
       </div>
 
       {/* Google Sheets */}
-      <div className="card mb-4">
+      <div className="card mb-4 stagger-3">
         <h3 className="mb-1">📊 Google Sheets</h3>
         <p className="text-sm text-muted mb-3">
           Backup dati su foglio Google configurato tramite Apps Script webhook.
@@ -438,7 +447,7 @@ export default function AdminPage() {
       </div>
 
       {/* Excel Export */}
-      <div className="card mb-4">
+      <div className="card mb-4 stagger-4">
         <h3 className="mb-1">📥 Export Excel</h3>
         <p className="text-sm text-muted mb-3">
           Scarica un file .xlsx con giocatori, partite ed eventi completi.
@@ -453,7 +462,7 @@ export default function AdminPage() {
       </div>
 
       {/* Recalculate Power Index */}
-      <div className="card mb-4">
+      <div className="card mb-4 stagger-5">
         <h3 className="mb-1">⚡ Ricalcola Power Index</h3>
         <p className="text-sm text-muted mb-3">
           Ricalcola le statistiche di tutti i giocatori partendo dallo storico partite.
@@ -468,7 +477,7 @@ export default function AdminPage() {
       </div>
 
       {/* Badge Catalog */}
-      <div className="card mb-4" style={{ border: '1px solid rgba(183,148,244,0.25)', background: 'rgba(183,148,244,0.03)' }}>
+      <div className="card mb-4 stagger-6" style={{ border: '1px solid rgba(183,148,244,0.25)', background: 'rgba(183,148,244,0.03)' }}>
         <h3 className="mb-1" style={{ fontSize: '0.95rem' }}>🏅 Catalogo Badge</h3>
         <p className="text-xs text-muted mb-3" style={{ lineHeight: 1.5 }}>
           Tutti i badge disponibili con descrizione, fonte dati e condizioni di sblocco.
@@ -481,7 +490,7 @@ export default function AdminPage() {
 
       {/* User Management */}
       {currentIsAdmin && (
-        <div className="card mb-4">
+        <div className="card mb-4 stagger-7">
           <h3 className="mb-3">👥 Gestione Utenti</h3>
           {users.length === 0 ? (
             <p className="text-sm text-muted">Nessun utente registrato</p>
@@ -525,7 +534,7 @@ export default function AdminPage() {
       )}
 
       {/* Operations Log */}
-      <div className="card mb-4">
+      <div className="card mb-4 stagger-8">
         <h3 className="mb-1" style={{ fontSize: '0.95rem' }}>📋 Log Operazioni</h3>
         <p className="text-xs text-muted mb-3">Azioni eseguite in questa sessione.</p>
         {opLog.length === 0 ? (

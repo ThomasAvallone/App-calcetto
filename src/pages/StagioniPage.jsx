@@ -39,7 +39,7 @@ export default function StagioniPage() {
   return (
     <div className="page-content">
       {/* Header */}
-      <div style={{ paddingTop: '0.5rem', marginBottom: '1rem' }}>
+      <div className="stagger-1" style={{ paddingTop: '0.5rem', marginBottom: '1rem' }}>
         <h2 style={{ marginBottom: '0.25rem' }}>📚 Annali del Calcetto</h2>
         <p className="text-sm text-muted">
           {totals.seasonCount} stagioni · {totals.matches} partite · {totals.goals} gol
@@ -47,7 +47,7 @@ export default function StagioniPage() {
       </div>
 
       {/* Season selector */}
-      <div style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', paddingBottom: '0.75rem', marginBottom: '1rem' }}>
+      <div className="stagger-2" style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', paddingBottom: '0.75rem', marginBottom: '1rem' }}>
         {seasons.map((s, i) => (
           <button
             key={s.id}
@@ -73,7 +73,7 @@ export default function StagioniPage() {
       </div>
 
       {/* Season banner */}
-      <div className="card mb-4" style={{
+      <div className="card mb-4 stagger-3" style={{
         background: season.inCorso
           ? 'linear-gradient(135deg, rgba(246,224,94,0.12), rgba(246,224,94,0.03))'
           : 'linear-gradient(135deg, rgba(79,209,197,0.12), rgba(79,209,197,0.03))',
@@ -109,7 +109,7 @@ export default function StagioniPage() {
       </div>
 
       {/* Records */}
-      <div className="card mb-4">
+      <div className="card mb-4 stagger-4">
         <h3 className="mb-3">🏆 Record della Stagione</h3>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
           {rec.topScorer && (
@@ -140,7 +140,7 @@ export default function StagioniPage() {
       </div>
 
       {/* Sort controls */}
-      <div className="flex items-center gap-2 mb-3">
+      <div className="flex items-center gap-2 mb-3 stagger-5">
         <h3 style={{ flex: 1 }}>📊 Classifica Giocatori</h3>
       </div>
       <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.75rem', overflowX: 'auto' }}>
@@ -167,7 +167,7 @@ export default function StagioniPage() {
       </div>
 
       {/* Player table */}
-      <div className="card" style={{ padding: '0.5rem' }}>
+      <div className="card stagger-6" style={{ padding: '0.5rem' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid #4A5568', color: '#718096' }}>

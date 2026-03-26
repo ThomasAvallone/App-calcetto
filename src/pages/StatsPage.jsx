@@ -545,10 +545,10 @@ export default function StatsPage() {
 
   return (
     <div className="page-content">
-      <h2 style={{ paddingTop: '0.5rem', marginBottom: '1.25rem' }}>📊 Classifiche</h2>
+      <h2 className="stagger-1" style={{ paddingTop: '0.5rem', marginBottom: '1.25rem' }}>📊 Classifiche</h2>
 
       {/* Tab bar */}
-      <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '1rem', overflowX: 'auto', paddingBottom: '0.25rem' }}>
+      <div className="stagger-2" style={{ display: 'flex', gap: '0.4rem', marginBottom: '1rem', overflowX: 'auto', paddingBottom: '0.25rem' }}>
         {LEADERBOARD_TABS.map(t => {
           const isActive = tab === t.key;
           const accent = t.key === 'duo' ? '#B794F4' : t.key === 'h2h' ? '#F6AD55' : t.key === 'classifica' ? '#F6E05E' : t.key === 'squadre' ? '#FC8181' : t.key === 'report' ? '#68D391' : t.key === 'hall' ? '#FBD38D' : tabConfig[t.key]?.accent || '#4FD1C5';
@@ -572,7 +572,7 @@ export default function StatsPage() {
 
       {/* Period filter – only for leaderboard tabs */}
       {!isSpecialTab && (
-        <div style={{ display: 'flex', gap: '0.35rem', marginBottom: '1.25rem' }}>
+        <div className="stagger-3" style={{ display: 'flex', gap: '0.35rem', marginBottom: '1.25rem' }}>
           {PERIODS.map(p => (
             <button
               key={p.key}
@@ -593,6 +593,7 @@ export default function StatsPage() {
       )}
 
       {/* Leaderboard */}
+      <div className="stagger-4">
       {!isSpecialTab && tab !== 'classifica' && (
         list.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '3rem 1rem', color: '#718096' }}>
@@ -1313,6 +1314,7 @@ function HallTab({ finishedMatches, players, hallText, setHallText, hallLoading,
           <p className="text-sm">Servono almeno 5 partite per giocatore per la Hall</p>
         </div>
       )}
+      </div>
     </div>
   );
 }

@@ -38,7 +38,7 @@ export default function BadgesPage() {
   return (
     <div className="page-content">
       {/* Header */}
-      <div className="flex items-center gap-3 mb-4" style={{ paddingTop: '0.5rem' }}>
+      <div className="flex items-center gap-3 mb-4 stagger-1" style={{ paddingTop: '0.5rem' }}>
         <button className="btn btn-ghost btn-icon" onClick={() => navigate(-1)}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
             <path d="M15 18l-6-6 6-6"/>
@@ -51,7 +51,7 @@ export default function BadgesPage() {
       </div>
 
       {/* Legend */}
-      <div className="card mb-4" style={{ padding: '0.75rem 1rem' }}>
+      <div className="card mb-4 stagger-2" style={{ padding: '0.75rem 1rem' }}>
         <p className="text-xs text-muted mb-2" style={{ fontWeight: 600 }}>Fonte dati</p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
           {Object.entries(SOURCE_LABELS).map(([key, { label, color }]) => (
@@ -72,7 +72,7 @@ export default function BadgesPage() {
       {[{ key: 'positive', list: positive }, { key: 'negative', list: negative }].map(({ key, list }) => {
         const cat = CATEGORY_LABELS[key];
         return (
-          <div key={key} className="card mb-4" style={{ background: cat.bg, border: `1px solid ${cat.border}` }}>
+          <div key={key} className={`card mb-4 stagger-3`} style={{ background: cat.bg, border: `1px solid ${cat.border}` }}>
             <h3 className="mb-3" style={{ fontSize: '0.9rem', color: cat.color }}>
               {cat.label} ({list.length})
             </h3>

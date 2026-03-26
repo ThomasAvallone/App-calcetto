@@ -196,7 +196,7 @@ export default function HistoryPage() {
 
   return (
     <div className="page-content">
-      <div className="flex items-center justify-between" style={{ paddingTop: '0.5rem', marginBottom: '1.25rem' }}>
+      <div className="flex items-center justify-between stagger-1" style={{ paddingTop: '0.5rem', marginBottom: '1.25rem' }}>
         <h2>📋 Storico Partite</h2>
         <div className="flex gap-1">
           {[{ key: 'list', label: '☰' }, { key: 'calendar', label: '📅' }].map(v => (
@@ -223,9 +223,9 @@ export default function HistoryPage() {
       )}
 
       {viewMode === 'calendar' ? (
-        <CalendarView matches={matches} onNavigate={navigate} />
+        <div className="stagger-2"><CalendarView matches={matches} onNavigate={navigate} /></div>
       ) : (
-      <>
+      <div className="stagger-2">
 
       {scheduled.length > 0 && (
         <>
@@ -363,7 +363,7 @@ export default function HistoryPage() {
         </div>
       )}
 
-      </>
+      </div>
       )}
     </div>
   );

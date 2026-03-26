@@ -644,7 +644,7 @@ export default function PlayersPage() {
 
   return (
     <div className="page-content">
-      <div className="flex items-center justify-between mb-4" style={{ paddingTop: '0.5rem' }}>
+      <div className="flex items-center justify-between mb-4 stagger-1" style={{ paddingTop: '0.5rem' }}>
         <h2>👥 Giocatori</h2>
         {isAdmin && (
           <div className="flex gap-2">
@@ -665,7 +665,7 @@ export default function PlayersPage() {
       </div>
 
       {/* Search */}
-      <div style={{ position: 'relative', marginBottom: '1rem' }}>
+      <div className="stagger-2" style={{ position: 'relative', marginBottom: '1rem' }}>
         <input className="input" placeholder="🔍 Cerca giocatore..." value={search}
           onChange={e => setSearch(e.target.value)} />
       </div>
@@ -724,6 +724,7 @@ export default function PlayersPage() {
       )}
 
       {/* Players ranking list */}
+      <div className="stagger-3">
       {ranking.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '3rem 1rem', color: '#718096' }}>
           <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>👤</div>
@@ -778,6 +779,7 @@ export default function PlayersPage() {
           </div>
         );
       })}
+      </div>
     </div>
   );
 }
