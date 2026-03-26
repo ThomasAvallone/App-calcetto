@@ -279,7 +279,7 @@ export default function FutCard({ player, form, seasonStats, rank, onClick }) {
       <div style={{
         position: 'absolute',
         top: 0, left: 0, right: 0,
-        padding: '6% 7% 2%',
+        padding: '5% 7% 1%',
         zIndex: 3,
         display: 'flex',
         alignItems: 'flex-start',
@@ -339,15 +339,23 @@ export default function FutCard({ player, form, seasonStats, rank, onClick }) {
         </div>
       </div>
 
-      {/* ── PHOTO / AVATAR — full width ────────────────────────────────────────
-          Starts below the header (~27% from top) and extends to the top of the
-          bottom panel (~44% from bottom). Full left-to-right width.
-          objectFit:cover fills the area without letterboxing; top-center anchors
-          the crop to the player's face / upper body for portrait images. ── */}
+      {/* ── PHOTO / AVATAR ─────────────────────────────────────────────────────
+          Raised to top:'23%' (header ends ~22%) so it sits immediately below
+          the header. Horizontal inset 8% each side.
+          objectFit:'contain' prevents any cropping — the full image always shows.
+          overflow:hidden + borderRadius + border give it a framed card look
+          consistent with the inner decorative frame of the card.
+          The dark background fills letterbox areas for non-square images. ── */}
       <div style={{
         position: 'absolute',
-        top: '27%', left: 0, right: 0, bottom: '44%',
+        top: '23%', left: '8%', right: '8%', bottom: '42%',
         zIndex: 1,
+        overflow:     'hidden',
+        borderRadius: '8px',
+        border:       `1.5px solid ${cfg.border}`,
+        background:   'rgba(0,0,0,0.22)',
+        // Subtle inner shadow so the frame feels inset, not pasted on
+        boxShadow:    `inset 0 0 12px rgba(0,0,0,0.5), 0 0 8px ${cfg.accent}18`,
       }}>
         {photo ? (
           <img
@@ -355,19 +363,21 @@ export default function FutCard({ player, form, seasonStats, rank, onClick }) {
             alt={player.name}
             style={{
               width: '100%', height: '100%',
-              objectFit: 'cover', objectPosition: 'top center',
-              filter: 'drop-shadow(0 4px 18px rgba(0,0,0,0.95))',
+              // contain: shows full image without cropping, letterbox areas
+              // show the dark container background
+              objectFit: 'contain', objectPosition: 'center top',
+              display: 'block',
             }}
             onError={e => { e.currentTarget.style.display = 'none'; }}
           />
         ) : (
-          /* Initials avatar — centred, sized to the available height */
+          /* Initials avatar — fills the framed container */
           <div style={{
             width: '100%', height: '100%',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
             <div style={{
-              height: '85%', aspectRatio: '1',
+              height: '80%', aspectRatio: '1',
               borderRadius: '50%',
               background: `radial-gradient(circle at 38% 38%, ${cfg.accentDim}, ${cfg.accent}0C)`,
               border: `2px solid ${cfg.border}`,
@@ -474,12 +484,13 @@ export default function FutCard({ player, form, seasonStats, rank, onClick }) {
 /*
   Design Notes — layout (bottom-up, % of card height at aspect-ratio 0.72)
   ─────────────────────────────────────────────────────────────────────────
-   2–16%   stats row      (4 cols, value 1.2em / label 0.68em — bigger than v1)
+   2–16%   stats row      (4 cols, value 1.2em / label 0.68em)
   17%      separator line
-  18–40%   SparkLine panel (22% = ~53px — much taller than v1's 15%)
-  44–100%  photo / avatar  (full-width, objectFit:cover, anchored top-center)
+  18–40%   SparkLine panel (22% = ~53px tall)
+  42–77%   photo / avatar  (inset 8% each side, framed with borderRadius+border,
+                            objectFit:contain — no cropping)
 
-  Top header (0–27%):
+  Top header (0–23%):
     flex row  [PI + abbr]  [name + emoji]  [medal/#rank]
     Dark-to-transparent gradient ensures readability over any photo.
     Name is uppercase, 1.3em, truncated with ellipsis.
