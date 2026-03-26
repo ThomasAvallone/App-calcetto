@@ -1014,6 +1014,7 @@ export default function StatsPage() {
           </div>
         );
       })()}
+      </div>
     </div>
   );
 }
@@ -1314,7 +1315,6 @@ function HallTab({ finishedMatches, players, hallText, setHallText, hallLoading,
           <p className="text-sm">Servono almeno 5 partite per giocatore per la Hall</p>
         </div>
       )}
-      </div>
     </div>
   );
 }
