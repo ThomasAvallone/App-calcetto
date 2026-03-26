@@ -62,11 +62,9 @@ const ROLE_ICON = {
   'Attaccante':     '⚽',
 };
 
-const MEDAL = ['🥇', '🥈', '🥉'];
-
-// Trend palette — shared with global app result colors
-const CLR_UP   = '#68D391';
-const CLR_DOWN = '#FC8181';
+const MEDAL     = ['🥇', '🥈', '🥉'];
+const CLR_UP    = '#68D391';
+const CLR_DOWN  = '#FC8181';
 
 function isImageUrl(url) {
   if (!url) return false;
@@ -80,8 +78,9 @@ function getInitials(name) {
 }
 
 // ─── SparkLine ────────────────────────────────────────────────────────────────
-// Renders an inline SVG power-index trend chart.
-// Uses the last 14 powerHistory snapshots; returns null if < 2 points.
+// SVG trend chart of power-index history.
+// Delta label sits top-LEFT: the last dot is always at the RIGHT edge of the
+// chart, so no overlap is geometrically possible regardless of the dot's Y.
 
 function SparkLine({ history, accent, uid }) {
   if (!history || history.length < 2) return null;
@@ -90,33 +89,30 @@ function SparkLine({ history, accent, uid }) {
   if (pts.length < 2) return null;
 
   const piValues = pts.map(p => p.pi);
-  const minV = Math.min(...piValues);
-  const maxV = Math.max(...piValues);
+  const minV  = Math.min(...piValues);
+  const maxV  = Math.max(...piValues);
   const range = maxV - minV;
 
-  // SVG coordinate space
-  const W = 100, H = 24, PX = 3, PY = 3;
+  // SVG viewport
+  const W = 100, H = 24;
+  // Horizontal padding keeps the last dot well away from the right edge,
+  // avoiding any possibility of overlap with the delta label.
+  const PX = 4, PY = 3;
 
   const toX = i  => PX + (i / (pts.length - 1)) * (W - PX * 2);
-  // Invert Y: higher pi = top of chart. Clamp to a flat center if perfectly flat.
   const toY = pi => range < 0.3
-    ? H / 2
+    ? H / 2   // perfectly flat → centred horizontal line
     : H - PY - ((pi - minV) / range) * (H - PY * 2);
 
   const points  = pts.map((p, i) => ({ x: toX(i), y: toY(p.pi) }));
   const lineStr = points.map(p => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ');
 
-  const firstPi = pts[0].pi;
-  const lastPi  = pts[pts.length - 1].pi;
-  const delta   = lastPi - firstPi;
-
-  // Color: green if clearly rising, red if falling, accent if flat
+  const delta      = pts[pts.length - 1].pi - pts[0].pi;
   const trendColor = delta > 1.5 ? CLR_UP : delta < -1.5 ? CLR_DOWN : accent;
   const deltaStr   = `${delta > 0.05 ? '+' : ''}${delta.toFixed(1)}`;
 
   const lastPt = points[points.length - 1];
 
-  // Area fill from line to bottom of SVG viewport
   const areaD = [
     `M ${points[0].x.toFixed(2)} ${H}`,
     ...points.map(p => `L ${p.x.toFixed(2)} ${p.y.toFixed(2)}`),
@@ -124,7 +120,7 @@ function SparkLine({ history, accent, uid }) {
     'Z',
   ].join(' ');
 
-  // Unique gradient ID per card instance (SVG IDs are document-global)
+  // Unique gradient ID — SVG IDs are document-global, scope by player
   const gId = `sg-${(uid || 'x').replace(/[^a-zA-Z0-9]/g, '').slice(0, 14)}`;
 
   return (
@@ -145,10 +141,10 @@ function SparkLine({ history, accent, uid }) {
           </linearGradient>
         </defs>
 
-        {/* Gradient area fill under the line */}
+        {/* Area fill */}
         <path d={areaD} fill={`url(#${gId})`} />
 
-        {/* The trend line itself */}
+        {/* Trend line */}
         <polyline
           points={lineStr}
           fill="none"
@@ -158,7 +154,7 @@ function SparkLine({ history, accent, uid }) {
           strokeLinejoin="round"
         />
 
-        {/* Glowing dot on the most recent data point */}
+        {/* Last-point dot — always at right edge, never near the left-side label */}
         <circle
           cx={lastPt.x.toFixed(2)}
           cy={lastPt.y.toFixed(2)}
@@ -168,20 +164,12 @@ function SparkLine({ history, accent, uid }) {
         />
       </svg>
 
-      {/* "TREND" micro-label top-left */}
+      {/* Delta label — TOP-LEFT.
+          The dot is always on the RIGHT side of the SVG, so these two
+          elements occupy opposite horizontal ends and can never collide. */}
       <div aria-hidden="true" style={{
         position: 'absolute', top: 0, left: 0,
-        fontSize: '0.58em', fontWeight: 700,
-        color: `${trendColor}88`,
-        letterSpacing: '0.06em', lineHeight: 1,
-      }}>
-        TREND
-      </div>
-
-      {/* Delta value top-right — primary data callout */}
-      <div aria-hidden="true" style={{
-        position: 'absolute', top: 0, right: 0,
-        fontSize: '0.7em', fontWeight: 900,
+        fontSize: '0.72em', fontWeight: 900,
         color: trendColor,
         textShadow: `0 0 8px ${trendColor}`,
         lineHeight: 1, letterSpacing: '0.02em',
@@ -202,12 +190,11 @@ export default function FutCard({ player, form, seasonStats, rank, onClick }) {
   const abbr  = ROLE_ABBR[role] || role.slice(0, 3).toUpperCase();
   const photo = isImageUrl(player.photoURL) ? player.photoURL : null;
 
-  const s  = player.stats   || {};
-  const ss = seasonStats    || {};
+  const s  = player.stats  || {};
+  const ss = seasonStats   || {};
   const totalMatches = s.matches || 0;
   const winRate = totalMatches > 0 ? Math.round(((s.wins || 0) / totalMatches) * 100) : 0;
 
-  // 4 core stats — cleaner with the sparkline occupying the form slot
   const stats = [
     { key: 'GOL',  value: ss.goals   ?? s.goals   ?? 0 },
     { key: 'ASS',  value: ss.assists ?? s.assists  ?? 0 },
@@ -235,8 +222,7 @@ export default function FutCard({ player, form, seasonStats, rank, onClick }) {
         cursor:       'pointer',
         overflow:     'hidden',
         userSelect:   'none',
-        // Base font-size: all children scale uniformly with this card root
-        fontSize:     '10px',
+        fontSize:     '10px', // base: all children use em → uniform scaling
         transition:   'transform 0.2s ease, box-shadow 0.2s ease',
         outline:      'none',
       }}
@@ -276,9 +262,9 @@ export default function FutCard({ player, form, seasonStats, rank, onClick }) {
 
       {/* ── Tier watermark ── */}
       <div aria-hidden="true" style={{
-        position: 'absolute', top: '42%', left: '50%',
+        position: 'absolute', top: '44%', left: '50%',
         transform: 'translate(-50%, -50%) rotate(-30deg)',
-        fontSize: '3.6em', fontWeight: 900,
+        fontSize: '3.4em', fontWeight: 900,
         color: `${cfg.accent}07`,
         pointerEvents: 'none', zIndex: 1,
         letterSpacing: '0.08em', whiteSpace: 'nowrap',
@@ -286,47 +272,81 @@ export default function FutCard({ player, form, seasonStats, rank, onClick }) {
         {cfg.watermark}
       </div>
 
-      {/* ── TOP-LEFT: rating + position abbr + role icon ── */}
-      <div style={{ position: 'absolute', top: '7%', left: '8%', zIndex: 3, lineHeight: 1 }}>
-        <div style={{
-          fontSize: '2.9em', fontWeight: 900,
-          color: cfg.accent,
-          textShadow: `0 0 16px ${cfg.accent}90`,
-          letterSpacing: '-0.02em', lineHeight: 1,
-        }}>
-          {Math.round(pi)}
-        </div>
-        <div style={{
-          fontSize: '0.85em', fontWeight: 800,
-          color: cfg.accent, letterSpacing: '0.12em',
-          marginTop: '2px',
-          textShadow: `0 0 8px ${cfg.accent}70`,
-        }}>
-          {abbr}
-        </div>
-        <div style={{ fontSize: '1.4em', marginTop: '4px', lineHeight: 1 }}>
-          {ROLE_ICON[role]}
-        </div>
-      </div>
-
-      {/* ── TOP-RIGHT: medal or rank ── */}
-      <div style={{ position: 'absolute', top: '7%', right: '8%', zIndex: 3, textAlign: 'right', lineHeight: 1 }}>
-        {rank < 3 ? (
-          <div style={{ fontSize: '1.7em' }}>{MEDAL[rank]}</div>
-        ) : (
-          <div style={{ fontSize: '0.72em', fontWeight: 800, color: cfg.accentDim, letterSpacing: '0.06em' }}>
-            #{rank + 1}
-          </div>
-        )}
-      </div>
-
-      {/* ── PHOTO / AVATAR ──
-          Extends down to bottom 40% to leave room for the expanded bottom panel.
-          The scrim (below) will fade the photo out naturally. ── */}
+      {/* ── TOP HEADER: PI | name + emoji | medal ──────────────────────────────
+          Flex row spanning full width. The name and role emoji live here,
+          flanked by the big PI number on the left and the rank badge on the right.
+          ── */}
       <div style={{
         position: 'absolute',
-        top: '8%', left: '24%', right: '4%', bottom: '40%',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        top: 0, left: 0, right: 0,
+        padding: '6% 7% 2%',
+        zIndex: 3,
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: '5px',
+        // Dark-to-transparent vignette so the header reads over the photo
+        background: 'linear-gradient(to bottom, rgba(0,0,0,0.72) 0%, rgba(0,0,0,0.3) 70%, transparent 100%)',
+      }}>
+
+        {/* PI number + position abbr */}
+        <div style={{ flexShrink: 0, lineHeight: 1 }}>
+          <div style={{
+            fontSize: '3em', fontWeight: 900,
+            color: cfg.accent,
+            textShadow: `0 0 16px ${cfg.accent}90`,
+            letterSpacing: '-0.02em', lineHeight: 1,
+          }}>
+            {Math.round(pi)}
+          </div>
+          <div style={{
+            fontSize: '0.82em', fontWeight: 800,
+            color: cfg.accent, letterSpacing: '0.12em',
+            marginTop: '2px',
+            textShadow: `0 0 8px ${cfg.accent}70`,
+          }}>
+            {abbr}
+          </div>
+        </div>
+
+        {/* Name + role emoji — centre column, truncates with ellipsis */}
+        <div style={{ flex: 1, minWidth: 0, paddingTop: '2px', lineHeight: 1 }}>
+          <div style={{
+            fontSize: '1.3em', fontWeight: 900,
+            color: cfg.accent,
+            letterSpacing: '0.05em', textTransform: 'uppercase',
+            textShadow: `0 0 12px ${cfg.accent}90, 0 0 24px ${cfg.accent}40`,
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          }}>
+            {player.name}
+          </div>
+          <div style={{ fontSize: '1.5em', marginTop: '5px', lineHeight: 1 }}>
+            {ROLE_ICON[role]}
+          </div>
+        </div>
+
+        {/* Rank / medal */}
+        <div style={{ flexShrink: 0, textAlign: 'right', lineHeight: 1 }}>
+          {rank < 3 ? (
+            <div style={{ fontSize: '1.6em' }}>{MEDAL[rank]}</div>
+          ) : (
+            <div style={{
+              fontSize: '0.72em', fontWeight: 800,
+              color: cfg.accentDim, letterSpacing: '0.06em',
+            }}>
+              #{rank + 1}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── PHOTO / AVATAR — full width ────────────────────────────────────────
+          Starts below the header (~27% from top) and extends to the top of the
+          bottom panel (~44% from bottom). Full left-to-right width.
+          objectFit:cover fills the area without letterboxing; top-center anchors
+          the crop to the player's face / upper body for portrait images. ── */}
+      <div style={{
+        position: 'absolute',
+        top: '27%', left: 0, right: 0, bottom: '44%',
         zIndex: 1,
       }}>
         {photo ? (
@@ -335,73 +355,53 @@ export default function FutCard({ player, form, seasonStats, rank, onClick }) {
             alt={player.name}
             style={{
               width: '100%', height: '100%',
-              objectFit: 'contain', objectPosition: 'center bottom',
+              objectFit: 'cover', objectPosition: 'top center',
               filter: 'drop-shadow(0 4px 18px rgba(0,0,0,0.95))',
             }}
             onError={e => { e.currentTarget.style.display = 'none'; }}
           />
         ) : (
+          /* Initials avatar — centred, sized to the available height */
           <div style={{
-            width: '60%', aspectRatio: '1',
-            borderRadius: '50%',
-            background: `radial-gradient(circle at 38% 38%, ${cfg.accentDim}, ${cfg.accent}0C)`,
-            border: `2px solid ${cfg.border}`,
+            width: '100%', height: '100%',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '1.9em', fontWeight: 900,
-            color: cfg.accent,
-            textShadow: `0 0 14px ${cfg.accent}`,
-            boxShadow: `0 0 24px ${cfg.accent}22, inset 0 0 14px ${cfg.accent}12`,
           }}>
-            {getInitials(player.name)}
+            <div style={{
+              height: '85%', aspectRatio: '1',
+              borderRadius: '50%',
+              background: `radial-gradient(circle at 38% 38%, ${cfg.accentDim}, ${cfg.accent}0C)`,
+              border: `2px solid ${cfg.border}`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '2.2em', fontWeight: 900,
+              color: cfg.accent,
+              textShadow: `0 0 14px ${cfg.accent}`,
+              boxShadow: `0 0 28px ${cfg.accent}22, inset 0 0 14px ${cfg.accent}12`,
+            }}>
+              {getInitials(player.name)}
+            </div>
           </div>
         )}
       </div>
 
-      {/* ── Bottom dark gradient scrim ──
-          Extended to 50% to cover the taller bottom panel (was 40%). ── */}
+      {/* ── Bottom scrim ───────────────────────────────────────────────────────
+          Extended to 48% so it fully covers sparkline + stats sections. ── */}
       <div aria-hidden="true" style={{
-        position: 'absolute', bottom: 0, left: 0, right: 0, height: '50%',
-        background: 'linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.88) 28%, rgba(0,0,0,0.97) 100%)',
+        position: 'absolute', bottom: 0, left: 0, right: 0, height: '48%',
+        background: 'linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.9) 26%, rgba(0,0,0,0.98) 100%)',
         zIndex: 2,
       }} />
 
-      {/* ── Player name ── bigger than before (1.2em vs old 0.95em) ── */}
-      <div style={{
-        position: 'absolute',
-        bottom: '36%', left: 0, right: 0, zIndex: 3,
-        textAlign: 'center', padding: '0 8px',
-      }}>
-        <div style={{
-          fontSize: '1.2em', fontWeight: 900,
-          color: cfg.accent,
-          letterSpacing: '0.07em', textTransform: 'uppercase',
-          textShadow: `0 0 12px ${cfg.accent}90, 0 0 24px ${cfg.accent}40`,
-          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-        }}>
-          {player.name}
-        </div>
-      </div>
-
-      {/* ── Separator above sparkline ── */}
-      <div aria-hidden="true" style={{
-        position: 'absolute', bottom: '34%', left: '8%', right: '8%',
-        height: '1px',
-        background: `linear-gradient(90deg, transparent, ${cfg.border}, transparent)`,
-        zIndex: 3,
-      }} />
-
-      {/* ── SparkLine zone ──
-          Subtle dark inset panel so the chart reads as its own section.
-          Only rendered when powerHistory has enough data. ── */}
+      {/* ── SparkLine panel ─────────────────────────────────────────────────────
+          22% tall = ~53px at a 243px card: plenty of room for a readable chart.
+          hasTrend guard renders a placeholder to preserve layout rhythm. ── */}
       {hasTrend ? (
         <div style={{
           position: 'absolute',
-          bottom: '17%', left: '5%', right: '5%', height: '15%',
+          bottom: '18%', left: '5%', right: '5%', height: '22%',
           zIndex: 3,
-          // Very subtle background so the chart floats on a defined surface
-          background: 'rgba(0,0,0,0.28)',
-          borderRadius: '4px',
-          padding: '3px 4px',
+          background: 'rgba(0,0,0,0.3)',
+          borderRadius: '5px',
+          padding: '4px 5px',
           boxSizing: 'border-box',
         }}>
           <SparkLine
@@ -411,35 +411,33 @@ export default function FutCard({ player, form, seasonStats, rank, onClick }) {
           />
         </div>
       ) : (
-        // Placeholder when no history: show dashes to preserve layout rhythm
         <div style={{
           position: 'absolute',
-          bottom: '17%', left: '5%', right: '5%', height: '15%',
+          bottom: '18%', left: '5%', right: '5%', height: '22%',
           zIndex: 3,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(0,0,0,0.18)',
-          borderRadius: '4px',
+          background: 'rgba(0,0,0,0.2)',
+          borderRadius: '5px',
         }}>
-          <div style={{ fontSize: '0.62em', color: `${cfg.accentDim}`, letterSpacing: '0.1em' }}>
+          <div style={{ fontSize: '0.6em', color: cfg.accentDim, letterSpacing: '0.1em' }}>
             — NESSUN TREND —
           </div>
         </div>
       )}
 
-      {/* ── Separator below sparkline ── */}
+      {/* ── Separator between sparkline and stats ── */}
       <div aria-hidden="true" style={{
-        position: 'absolute', bottom: '16%', left: '8%', right: '8%',
+        position: 'absolute', bottom: '17%', left: '8%', right: '8%',
         height: '1px',
         background: `linear-gradient(90deg, transparent, ${cfg.border}, transparent)`,
         zIndex: 3,
       }} />
 
-      {/* ── 4 stats in a single row ──
-          Reduced from 6 to 4: the sparkline now carries the form information.
-          Single row is cleaner and gives each stat more breathing room. ── */}
+      {/* ── 4 stats — single row, slightly bigger fonts ─────────────────────────
+          More horizontal breathing room per stat vs the previous 6-stat grid. ── */}
       <div style={{
         position: 'absolute',
-        bottom: '2%', left: '3%', right: '3%', height: '13%',
+        bottom: '2%', left: '3%', right: '3%', height: '14%',
         display: 'grid',
         gridTemplateColumns: 'repeat(4, 1fr)',
         zIndex: 3,
@@ -451,7 +449,7 @@ export default function FutCard({ player, form, seasonStats, rank, onClick }) {
             lineHeight: 1,
           }}>
             <div style={{
-              fontSize: '1.05em', fontWeight: 900,
+              fontSize: '1.2em', fontWeight: 900,
               color: cfg.accent,
               textShadow: `0 0 6px ${cfg.accent}62`,
               letterSpacing: '-0.01em',
@@ -459,9 +457,9 @@ export default function FutCard({ player, form, seasonStats, rank, onClick }) {
               {value}
             </div>
             <div style={{
-              fontSize: '0.6em', fontWeight: 700,
+              fontSize: '0.68em', fontWeight: 700,
               color: cfg.accentDim,
-              letterSpacing: '0.04em',
+              letterSpacing: '0.05em',
             }}>
               {key}
             </div>
@@ -474,21 +472,20 @@ export default function FutCard({ player, form, seasonStats, rank, onClick }) {
 }
 
 /*
-  Design Notes
-  ────────────
-  Layout (bottom-up, % of card height):
-    2–15%   → 4-stat row (single row, 4 cols)
-    16%     → separator line
-    17–32%  → SparkLine panel (power-index trend SVG, ~36px at a 243px-tall card)
-    34%     → separator line
-    36%     → player name (1.2em, up from 0.95em — more visual weight)
-    40–100% → photo / avatar area + scrim overlay (scrim extended to 50% for taller panel)
+  Design Notes — layout (bottom-up, % of card height at aspect-ratio 0.72)
+  ─────────────────────────────────────────────────────────────────────────
+   2–16%   stats row      (4 cols, value 1.2em / label 0.68em — bigger than v1)
+  17%      separator line
+  18–40%   SparkLine panel (22% = ~53px — much taller than v1's 15%)
+  44–100%  photo / avatar  (full-width, objectFit:cover, anchored top-center)
 
-  SparkLine colors:
-    delta > +1.5 → green  (#68D391) — clearly improving
-    delta < −1.5 → red    (#FC8181) — declining
-    otherwise    → card accent       — stable
+  Top header (0–27%):
+    flex row  [PI + abbr]  [name + emoji]  [medal/#rank]
+    Dark-to-transparent gradient ensures readability over any photo.
+    Name is uppercase, 1.3em, truncated with ellipsis.
 
-  Gradient IDs are scoped with the player.id to avoid SVG namespace collisions
-  when multiple cards render simultaneously.
+  SparkLine delta fix:
+    Delta text is at top-LEFT of the sparkline div.
+    The last dot is always at the RIGHT edge of the SVG (x ≈ 96/100).
+    Opposite corners → collision geometrically impossible regardless of Y.
 */
