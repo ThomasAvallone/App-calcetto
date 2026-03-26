@@ -12,6 +12,15 @@ import toast from 'react-hot-toast';
 
 const CHANGELOG = [
   {
+    version: '3.2.0',
+    date: 'Marzo 2026',
+    entries: [
+      { type: 'new', text: 'Logo app: icona personalizzata su tutte le superfici PWA (favicon, apple-touch-icon, icone 72×72…512×512) — sostituisce il placeholder precedente' },
+      { type: 'new', text: 'Vista Carte FUT (PlayersPage): visualizzazione alternativa alla lista con card ispirate alle FUT di EA Sports — 4 tier metallici (Bronzo, Argento, Oro, In Forma) con gradienti, glow, watermark e shimmer animato per i top player' },
+      { type: 'new', text: 'Trend Forma nella card FUT: sparkline SVG con gli ultimi 14 aggiornamenti del Power Index — area gradient, linea colorata (verde/rosso/neutro secondo il delta), dot glow sull\'ultimo punto e label delta top-left' },
+    ],
+  },
+  {
     version: '3.1.1',
     date: 'Marzo 2026',
     entries: [

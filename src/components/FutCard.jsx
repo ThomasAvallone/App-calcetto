@@ -109,7 +109,10 @@ function SparkLine({ history, accent, uid }) {
 
   const delta      = pts[pts.length - 1].pi - pts[0].pi;
   const trendColor = delta > 1.5 ? CLR_UP : delta < -1.5 ? CLR_DOWN : accent;
-  const deltaStr   = `${delta > 0.05 ? '+' : ''}${delta.toFixed(1)}`;
+  // Avoid "-0.0" for near-zero deltas
+  const deltaStr   = Math.abs(delta) < 0.05
+    ? '±0'
+    : delta > 0 ? `+${delta.toFixed(1)}` : delta.toFixed(1);
 
   const lastPt = points[points.length - 1];
 
@@ -192,8 +195,9 @@ export default function FutCard({ player, form, seasonStats, rank, onClick }) {
 
   const s  = player.stats  || {};
   const ss = seasonStats   || {};
-  const totalMatches = s.matches || 0;
-  const winRate = totalMatches > 0 ? Math.round(((s.wins || 0) / totalMatches) * 100) : 0;
+  // Win rate from season stats for consistency with the other season-based figures on the card
+  const seasonMatches = ss.matches || 0;
+  const winRate = seasonMatches > 0 ? Math.round(((ss.wins || 0) / seasonMatches) * 100) : 0;
 
   const stats = [
     { key: 'GOL',  value: ss.goals   ?? s.goals   ?? 0 },
@@ -308,10 +312,10 @@ export default function FutCard({ player, form, seasonStats, rank, onClick }) {
           </div>
         </div>
 
-        {/* Name + role emoji — fixed 3.2em: just above the PI number (3em), uniform across all cards */}
+        {/* Name + role emoji — fixed 1.6em: uniform across all cards, fits names up to ~9 chars */}
         <div style={{ flex: 1, minWidth: 0, paddingTop: '2px', lineHeight: 1 }}>
           <div style={{
-            fontSize: '3.2em', fontWeight: 900,
+            fontSize: '1.6em', fontWeight: 900,
             color: cfg.accent,
             letterSpacing: '0.03em', textTransform: 'uppercase',
             textShadow: `0 0 14px ${cfg.accent}95, 0 0 28px ${cfg.accent}50`,
