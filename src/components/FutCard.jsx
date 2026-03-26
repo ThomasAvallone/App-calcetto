@@ -311,10 +311,10 @@ export default function FutCard({ player, form, seasonStats, rank, onClick }) {
         {/* Name + role emoji — centre column, truncates with ellipsis */}
         <div style={{ flex: 1, minWidth: 0, paddingTop: '2px', lineHeight: 1 }}>
           <div style={{
-            fontSize: '1.3em', fontWeight: 900,
+            fontSize: '1.65em', fontWeight: 900,
             color: cfg.accent,
-            letterSpacing: '0.05em', textTransform: 'uppercase',
-            textShadow: `0 0 12px ${cfg.accent}90, 0 0 24px ${cfg.accent}40`,
+            letterSpacing: '0.03em', textTransform: 'uppercase',
+            textShadow: `0 0 14px ${cfg.accent}95, 0 0 28px ${cfg.accent}50`,
             whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
           }}>
             {player.name}
