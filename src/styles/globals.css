@@ -481,5 +481,11 @@ select.input option { background: var(--bg-card); }
   filter: drop-shadow(0 0 8px rgba(79,209,197,0.35));
 }
 
+/* ─── FUT Card animations ───────────────────────────────────────────────────── */
+@keyframes fut-shimmer {
+  0%   { transform: rotate(25deg) translateX(-120%); }
+  100% { transform: rotate(25deg) translateX(420%); }
+}
+
 /* ─── Toaster override ──────────────────────────────────────────────────────── */
 .go-toast-container { font-family: 'Inter', sans-serif !important; }

@@ -11,6 +11,7 @@ import toast from 'react-hot-toast';
 import { getMs } from '../utils/dateUtils';
 import { generatePlayerTrendAnalysis, generatePlayerNickname } from '../services/geminiService';
 import { RESULT_COLORS, CLR_WIN, CLR_DRAW, CLR_LOSS, AVATAR_COLORS, CLR_MUTED, MEDAL_COLORS } from '../constants/colors';
+import FutCard from '../components/FutCard';
 
 const ROLES = ['Portiere', 'Difensore', 'Centrocampista', 'Attaccante'];
 
@@ -126,6 +127,7 @@ export default function PlayersPage() {
   const [loading, setLoading] = useState(false);
   const [recalcLoading, setRecalcLoading] = useState(false);
   const [search, setSearch] = useState('');
+  const [viewMode, setViewMode] = useState('list'); // 'list' | 'cards'
   const [selectedPlayer, setSelectedPlayer] = useState(null);
   const [statView, setStatView] = useState('season');
 
@@ -664,10 +666,61 @@ export default function PlayersPage() {
         )}
       </div>
 
-      {/* Search */}
-      <div className="stagger-2" style={{ position: 'relative', marginBottom: '1rem' }}>
+      {/* Search + view toggle */}
+      <div className="stagger-2" style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', alignItems: 'center' }}>
         <input className="input" placeholder="🔍 Cerca giocatore..." value={search}
-          onChange={e => setSearch(e.target.value)} />
+          onChange={e => setSearch(e.target.value)} style={{ flex: 1 }} />
+        {/* List view button */}
+        <button
+          onClick={() => setViewMode('list')}
+          title="Vista lista"
+          aria-label="Vista lista"
+          aria-pressed={viewMode === 'list'}
+          style={{
+            flexShrink: 0,
+            width: 40, height: 40,
+            borderRadius: '8px',
+            border: '1px solid',
+            borderColor: viewMode === 'list' ? '#4FD1C5' : '#4A5568',
+            background: viewMode === 'list' ? 'rgba(79,209,197,0.15)' : 'transparent',
+            color: viewMode === 'list' ? '#4FD1C5' : '#718096',
+            cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <rect x="1" y="2" width="14" height="2.5" rx="1.2" fill="currentColor"/>
+            <rect x="1" y="6.75" width="14" height="2.5" rx="1.2" fill="currentColor"/>
+            <rect x="1" y="11.5" width="14" height="2.5" rx="1.2" fill="currentColor"/>
+          </svg>
+        </button>
+        {/* Cards view button */}
+        <button
+          onClick={() => setViewMode('cards')}
+          title="Vista carte FUT"
+          aria-label="Vista carte FUT"
+          aria-pressed={viewMode === 'cards'}
+          style={{
+            flexShrink: 0,
+            width: 40, height: 40,
+            borderRadius: '8px',
+            border: '1px solid',
+            borderColor: viewMode === 'cards' ? '#F6E05E' : '#4A5568',
+            background: viewMode === 'cards' ? 'rgba(246,224,94,0.12)' : 'transparent',
+            color: viewMode === 'cards' ? '#F6E05E' : '#718096',
+            cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <rect x="1"   y="1"   width="6" height="8.5" rx="1.5" fill="currentColor"/>
+            <rect x="9"   y="1"   width="6" height="8.5" rx="1.5" fill="currentColor"/>
+            <rect x="1"   y="11"  width="6" height="4"   rx="1.5" fill="currentColor"/>
+            <rect x="9"   y="11"  width="6" height="4"   rx="1.5" fill="currentColor"/>
+          </svg>
+        </button>
       </div>
 
       {/* Add/Edit Form */}
@@ -723,14 +776,38 @@ export default function PlayersPage() {
         </div>
       )}
 
-      {/* Players ranking list */}
+      {/* Players ranking — empty state + cards/list views */}
       <div className="stagger-3">
-      {ranking.length === 0 ? (
+      {ranking.length === 0 && (
         <div style={{ textAlign: 'center', padding: '3rem 1rem', color: '#718096' }}>
           <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>👤</div>
           <p>{search ? 'Nessun risultato' : 'Nessun giocatore registrato'}</p>
         </div>
-      ) : ranking.map((p, i) => {
+      )}
+
+      {/* ── FUT Cards grid ── */}
+      {ranking.length > 0 && viewMode === 'cards' && (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(2, 1fr)',
+          gap: '10px',
+          paddingBottom: '1.5rem',
+        }}>
+          {ranking.map((p, i) => (
+            <FutCard
+              key={p.id}
+              player={p}
+              form={playerFormMap[p.id]}
+              seasonStats={playerSeasonStats[p.id]}
+              rank={i}
+              onClick={() => setSelectedPlayer(p.id)}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* ── Classic list ── */}
+      {ranking.length > 0 && viewMode === 'list' && ranking.map((p, i) => {
         const as = p.stats || {};
         const totalGoals = as.goals || 0;
         const totalAssists = as.assists || 0;
