@@ -62,18 +62,14 @@ def draw_ea_logo(draw, cx, cy, scale):
     lx = cx - logo_w // 2     # top-left reference
     ly = cy - logo_h // 2
 
-    def skewed_rect(x0, y0, w, h, extra_cut=0):
+    def skewed_rect(x0, y0, w, h, cut=0):
         """
         Return polygon points for a skewed (italic) rectangle.
-        extra_cut trims the right end diagonally (arm tip style).
+        cut trims the right end diagonally (arm tip style).
         """
-        # skew offset per row: positive = shift right as y increases
         sk_top = int(skew * (logo_h - (y0 - ly)) / logo_h)
         sk_bot = int(skew * (logo_h - (y0 + h - ly)) / logo_h)
-
-        rx = x0 + w            # right edge x
-        cut = extra_cut        # extra diagonal at right tip
-
+        rx = x0 + w
         return [
             (x0  + sk_top,        y0),
             (rx  + sk_top - cut,  y0),
