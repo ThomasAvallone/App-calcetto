@@ -23,7 +23,7 @@ export default function Spinner({ fullPage, size = 32 }) {
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         background: '#1A202C', zIndex: 999,
       }}>
-        {spinner}
+        <img src="/loading.gif" alt="Loading..." style={{ maxWidth: '80%', maxHeight: '80%' }} />
       </div>
     );
   }

@@ -10,13 +10,23 @@ const useAuthStore = create((set, get) => ({
   error: null,
 
   init() {
+    const GIF_DURATION_MS = 3600;
+    const startTime = Date.now();
+
     subscribeToAuth(async (firebaseUser) => {
+      let newState;
       if (firebaseUser) {
         const role = await getUserRole(firebaseUser.uid);
-        set({ user: firebaseUser, role, loading: false, error: null });
+        newState = { user: firebaseUser, role, loading: false, error: null };
       } else {
-        set({ user: null, role: null, loading: false });
+        newState = { user: null, role: null, loading: false };
       }
+      const elapsed = Date.now() - startTime;
+      const remaining = GIF_DURATION_MS - elapsed;
+      if (remaining > 0) {
+        await new Promise(r => setTimeout(r, remaining));
+      }
+      set(newState);
     });
   },
 
