@@ -180,17 +180,19 @@ export default function PlayersPage() {
         if (my > their) s.wins++;
         else if (my < their) s.losses++;
         else s.draws++;
-        if (their === 0) s.cleanSheets++;
         // Tutti ruotano in porta: ogni partita giocata = 1 apparizione da portiere
         s.gkMatches++;
+        let gkConcededThisMatch = 0;
         for (const ev of m.events || []) {
           if (ev.type === 'goal') {
             if (ev.scorerId === p.id) s.goals++;
             if (ev.assistId === p.id) s.assists++;
           }
           if (ev.type === 'autogoal' && ev.scorerId === p.id) s.autogoals++;
-          if (ev.gkConcededId === p.id) s.gkGoalsConceded++;
+          if (ev.gkConcededId === p.id) { s.gkGoalsConceded++; gkConcededThisMatch++; }
         }
+        // Clean sheet individuale: il portiere non ha subito gol personalmente (escluse partite storiche senza dati GK individuali)
+        if (!m.isHistorical && gkConcededThisMatch === 0) s.cleanSheets++;
         // Track historical matches by season for assist proration
         if (m.isHistorical) {
           const sid = getSeasonId(m.date);
@@ -214,19 +216,18 @@ export default function PlayersPage() {
     return stats;
   }, [players, finishedMatches, seasonStartMs]);
 
-  // All-time clean sheets per player (matches where team conceded 0)
+  // All-time clean sheets per player: il portiere non ha subito gol personalmente
   const playerCleanSheets = useMemo(() => {
     const cs = {};
     for (const p of players) cs[p.id] = 0;
     for (const m of finishedMatches) {
-      const redCS = (m.blueScore ?? 0) === 0;
-      const blueCS = (m.redScore ?? 0) === 0;
-      if (!redCS && !blueCS) continue;
-      for (const pl of (m.redTeam || [])) {
-        if (pl.id && cs[pl.id] !== undefined && redCS) cs[pl.id]++;
-      }
-      for (const pl of (m.blueTeam || [])) {
-        if (pl.id && cs[pl.id] !== undefined && blueCS) cs[pl.id]++;
+      if (m.isHistorical) continue; // partite storiche senza dati GK individuali
+      // Trova i portieri che hanno subito almeno un gol in questa partita
+      const concededSet = new Set((m.events || []).filter(ev => ev.gkConcededId).map(ev => ev.gkConcededId));
+      for (const pl of [...(m.redTeam || []), ...(m.blueTeam || [])]) {
+        if (pl.id && cs[pl.id] !== undefined && !concededSet.has(pl.id)) {
+          cs[pl.id]++;
+        }
       }
     }
     return cs;

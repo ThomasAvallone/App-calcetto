@@ -166,15 +166,17 @@ function computeStatsFromMatches(players, matches) {
       if (my > their) s.wins++;
       else if (my < their) s.losses++;
       else s.draws++;
-      if (their === 0) s.cleanSheets++;
       if (!m.isHistorical) s.gkMatches++; // tutti ruotano in porta ad ogni partita
+      let gkConcededThisMatch = 0;
       for (const ev of (m.events || [])) {
         if (ev.type === 'goal') {
           if (ev.scorerId === p.id) s.goals++;
           if (ev.assistId === p.id) s.assists++;
         }
-        if (ev.gkConcededId === p.id) s.gkGoalsConceded++;
+        if (ev.gkConcededId === p.id) { s.gkGoalsConceded++; gkConcededThisMatch++; }
       }
+      // Clean sheet individuale: portiere non ha subito gol personalmente
+      if (!m.isHistorical && gkConcededThisMatch === 0) s.cleanSheets++;
       // Track historical matches by season for assist prorating
       if (m.isHistorical) {
         const sid = getSeasonId(m.date);
