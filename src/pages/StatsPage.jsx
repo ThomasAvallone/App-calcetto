@@ -167,15 +167,14 @@ function computeStatsFromMatches(players, matches) {
       else if (my < their) s.losses++;
       else s.draws++;
       if (their === 0) s.cleanSheets++;
-      let wasGkThisMatch = false;
+      if (!m.isHistorical) s.gkMatches++; // tutti ruotano in porta ad ogni partita
       for (const ev of (m.events || [])) {
         if (ev.type === 'goal') {
           if (ev.scorerId === p.id) s.goals++;
           if (ev.assistId === p.id) s.assists++;
         }
-        if (ev.gkConcededId === p.id) { s.gkGoalsConceded++; wasGkThisMatch = true; }
+        if (ev.gkConcededId === p.id) s.gkGoalsConceded++;
       }
-      if (wasGkThisMatch) s.gkMatches++;
       // Track historical matches by season for assist prorating
       if (m.isHistorical) {
         const sid = getSeasonId(m.date);
@@ -241,37 +240,20 @@ export default function StatsPage() {
     return () => { cancelled = true; };
   }, [h2hP1, h2hP2]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // GK stats always computed live from events (Firestore p.stats can be stale for GK fields)
-  const gkFromEvents = useMemo(() => {
+  // Clean sheets all-time: da app-only matches (le storiche non hanno dati GK)
+  const cleanSheetsAll = useMemo(() => {
     const map = {};
-    for (const p of players) map[p.id] = { gkGoalsConceded: 0, gkMatches: 0 };
-    // Clean sheets: per-player count of matches where their team conceded 0 goals
-    const cleanSheetsMap = {};
-    for (const p of players) cleanSheetsMap[p.id] = 0;
+    for (const p of players) map[p.id] = 0;
     for (const m of finishedMatches) {
-      const gkInMatch = new Set();
-      for (const ev of (m.events || [])) {
-        if (ev.gkConcededId && map[ev.gkConcededId]) {
-          map[ev.gkConcededId].gkGoalsConceded++;
-          gkInMatch.add(ev.gkConcededId);
-        }
-      }
-      for (const pid of gkInMatch) {
-        if (map[pid]) map[pid].gkMatches++;
-      }
-      // Count clean sheets for all players in this match
+      if (m.isHistorical) continue;
       const redCS = (m.blueScore ?? 0) === 0;
       const blueCS = (m.redScore ?? 0) === 0;
       for (const pl of (m.redTeam || [])) {
-        if (pl.id && cleanSheetsMap[pl.id] !== undefined && redCS) cleanSheetsMap[pl.id]++;
+        if (pl.id && map[pl.id] !== undefined && redCS) map[pl.id]++;
       }
       for (const pl of (m.blueTeam || [])) {
-        if (pl.id && cleanSheetsMap[pl.id] !== undefined && blueCS) cleanSheetsMap[pl.id]++;
+        if (pl.id && map[pl.id] !== undefined && blueCS) map[pl.id]++;
       }
-    }
-    // Merge cleanSheets into map
-    for (const pid of Object.keys(map)) {
-      map[pid].cleanSheets = cleanSheetsMap[pid] || 0;
     }
     return map;
   }, [players, finishedMatches]);
@@ -296,7 +278,6 @@ export default function StatsPage() {
     if (period === 'all') {
       return players.map(p => {
         const as = p.stats || {};
-        const gk = gkFromEvents[p.id] || {};
         return {
           ...p,
           totalGoals:      as.goals   || 0,
@@ -304,25 +285,16 @@ export default function StatsPage() {
           totalMatches:    as.matches || 0,
           totalWins:       as.wins    || 0,
           totalDraws:      as.draws   || 0,
-          gkMatches:       gk.gkMatches || 0,
-          gkGoalsConceded: gk.gkGoalsConceded || 0,
-          cleanSheets:     gk.cleanSheets || 0,
+          gkMatches:       as.gkMatches || 0,
+          gkGoalsConceded: as.gkGoalsConceded || 0,
+          cleanSheets:     cleanSheetsAll[p.id] || 0,
         };
       });
     }
-    const computed = period === '30d' ? thirtyDayComputedStats : seasonComputedStats;
-    // GK stats (gkMatches, gkGoalsConceded, cleanSheets) use all matches since
-    // GK/clean-sheet tracking started this season → no date filtering needed.
-    return computed.map(p => {
-      const gk = gkFromEvents[p.id] || {};
-      return {
-        ...p,
-        gkMatches:       gk.gkMatches || 0,
-        gkGoalsConceded: gk.gkGoalsConceded || 0,
-        cleanSheets:     gk.cleanSheets || 0,
-      };
-    });
-  }, [period, players, gkFromEvents, seasonComputedStats, thirtyDayComputedStats]);
+    // Per season/30d: gkMatches e gkGoalsConceded vengono da computeStatsFromMatches
+    // che usa le partite già filtrate per periodo — nessun override necessario.
+    return period === '30d' ? thirtyDayComputedStats : seasonComputedStats;
+  }, [period, players, cleanSheetsAll, seasonComputedStats, thirtyDayComputedStats]);
 
   // Classifica: computed from matches (GF/GS not in p.stats)
   // For all-time: excludes isHistorical match docs (those come from p.historicalStats)
