@@ -129,16 +129,20 @@ export async function recalculatePlayerStats(playerIds, { cachedMatches, cachedP
       if (myScore > theirScore) s.wins++;
       else if (myScore < theirScore) s.losses++;
       else s.draws++;
-      let wasGkThisMatch = false;
+      // Match-level GK tracking (covers clean sheets)
+      const wasGkThisMatch = match.redGkId === pid || match.blueGkId === pid;
       for (const ev of (match.events || [])) {
         if (ev.type === 'goal') {
           if (ev.scorerId === pid) s.goals++;
           if (ev.assistId === pid) s.assists++;
         }
         if (ev.type === 'autogoal' && ev.scorerId === pid) s.autogoals++;
-        if (ev.gkConcededId === pid) { s.gkGoalsConceded++; wasGkThisMatch = true; }
+        if (ev.gkConcededId === pid) s.gkGoalsConceded++;
       }
-      if (wasGkThisMatch) s.gkMatches++;
+      // Fall back to event-based detection if no match-level GK is set (legacy matches)
+      if (wasGkThisMatch || (!match.redGkId && !match.blueGkId && (match.events || []).some(ev => ev.gkConcededId === pid))) {
+        s.gkMatches++;
+      }
     }
     return s;
   }
