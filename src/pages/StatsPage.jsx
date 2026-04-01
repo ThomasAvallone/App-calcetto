@@ -240,24 +240,6 @@ export default function StatsPage() {
     return () => { cancelled = true; };
   }, [h2hP1, h2hP2]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Clean sheets all-time: da app-only matches (le storiche non hanno dati GK)
-  const cleanSheetsAll = useMemo(() => {
-    const map = {};
-    for (const p of players) map[p.id] = 0;
-    for (const m of finishedMatches) {
-      if (m.isHistorical) continue;
-      const redCS = (m.blueScore ?? 0) === 0;
-      const blueCS = (m.redScore ?? 0) === 0;
-      for (const pl of (m.redTeam || [])) {
-        if (pl.id && map[pl.id] !== undefined && redCS) map[pl.id]++;
-      }
-      for (const pl of (m.blueTeam || [])) {
-        if (pl.id && map[pl.id] !== undefined && blueCS) map[pl.id]++;
-      }
-    }
-    return map;
-  }, [players, finishedMatches]);
-
   // Pre-filter matches per period (stable refs unless finishedMatches change)
   const seasonFilteredMatches = useMemo(() => {
     const cutoff = getSeasonStartMs();
@@ -270,31 +252,16 @@ export default function StatsPage() {
   }, [finishedMatches]);
 
   // Pre-compute stats per period (avoids recomputing on period tab switch)
+  // All three periods use the same live computation from matches — no stale p.stats.
+  const allTimeComputedStats = useMemo(() => computeStatsFromMatches(players, finishedMatches), [players, finishedMatches]);
   const seasonComputedStats = useMemo(() => computeStatsFromMatches(players, seasonFilteredMatches), [players, seasonFilteredMatches]);
   const thirtyDayComputedStats = useMemo(() => computeStatsFromMatches(players, thirtyDayFilteredMatches), [players, thirtyDayFilteredMatches]);
 
   // withStats: selects pre-computed data based on current period
   const withStats = useMemo(() => {
-    if (period === 'all') {
-      return players.map(p => {
-        const as = p.stats || {};
-        return {
-          ...p,
-          totalGoals:      as.goals   || 0,
-          totalAssists:    as.assists || 0,
-          totalMatches:    as.matches || 0,
-          totalWins:       as.wins    || 0,
-          totalDraws:      as.draws   || 0,
-          gkMatches:       as.gkMatches || 0,
-          gkGoalsConceded: as.gkGoalsConceded || 0,
-          cleanSheets:     cleanSheetsAll[p.id] || 0,
-        };
-      });
-    }
-    // Per season/30d: gkMatches e gkGoalsConceded vengono da computeStatsFromMatches
-    // che usa le partite già filtrate per periodo — nessun override necessario.
+    if (period === 'all') return allTimeComputedStats;
     return period === '30d' ? thirtyDayComputedStats : seasonComputedStats;
-  }, [period, players, cleanSheetsAll, seasonComputedStats, thirtyDayComputedStats]);
+  }, [period, allTimeComputedStats, seasonComputedStats, thirtyDayComputedStats]);
 
   // Classifica: computed from matches (GF/GS not in p.stats)
   // For all-time: excludes isHistorical match docs (those come from p.historicalStats)
