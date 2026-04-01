@@ -129,8 +129,8 @@ export async function recalculatePlayerStats(playerIds, { cachedMatches, cachedP
       if (myScore > theirScore) s.wins++;
       else if (myScore < theirScore) s.losses++;
       else s.draws++;
-      // Match-level GK tracking (covers clean sheets)
-      const wasGkThisMatch = match.redGkId === pid || match.blueGkId === pid;
+      // Tutti ruotano in porta: ogni partita giocata = 1 apparizione da portiere
+      s.gkMatches++;
       for (const ev of (match.events || [])) {
         if (ev.type === 'goal') {
           if (ev.scorerId === pid) s.goals++;
@@ -138,10 +138,6 @@ export async function recalculatePlayerStats(playerIds, { cachedMatches, cachedP
         }
         if (ev.type === 'autogoal' && ev.scorerId === pid) s.autogoals++;
         if (ev.gkConcededId === pid) s.gkGoalsConceded++;
-      }
-      // Fall back to event-based detection if no match-level GK is set (legacy matches)
-      if (wasGkThisMatch || (!match.redGkId && !match.blueGkId && (match.events || []).some(ev => ev.gkConcededId === pid))) {
-        s.gkMatches++;
       }
     }
     return s;

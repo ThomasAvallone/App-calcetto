@@ -181,7 +181,8 @@ export default function PlayersPage() {
         else if (my < their) s.losses++;
         else s.draws++;
         if (their === 0) s.cleanSheets++;
-        const wasGkThisMatch = m.redGkId === p.id || m.blueGkId === p.id;
+        // Tutti ruotano in porta: ogni partita giocata = 1 apparizione da portiere
+        s.gkMatches++;
         for (const ev of m.events || []) {
           if (ev.type === 'goal') {
             if (ev.scorerId === p.id) s.goals++;
@@ -189,9 +190,6 @@ export default function PlayersPage() {
           }
           if (ev.type === 'autogoal' && ev.scorerId === p.id) s.autogoals++;
           if (ev.gkConcededId === p.id) s.gkGoalsConceded++;
-        }
-        if (wasGkThisMatch || (!m.redGkId && !m.blueGkId && (m.events || []).some(ev => ev.gkConcededId === p.id))) {
-          s.gkMatches++;
         }
         // Track historical matches by season for assist proration
         if (m.isHistorical) {
@@ -1009,14 +1007,12 @@ function PiTrendChart({ playerMatches, playerId, playerPi }) {
         const my = inRed ? m.redScore : m.blueScore;
         const their = inRed ? m.blueScore : m.redScore;
         if (my > their) s.wins++; else if (my < their) s.losses++; else s.draws++;
-        const wasGk = m.redGkId === playerId || m.blueGkId === playerId;
+        // Tutti ruotano in porta: ogni partita giocata = 1 apparizione da portiere
+        s.gkMatches++;
         for (const ev of (m.events || [])) {
           if (ev.type === 'goal') { if (ev.scorerId === playerId) s.goals++; if (ev.assistId === playerId) s.assists++; }
           if (ev.type === 'autogoal' && ev.scorerId === playerId) s.autogoals++;
           if (ev.gkConcededId === playerId) s.gkGoalsConceded++;
-        }
-        if (wasGk || (!m.redGkId && !m.blueGkId && (m.events || []).some(ev => ev.gkConcededId === playerId))) {
-          s.gkMatches++;
         }
       }
       return { pi: computePowerIndex(s), date: played[absIdx].date };

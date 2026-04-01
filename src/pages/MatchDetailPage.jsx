@@ -270,27 +270,6 @@ export default function MatchDetailPage() {
     }
   };
 
-  const handleSetTeamGk = async (team, playerId, playerName) => {
-    const idField = team === 'red' ? 'redGkId' : 'blueGkId';
-    const nameField = team === 'red' ? 'redGkName' : 'blueGkName';
-    const current = match[idField];
-    const newId = current === playerId ? null : playerId;
-    const newName = current === playerId ? null : playerName;
-    setSaving(true);
-    try {
-      await updateMatch(id, { [idField]: newId, [nameField]: newName });
-      const updated = { ...match, [idField]: newId, [nameField]: newName };
-      setMatch(updated);
-      const allIds = [...(match.redTeam || []), ...(match.blueTeam || [])].map(p => p.id);
-      await recalcStats(allIds, updated);
-      toast.success(newId ? `🧤 Portiere impostato: ${newName}` : '🧤 Portiere rimosso');
-    } catch (e) {
-      toast.error(e.message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const handleAddEvent = async () => {
     if (!addForm.scorerId) return toast.error('Seleziona il marcatore');
     if (!addForm.gkId) return toast.error('Seleziona il portiere che ha subito il gol');
@@ -747,27 +726,14 @@ export default function MatchDetailPage() {
 
       {/* Teams */}
       <div className="grid-2 mb-4">
-        {[
-          { team: 'red', players: match.redTeam || [], gkId: match.redGkId, label: '🔴 Squadra Rossa', cls: 'team-red' },
-          { team: 'blue', players: match.blueTeam || [], gkId: match.blueGkId, label: '🔵 Squadra Blu', cls: 'team-blue' },
-        ].map(({ team, players, gkId, label, cls }) => (
-          <div key={team} className={`card ${cls}-bg`}>
-            <h3 className={`${cls}-text text-sm mb-2`}>{label}</h3>
-            {players.map(p => (
-              <div key={p.id} style={{ fontSize: '0.9rem', padding: '0.2rem 0', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                {p.id === gkId
-                  ? <span title="Portiere" style={{ fontSize: '0.8rem', cursor: isAdmin ? 'pointer' : 'default' }}
-                      onClick={() => isAdmin && handleSetTeamGk(team, p.id, p.name)}>🧤</span>
-                  : isAdmin
-                    ? <span title="Imposta portiere" style={{ fontSize: '0.75rem', opacity: 0.3, cursor: 'pointer' }}
-                        onClick={() => handleSetTeamGk(team, p.id, p.name)}>🧤</span>
-                    : null
-                }
-                {p.name}
-              </div>
-            ))}
-          </div>
-        ))}
+        <div className="card team-red-bg">
+          <h3 className="team-red-text text-sm mb-2">🔴 Squadra Rossa</h3>
+          {(match.redTeam || []).map(p => <div key={p.id} style={{ fontSize: '0.9rem', padding: '0.2rem 0' }}>{p.name}</div>)}
+        </div>
+        <div className="card team-blue-bg">
+          <h3 className="team-blue-text text-sm mb-2">🔵 Squadra Blu</h3>
+          {(match.blueTeam || []).map(p => <div key={p.id} style={{ fontSize: '0.9rem', padding: '0.2rem 0' }}>{p.name}</div>)}
+        </div>
       </div>
 
       {/* Rating section */}
