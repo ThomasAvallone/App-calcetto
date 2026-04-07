@@ -621,9 +621,11 @@ export default function MatchDetailPage() {
               ↺ Rigenera
             </button>
           </div>
-          <p style={{ fontSize: '0.85rem', color: '#CBD5E0', lineHeight: 1.75, margin: 0, whiteSpace: 'pre-wrap' }}>
-            {match.aiCommentary}
-          </p>
+          <div style={{ maxHeight: '16rem', overflowY: 'auto', paddingRight: '0.25rem' }}>
+            <p style={{ fontSize: '0.85rem', color: '#CBD5E0', lineHeight: 1.75, margin: 0, whiteSpace: 'pre-wrap' }}>
+              {match.aiCommentary}
+            </p>
+          </div>
           <div className="flex gap-2" style={{ marginTop: '1rem' }}>
             <button className="btn" style={{ flex: 1, fontSize: '0.8rem' }}
               onClick={() => navigator.clipboard.writeText(match.aiCommentary).then(() => toast.success('Copiato!'))}>

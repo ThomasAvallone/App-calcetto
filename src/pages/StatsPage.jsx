@@ -795,7 +795,9 @@ export default function StatsPage() {
                       {rivalryLoading ? '⏳' : '↺ Rigenera'}
                     </button>
                   </div>
-                  <p style={{ fontSize: '0.83rem', color: '#CBD5E0', lineHeight: 1.75, margin: 0, whiteSpace: 'pre-wrap' }}>{rivalryText}</p>
+                  <div style={{ maxHeight: '16rem', overflowY: 'auto', paddingRight: '0.25rem' }}>
+                    <p style={{ fontSize: '0.83rem', color: '#CBD5E0', lineHeight: 1.75, margin: 0, whiteSpace: 'pre-wrap' }}>{rivalryText}</p>
+                  </div>
                 </div>
               )}
             </div>
@@ -1100,7 +1102,9 @@ function ReportAITab({ finishedMatches, players, reportText, setReportText, repo
 
       {reportText && (
         <div className="card" style={{ border: `1px solid ${reportStale ? 'rgba(246,173,85,0.4)' : 'rgba(104,211,145,0.3)'}`, background: 'rgba(104,211,145,0.04)' }}>
-          <p style={{ fontSize: '0.84rem', color: '#CBD5E0', lineHeight: 1.8, margin: 0, whiteSpace: 'pre-wrap' }}>{reportText}</p>
+          <div style={{ maxHeight: '16rem', overflowY: 'auto', paddingRight: '0.25rem' }}>
+            <p style={{ fontSize: '0.84rem', color: '#CBD5E0', lineHeight: 1.8, margin: 0, whiteSpace: 'pre-wrap' }}>{reportText}</p>
+          </div>
         </div>
       )}
     </div>
@@ -1246,7 +1250,9 @@ function HallTab({ finishedMatches, players, hallText, setHallText, hallLoading,
               {hallLoading ? '⏳' : '↺ Rigenera'}
             </button>
           </div>
-          <p style={{ fontSize: '0.84rem', color: '#CBD5E0', lineHeight: 1.8, margin: 0, whiteSpace: 'pre-wrap' }}>{hallText}</p>
+          <div style={{ maxHeight: '16rem', overflowY: 'auto', paddingRight: '0.25rem' }}>
+            <p style={{ fontSize: '0.84rem', color: '#CBD5E0', lineHeight: 1.8, margin: 0, whiteSpace: 'pre-wrap' }}>{hallText}</p>
+          </div>
         </div>
       )}
 
