@@ -242,9 +242,10 @@ export async function rateMatch(matchId, userId, scores, raterName) {
 
 // Pure function: compute recent form for a player from allMatches data
 export function computeStreak(allMatches, playerId, prefiltered = false) {
-  const playerMatches = prefiltered ? allMatches : allMatches
+  const playerMatches = prefiltered ? allMatches.filter(m => !m.isHistorical) : allMatches
     .filter(m =>
       m.status === 'finished' &&
+      !m.isHistorical &&
       [...(m.redTeam || []), ...(m.blueTeam || [])].some(p => p.id === playerId)
     )
     .sort((a, b) => getMs(b.date) - getMs(a.date));
@@ -268,9 +269,10 @@ export function computeStreak(allMatches, playerId, prefiltered = false) {
 }
 
 export function computeRecentForm(allMatches, playerId, prefiltered = false) {
-  const playerMatches = (prefiltered ? allMatches : allMatches
+  const playerMatches = (prefiltered ? allMatches.filter(m => !m.isHistorical) : allMatches
     .filter(m =>
       m.status === 'finished' &&
+      !m.isHistorical &&
       [...(m.redTeam || []), ...(m.blueTeam || [])].some(p => p.id === playerId)
     )
     .sort((a, b) => getMs(b.date) - getMs(a.date)))
