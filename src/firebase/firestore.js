@@ -192,11 +192,17 @@ export async function recalculatePlayerStats(playerIds, { cachedMatches, cachedP
       ? recentPI * 0.6 + overallPI * 0.4
       : overallPI;
 
-    // Apply activity decay
-    const finalPI = Math.max(0, Math.min(100, Math.round(blendedPI * activityFactor * 10) / 10));
-
     const recentForm = computeRecentForm(playerMatches, pid, true);
     const streak = computeStreak(playerMatches, pid, true);
+
+    // Bonus da rating peer: sposta il PI di ±qualche punto se il giocatore è
+    // stato votato in almeno 3 partite recenti. Scala 1-10, neutro a 5.5.
+    const ratingBonus = (recentForm && recentForm.ratedMatches >= 3)
+      ? (recentForm.avg - 5.5) * 1.5
+      : 0;
+
+    // Apply activity decay (il bonus rating decade anch'esso se inattivo)
+    const finalPI = Math.max(0, Math.min(100, Math.round((blendedPI + ratingBonus) * activityFactor * 10) / 10));
 
     // Append snapshot to powerHistory (keep last 30 entries, one per recalc date)
     const today = new Date().toISOString().slice(0, 10);

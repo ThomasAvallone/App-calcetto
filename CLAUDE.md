@@ -90,7 +90,7 @@ src/
 - **Lingua UI**: italiano
 - **AI**: chiamate Gemini solo on-demand (button click), mai automatiche
 - **Firestore**: ogni documento ha ID gestito da Firebase; `getMs()` converte Timestamp → ms
-- **Power Index**: calcolato con `computePowerIndex()` in `firebase/firestore.js`
+- **Power Index**: calcolato con `computePowerIndex()` in `firebase/firestore.js`. Formula: `50 + winRate×20 + attackPerMatch×6 - gkPenalty`. Dopo il blend recent/overall (60/40), si applica un `ratingBonus = (avgRating - 5.5) × 1.5` (solo se ≥3 partite votate), poi l'`activityFactor` (decay da inattività). Il tutto in `recalculatePlayerStats`.
 - **Logica portiere (GK)**: il portiere NON è fisso — tutti i giocatori ruotano in porta. Ogni giocatore fa **2 turni in porta per partita** (uno per tempo). Di conseguenza `gkMatches` si incrementa di **2** per ogni partita giocata (`s.gkMatches += 2`). Tutti i calcoli GK (Power Index, badge Muro/Colabrodo/Gufo) usano questa unità: `gkGoalsConceded / gkMatches` = media gol subiti per turno. Non correggere questo comportamento: è intenzionale.
 
 ## Comandi

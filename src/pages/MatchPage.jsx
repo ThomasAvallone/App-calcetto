@@ -45,6 +45,7 @@ export default function MatchPage() {
   const [showConfetti, setShowConfetti] = useState(false);
   const [scoreBounce, setScoreBounce] = useState(null); // 'red' | 'blue' | null
   const [scoreShake, setScoreShake] = useState(null);   // 'red' | 'blue' | null
+  const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const prevRedScore  = useRef(0);
   const prevBlueScore = useRef(0);
 
@@ -592,8 +593,17 @@ export default function MatchPage() {
                     <span style={{ color: '#63B3ED' }}>{ev.partialBlue}</span>
                   </span>
                   {isAdmin && (
-                    <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#FC8181', padding: '4px', fontSize: '0.8rem' }}
-                      onClick={() => deleteEvent(ev.id).then(() => toast.success('Evento eliminato'))}>✕</button>
+                    deleteConfirmId === ev.id ? (
+                      <div style={{ display: 'flex', gap: '4px' }}>
+                        <button style={{ background: '#FC8181', border: 'none', cursor: 'pointer', color: '#1A202C', padding: '3px 7px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 700 }}
+                          onClick={() => { deleteEvent(ev.id).then(() => toast.success('Evento eliminato')); setDeleteConfirmId(null); }}>✓</button>
+                        <button style={{ background: 'none', border: '1px solid #4A5568', cursor: 'pointer', color: '#A0AEC0', padding: '3px 7px', borderRadius: '4px', fontSize: '0.75rem' }}
+                          onClick={() => setDeleteConfirmId(null)}>✕</button>
+                      </div>
+                    ) : (
+                      <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#FC8181', padding: '4px', fontSize: '0.8rem' }}
+                        onClick={() => setDeleteConfirmId(ev.id)}>✕</button>
+                    )
                   )}
                 </div>
               ));

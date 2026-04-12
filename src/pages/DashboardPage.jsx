@@ -9,6 +9,7 @@ import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 import { safeDate } from '../utils/dateUtils';
+import { CLR_WIN, CLR_LOSS, CLR_MUTED } from '../constants/colors';
 import { fetchWeatherForDate } from '../services/weatherService';
 
 function getCountdown(dateStr) {
@@ -516,6 +517,13 @@ export default function DashboardPage() {
           const barFrom  = isFirst ? 'var(--gold-dark)' : 'var(--teal-dark)';
           const barGlow  = isFirst ? 'rgba(246,224,94,0.7)' : 'rgba(79,209,197,0.7)';
           const medalColor = i === 0 ? 'var(--gold)' : i === 1 ? 'var(--text-secondary)' : i === 2 ? '#C05621' : 'var(--text-muted)';
+          const hist = p.powerHistory || [];
+          const trend = hist.length >= 2
+            ? hist[hist.length - 1].pi > hist[hist.length - 2].pi ? '↑'
+              : hist[hist.length - 1].pi < hist[hist.length - 2].pi ? '↓'
+              : '→'
+            : null;
+          const trendColor = trend === '↑' ? CLR_WIN : trend === '↓' ? CLR_LOSS : CLR_MUTED;
           return (
             <div
               key={p.id}
@@ -564,6 +572,7 @@ export default function DashboardPage() {
               </div>
               <div style={{ fontWeight: 700, color: piColor, minWidth: '42px', textAlign: 'right', fontSize: '0.95rem' }}>
                 {p.powerIndex?.toFixed(1) || '50.0'}
+                {trend && <span style={{ fontSize: '0.7rem', color: trendColor, marginLeft: '3px' }}>{trend}</span>}
               </div>
             </div>
           );

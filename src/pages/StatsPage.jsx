@@ -16,6 +16,7 @@ const LEADERBOARD_TABS = [
   { key: 'winrate', label: '🏆 Win %' },
   { key: 'matches', label: '🏟️ Presenze' },
   { key: 'gk',      label: '🧤 GK' },
+  { key: 'autogoals', label: '🤦 Autogol' },
   { key: 'classifica', label: '📋 Classifica' },
   { key: 'duo',     label: '👥 Duo' },
   { key: 'h2h',     label: '⚔️ H2H' },
@@ -154,7 +155,7 @@ function getSeasonId(dateVal) {
 
 function computeStatsFromMatches(players, matches) {
   return players.map(p => {
-    const s = { goals: 0, assists: 0, wins: 0, draws: 0, losses: 0, matches: 0, gkMatches: 0, gkGoalsConceded: 0, cleanSheets: 0 };
+    const s = { goals: 0, assists: 0, autogoals: 0, wins: 0, draws: 0, losses: 0, matches: 0, gkMatches: 0, gkGoalsConceded: 0, cleanSheets: 0 };
     // historicalMatches per season → count of games played (for assist prorating)
     const histBySeason = {};
 
@@ -176,6 +177,7 @@ function computeStatsFromMatches(players, matches) {
           if (ev.assistId === p.id) s.assists++;
         }
         if (ev.gkConcededId === p.id) { s.gkGoalsConceded++; gkConcededThisMatch++; }
+        if (ev.type === 'autogoal' && ev.scorerId === p.id) s.autogoals++;
       }
       // Clean sheet individuale: portiere non ha subito gol personalmente
       if (!m.isHistorical && gkConcededThisMatch === 0) s.cleanSheets++;
@@ -199,7 +201,7 @@ function computeStatsFromMatches(players, matches) {
       s.assists += Math.round(pData.assist * (countInPeriod / pData.presenze));
     }
 
-    return { ...p, totalGoals: s.goals, totalAssists: s.assists, totalMatches: s.matches, totalWins: s.wins, totalDraws: s.draws, gkMatches: s.gkMatches, gkGoalsConceded: s.gkGoalsConceded, cleanSheets: s.cleanSheets };
+    return { ...p, totalGoals: s.goals, totalAssists: s.assists, totalAutogoals: s.autogoals, totalMatches: s.matches, totalWins: s.wins, totalDraws: s.draws, gkMatches: s.gkMatches, gkGoalsConceded: s.gkGoalsConceded, cleanSheets: s.cleanSheets };
   });
 }
 
@@ -471,6 +473,11 @@ export default function StatsPage() {
       (a, b) => b.gkGoalsConceded - a.gkGoalsConceded,
       p => p.gkGoalsConceded > 0
     ),
+    autogoals: getRanked(
+      withStats,
+      (a, b) => b.totalAutogoals - a.totalAutogoals,
+      p => p.totalAutogoals > 0
+    ),
   }), [withStats]);
 
   const tabConfig = {
@@ -478,7 +485,8 @@ export default function StatsPage() {
     assists: { accent: '#63B3ED', getVal: p => p.totalAssists, getLabel: () => 'assist', getSub: p => `${p.totalMatches} partite` },
     winrate: { accent: CLR_DRAW, getVal: p => `${Math.round((p.totalWins + p.totalDraws * 0.5) / p.totalMatches * 100)}`, getLabel: () => '%', getSub: p => `${p.totalWins}V · ${p.totalDraws}P · ${p.totalMatches - p.totalWins - p.totalDraws}S su ${p.totalMatches} partite` },
     matches: { accent: '#A0AEC0', getVal: p => p.totalMatches, getLabel: () => 'pt', getSub: p => `${p.totalWins}V · ${p.totalDraws}P · ${p.totalMatches - p.totalWins - p.totalDraws}S` },
-    gk:      { accent: CLR_WIN, getVal: p => p.gkGoalsConceded, getLabel: () => 'gs', getSub: p => p.gkMatches > 0 ? `${p.gkMatches} pt in porta · ${(p.gkGoalsConceded / p.gkMatches).toFixed(1)} gs/pt · 🧹 ${p.cleanSheets ?? 0} clean sheet` : `${p.gkGoalsConceded} gol subiti` },
+    gk:        { accent: CLR_WIN, getVal: p => p.gkGoalsConceded, getLabel: () => 'gs', getSub: p => p.gkMatches > 0 ? `${p.gkMatches} pt in porta · ${(p.gkGoalsConceded / p.gkMatches).toFixed(1)} gs/pt · 🧹 ${p.cleanSheets ?? 0} clean sheet` : `${p.gkGoalsConceded} gol subiti` },
+    autogoals: { accent: CLR_LOSS, getVal: p => p.totalAutogoals, getLabel: () => 'ag', getSub: p => `${p.totalMatches} partite · ${(p.totalAutogoals / Math.max(1, p.totalMatches) * 100).toFixed(1)}% delle partite` },
   };
 
   const cfg = tabConfig[tab];
