@@ -24,7 +24,7 @@ export default function PiTrendChart({ playerMatches, playerId, playerPi }) {
         const my = inRed ? m.redScore : m.blueScore;
         const their = inRed ? m.blueScore : m.redScore;
         if (my > their) s.wins++; else if (my < their) s.losses++; else s.draws++;
-        s.gkMatches++;
+        s.gkMatches += 2;
         for (const ev of (m.events || [])) {
           if (ev.type === 'goal') { if (ev.scorerId === playerId) s.goals++; if (ev.assistId === playerId) s.assists++; }
           if (ev.type === 'autogoal' && ev.scorerId === playerId) s.autogoals++;

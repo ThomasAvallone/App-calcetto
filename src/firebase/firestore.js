@@ -129,8 +129,8 @@ export async function recalculatePlayerStats(playerIds, { cachedMatches, cachedP
       if (myScore > theirScore) s.wins++;
       else if (myScore < theirScore) s.losses++;
       else s.draws++;
-      // Tutti ruotano in porta: ogni partita giocata = 1 apparizione da portiere
-      s.gkMatches++;
+      // Tutti ruotano in porta: ogni partita giocata = 2 turni da portiere
+      s.gkMatches += 2;
       for (const ev of (match.events || [])) {
         if (ev.type === 'goal') {
           if (ev.scorerId === pid) s.goals++;
