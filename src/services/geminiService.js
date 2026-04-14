@@ -4,8 +4,20 @@
 // Protezione aggiuntiva: imposta la restrizione HTTP referrer su Google Cloud Console.
 
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
-const MODEL   = 'gemini-3.1-flash-lite-preview';
-const BASE_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
+
+// Gerarchia modelli: fast = velocità/costo, pro = ragionamento/qualità
+const MODELS = {
+  fast: [
+    'gemini-3.1-flash-lite-preview',
+    'gemini-3-flash-preview',
+    'gemini-3.1-pro-preview',
+  ],
+  pro: [
+    'gemini-3.1-pro-preview',
+    'gemini-3.1-flash-lite-preview',
+    'gemini-3-flash-preview',
+  ],
+};
 
 // AI call counter — persistito in localStorage, non si azzera al refresh
 const _AI_CALL_KEY = 'calcetto_ai_call_count';
@@ -15,46 +27,54 @@ export function getAICallCount() { return _aiCallCount; }
 export function resetAICallCount() { _aiCallCount = 0; localStorage.setItem(_AI_CALL_KEY, '0'); _aiCallListeners.forEach(fn => fn(_aiCallCount)); }
 export function onAICallCountChange(fn) { _aiCallListeners.add(fn); return () => _aiCallListeners.delete(fn); }
 
-async function callGemini(prompt, { temperature = 0.85, maxTokens = 600 } = {}) {
+// tier: 'fast' (default) | 'pro' (task di ragionamento/qualità)
+async function callGemini(prompt, { temperature = 0.85, maxTokens = 600, tier = 'fast' } = {}) {
   if (!API_KEY) throw new Error('Chiave Gemini non configurata (VITE_GEMINI_API_KEY)');
 
-  const MAX_RETRIES = 3;
+  const models = MODELS[tier];
   let lastError;
 
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    if (attempt > 0) {
-      // Backoff esponenziale: 1s, 2s, 4s
-      await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt - 1)));
+  for (const model of models) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+
+    for (let attempt = 0; attempt <= 2; attempt++) {
+      if (attempt > 0) {
+        // Backoff esponenziale: 1s, 2s
+        await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt - 1)));
+      }
+
+      const res = await fetch(`${url}?key=${API_KEY}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature, maxOutputTokens: maxTokens },
+        }),
+      });
+
+      // Retry sullo stesso modello su 503/429
+      if (res.status === 503 || res.status === 429) {
+        const err = await res.json().catch(() => ({}));
+        lastError = new Error(err?.error?.message || `Errore API Gemini: ${res.status}`);
+        continue;
+      }
+
+      // Errore non recuperabile: salta al modello successivo
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        lastError = new Error(err?.error?.message || `Errore API Gemini: ${res.status}`);
+        break;
+      }
+
+      const data = await res.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+      if (!text) throw new Error('Risposta AI vuota o bloccata dal filtro di sicurezza');
+      _aiCallCount++;
+      localStorage.setItem(_AI_CALL_KEY, String(_aiCallCount));
+      _aiCallListeners.forEach(fn => fn(_aiCallCount));
+      return text;
     }
-
-    const res = await fetch(`${BASE_URL}?key=${API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature, maxOutputTokens: maxTokens },
-      }),
-    });
-
-    // Retry su 503 (overload) e 429 (rate limit)
-    if (res.status === 503 || res.status === 429) {
-      const err = await res.json().catch(() => ({}));
-      lastError = new Error(err?.error?.message || `Errore API Gemini: ${res.status}`);
-      continue;
-    }
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err?.error?.message || `Errore API Gemini: ${res.status}`);
-    }
-
-    const data = await res.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
-    if (!text) throw new Error('Risposta AI vuota o bloccata dal filtro di sicurezza');
-    _aiCallCount++;
-    localStorage.setItem(_AI_CALL_KEY, String(_aiCallCount));
-    _aiCallListeners.forEach(fn => fn(_aiCallCount));
-    return text;
+    // Tutti i retry esauriti su questo modello → prova il prossimo
   }
 
   throw lastError;
@@ -183,7 +203,7 @@ Assegna ogni giocatore a una sola squadra, nessuno deve essere escluso.
 Rispondi ESCLUSIVAMENTE con un JSON valido (niente testo prima o dopo):
 {"red":["Nome1","Nome2"],"blue":["Nome3","Nome4"],"reasoning":"breve spiegazione in italiano di max 2 frasi"}`;
 
-  const raw = await callGemini(prompt, { temperature: 0.25, maxTokens: 400 });
+  const raw = await callGemini(prompt, { temperature: 0.25, maxTokens: 400, tier: 'pro' });
 
   // Extract JSON from response (handles potential extra text)
   const jsonMatch = raw.match(/\{[\s\S]*\}/);
@@ -259,7 +279,7 @@ STATISTICHE DEL PERIODO:
 
 Scrivi il report ora:`;
 
-  return callGemini(prompt, { temperature: 0.9, maxTokens: 650 });
+  return callGemini(prompt, { temperature: 0.9, maxTokens: 650, tier: 'pro' });
 }
 
 // ─── Hall of Fame / Hall of Shame AI ─────────────────────────────────────────
@@ -282,7 +302,7 @@ ${fmtShame || 'Tutti si sono comportati decentemente (miracolo)'}
 
 Scrivi la cerimonia ora:`;
 
-  return callGemini(prompt, { temperature: 0.93, maxTokens: 750 });
+  return callGemini(prompt, { temperature: 0.93, maxTokens: 750, tier: 'pro' });
 }
 
 // ─── Rivalità tra giocatori AI ────────────────────────────────────────────────
