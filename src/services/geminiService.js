@@ -18,27 +18,46 @@ export function onAICallCountChange(fn) { _aiCallListeners.add(fn); return () =>
 async function callGemini(prompt, { temperature = 0.85, maxTokens = 600 } = {}) {
   if (!API_KEY) throw new Error('Chiave Gemini non configurata (VITE_GEMINI_API_KEY)');
 
-  const res = await fetch(`${BASE_URL}?key=${API_KEY}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { temperature, maxOutputTokens: maxTokens },
-    }),
-  });
+  const MAX_RETRIES = 3;
+  let lastError;
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err?.error?.message || `Errore API Gemini: ${res.status}`);
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    if (attempt > 0) {
+      // Backoff esponenziale: 1s, 2s, 4s
+      await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt - 1)));
+    }
+
+    const res = await fetch(`${BASE_URL}?key=${API_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature, maxOutputTokens: maxTokens },
+      }),
+    });
+
+    // Retry su 503 (overload) e 429 (rate limit)
+    if (res.status === 503 || res.status === 429) {
+      const err = await res.json().catch(() => ({}));
+      lastError = new Error(err?.error?.message || `Errore API Gemini: ${res.status}`);
+      continue;
+    }
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err?.error?.message || `Errore API Gemini: ${res.status}`);
+    }
+
+    const data = await res.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+    if (!text) throw new Error('Risposta AI vuota o bloccata dal filtro di sicurezza');
+    _aiCallCount++;
+    localStorage.setItem(_AI_CALL_KEY, String(_aiCallCount));
+    _aiCallListeners.forEach(fn => fn(_aiCallCount));
+    return text;
   }
 
-  const data = await res.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
-  if (!text) throw new Error('Risposta AI vuota o bloccata dal filtro di sicurezza');
-  _aiCallCount++;
-  localStorage.setItem(_AI_CALL_KEY, String(_aiCallCount));
-  _aiCallListeners.forEach(fn => fn(_aiCallCount));
-  return text;
+  throw lastError;
 }
 
 function fmtMatchDate(d) {
