@@ -203,7 +203,7 @@ Assegna ogni giocatore a una sola squadra, nessuno deve essere escluso.
 Rispondi ESCLUSIVAMENTE con un JSON valido (niente testo prima o dopo):
 {"red":["Nome1","Nome2"],"blue":["Nome3","Nome4"],"reasoning":"breve spiegazione in italiano di max 2 frasi"}`;
 
-  const raw = await callGemini(prompt, { temperature: 0.25, maxTokens: 400, tier: 'pro' });
+  const raw = await callGemini(prompt, { temperature: 0.25, maxTokens: 2000, tier: 'pro' });
 
   // Extract JSON from response (handles potential extra text)
   const jsonMatch = raw.match(/\{[\s\S]*\}/);
@@ -279,7 +279,7 @@ STATISTICHE DEL PERIODO:
 
 Scrivi il report ora:`;
 
-  return callGemini(prompt, { temperature: 0.9, maxTokens: 650, tier: 'pro' });
+  return callGemini(prompt, { temperature: 0.9, maxTokens: 3500, tier: 'pro' });
 }
 
 // ─── Hall of Fame / Hall of Shame AI ─────────────────────────────────────────
@@ -302,7 +302,7 @@ ${fmtShame || 'Tutti si sono comportati decentemente (miracolo)'}
 
 Scrivi la cerimonia ora:`;
 
-  return callGemini(prompt, { temperature: 0.93, maxTokens: 750, tier: 'pro' });
+  return callGemini(prompt, { temperature: 0.93, maxTokens: 4000, tier: 'pro' });
 }
 
 // ─── Rivalità tra giocatori AI ────────────────────────────────────────────────
