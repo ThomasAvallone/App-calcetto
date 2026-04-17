@@ -13,6 +13,8 @@ import PiTrendChart from '../components/players/PiTrendChart';
 import AiTrendCard from '../components/players/AiTrendCard';
 import AiNicknameCard from '../components/players/AiNicknameCard';
 import { PiArc, getRoleIcon, PlayerAvatar, PlayerMatchHistory, PlayerRecords, PlayerBadges, PowerIndexChart, StreakBadge } from '../components/players/PlayerDetailComponents';
+import DuoCompatibility from '../components/players/DuoCompatibility';
+import PlayerAchievements from '../components/players/PlayerAchievements';
 
 const ROLES = ['Portiere', 'Difensore', 'Centrocampista', 'Attaccante'];
 
@@ -639,6 +641,10 @@ export default function PlayersPage() {
             )}
           </div>
         )}
+
+        <PlayerAchievements player={p} allMatches={finishedMatches} />
+
+        <DuoCompatibility player={p} allMatches={finishedMatches} allPlayers={players} />
 
         <PlayerMatchHistory playerMatches={playerMatchesMap[p.id] || []} playerId={p.id} />
       </div>
