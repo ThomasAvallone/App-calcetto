@@ -9,6 +9,7 @@ import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 import { safeDate } from '../utils/dateUtils';
+import MatchReplay from '../components/MatchReplay';
 
 function BestieSection({ match, onUpdate }) {
   const allPlayers = [...(match.redTeam || []), ...(match.blueTeam || [])];
@@ -189,6 +190,7 @@ export default function MatchDetailPage() {
   const [editingYoutube, setEditingYoutube] = useState(false);
   const [youtubeInput, setYoutubeInput] = useState('');
   const [showShareModal, setShowShareModal] = useState(false);
+  const [showReplay, setShowReplay] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [showAiCommentary, setShowAiCommentary] = useState(false);
   const allMatchesRef = useRef(null);
@@ -603,6 +605,11 @@ export default function MatchDetailPage() {
               📤 Condividi
             </button>
           )}
+          {match.status === 'finished' && (match.events || []).some(e => e.type === 'goal' || e.type === 'autogoal') && (
+            <button className="btn btn-ghost" onClick={() => setShowReplay(true)}>
+              ▶️ Replay
+            </button>
+          )}
         </div>
       </div>
 
@@ -973,6 +980,8 @@ export default function MatchDetailPage() {
           </button>
         </div>
       )}
+
+      {showReplay && <MatchReplay match={match} onClose={() => setShowReplay(false)} />}
     </div>
   );
 }

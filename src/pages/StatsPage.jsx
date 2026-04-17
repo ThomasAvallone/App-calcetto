@@ -372,6 +372,7 @@ export default function StatsPage() {
     let together = { wins: 0, draws: 0, losses: 0, matches: 0, mutualAssists: 0 };
     let against  = { p1wins: 0, p2wins: 0, draws: 0, matches: 0 };
     let p1Goals = 0, p2Goals = 0;
+    const againstMatchList = []; // cronologia scontri diretti
     for (const m of finishedMatches) {
       const p1InRed  = (m.redTeam  || []).some(p => p.id === h2hP1);
       const p1InBlue = (m.blueTeam || []).some(p => p.id === h2hP1);
@@ -393,6 +394,23 @@ export default function StatsPage() {
         if (p1s > p2s) against.p1wins++;
         else if (p1s < p2s) against.p2wins++;
         else against.draws++;
+        // Gol dei due in questa partita
+        let p1g = 0, p2g = 0;
+        for (const ev of (m.events || [])) {
+          if (ev.type === 'goal') {
+            if (ev.scorerId === h2hP1) p1g++;
+            if (ev.scorerId === h2hP2) p2g++;
+          }
+        }
+        againstMatchList.push({
+          date: m.date,
+          redScore: m.redScore ?? 0,
+          blueScore: m.blueScore ?? 0,
+          p1InRed,
+          p1Goals: p1g,
+          p2Goals: p2g,
+          outcome: p1s > p2s ? 'p1win' : p1s < p2s ? 'p2win' : 'draw',
+        });
       }
       // Assist reciproci (solo quando insieme): p1 assiste p2 o viceversa
       if (sameTeam) {
@@ -415,7 +433,9 @@ export default function StatsPage() {
         }
       }
     }
-    return { p1name, p2name, together, against, p1Goals, p2Goals };
+    // Ordina cronologia dal più recente
+    againstMatchList.sort((a, b) => getMs(b.date) - getMs(a.date));
+    return { p1name, p2name, together, against, p1Goals, p2Goals, againstMatchList };
   }, [finishedMatches, h2hP1, h2hP2, players]);
 
   // Squadre: team vs team historical comparison
@@ -762,6 +782,55 @@ export default function StatsPage() {
               </div>
             </div>
           )}
+
+          {/* Cronologia scontri diretti */}
+          {h2hStats && h2hStats.againstMatchList.length > 0 && (() => {
+            const [showChronology, setShowChronology] = React.useState(false);
+            const fmtDate = d => {
+              const dt = d?.toDate ? d.toDate() : d ? new Date(d) : null;
+              if (!dt) return '–';
+              return dt.toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: '2-digit' });
+            };
+            return (
+              <div className="card mb-3" style={{ border: '1px solid rgba(74,85,104,0.6)' }}>
+                <button
+                  onClick={() => setShowChronology(v => !v)}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                >
+                  <h3 style={{ fontSize: '0.9rem', margin: 0 }}>📅 Cronologia scontri diretti</h3>
+                  <span style={{ fontSize: '0.75rem', color: '#718096' }}>
+                    {h2hStats.againstMatchList.length} partite {showChronology ? '▲' : '▼'}
+                  </span>
+                </button>
+                {showChronology && (
+                  <div style={{ marginTop: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    {h2hStats.againstMatchList.map((m, i) => {
+                      const outcomeColor = m.outcome === 'p1win' ? '#4FD1C5' : m.outcome === 'p2win' ? '#63B3ED' : '#F6E05E';
+                      const outcomeLabel = m.outcome === 'p1win' ? `${h2hStats.p1name} vince` : m.outcome === 'p2win' ? `${h2hStats.p2name} vince` : 'Pareggio';
+                      const p1Side = m.p1InRed ? '🔴' : '🔵';
+                      const p2Side = m.p1InRed ? '🔵' : '🔴';
+                      return (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.4rem 0.5rem', borderRadius: '7px', background: 'rgba(74,85,104,0.18)' }}>
+                          <span style={{ fontSize: '0.72rem', color: '#718096', flexShrink: 0, minWidth: '64px' }}>{fmtDate(m.date)}</span>
+                          <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#E2E8F0', flex: 1 }}>
+                            <span style={{ color: '#FC8181' }}>🔴 {m.redScore}</span>
+                            <span style={{ color: '#718096', margin: '0 0.2rem' }}>–</span>
+                            <span style={{ color: '#63B3ED' }}>{m.blueScore} 🔵</span>
+                          </span>
+                          <span style={{ fontSize: '0.7rem', color: outcomeColor, fontWeight: 600, flexShrink: 0 }}>{outcomeLabel}</span>
+                          {(m.p1Goals > 0 || m.p2Goals > 0) && (
+                            <span style={{ fontSize: '0.68rem', color: '#718096', flexShrink: 0 }}>
+                              {p1Side}{m.p1Goals}g · {p2Side}{m.p2Goals}g
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {h2hStats && (() => {
             const handleRivalryGenerate = async () => {

@@ -8,6 +8,7 @@ import { useMatchesSubscription } from '../hooks/useMatchesSubscription';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import toast from 'react-hot-toast';
+import WhatIfModal from '../components/WhatIfModal';
 import { safeDate } from '../utils/dateUtils';
 import { CLR_WIN, CLR_LOSS, CLR_MUTED } from '../constants/colors';
 import { fetchWeatherForDate } from '../services/weatherService';
@@ -35,6 +36,7 @@ export default function DashboardPage() {
   const allMatches = useMatchesSubscription();
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [nextMatchWeather, setNextMatchWeather] = useState(null);
+  const [showWhatIf, setShowWhatIf] = useState(false);
 
   const recentMatches = allMatches.filter(m => m.status !== 'scheduled').slice(0, 5);
   const finishedMatches = allMatches.filter(m => m.status === 'finished');
@@ -374,6 +376,13 @@ export default function DashboardPage() {
               📚 Annali Storici
             </button>
           </div>
+          <button
+            className="btn btn-ghost btn-full"
+            style={{ fontSize: '0.85rem', marginBottom: '0.25rem', border: '1px dashed rgba(246,173,85,0.35)', color: '#F6AD55' }}
+            onClick={() => setShowWhatIf(true)}
+          >
+            🎲 Simulatore What-if
+          </button>
 
           {showStartPicker && (
             <div style={{
@@ -686,6 +695,7 @@ export default function DashboardPage() {
         })}
       </div>
 
+      {showWhatIf && <WhatIfModal onClose={() => setShowWhatIf(false)} />}
     </div>
   );
 }
