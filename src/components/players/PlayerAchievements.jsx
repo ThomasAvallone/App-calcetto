@@ -81,12 +81,12 @@ const CAT_LABEL = {
   shame: '😬 Infamia',
 };
 
-export default function PlayerAchievements({ player, allMatches }) {
+export default function PlayerAchievements({ player, allMatches = [] }) {
   const [showAll, setShowAll] = useState(false);
 
   const evaluated = useMemo(() => {
-    const stats = player.stats || {};
-    const finished = allMatches.filter(m => m.status === 'finished');
+    const stats = player?.stats || {};
+    const finished = (allMatches || []).filter(m => m.status === 'finished');
     return ACHIEVEMENTS.map(a => {
       const current = Math.min(a.getValue(stats, finished, player.id) || 0, a.target);
       const unlocked = current >= a.target;

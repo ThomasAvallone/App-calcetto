@@ -3,7 +3,7 @@ import { getMs } from '../../utils/dateUtils';
 import { CLR_WIN, CLR_LOSS, CLR_MUTED } from '../../constants/colors';
 
 // Calcola win-rate quando insieme e quando avversari, per ogni altro giocatore.
-export default function DuoCompatibility({ player, allMatches, allPlayers }) {
+export default function DuoCompatibility({ player, allMatches = [], allPlayers = [] }) {
   const [expanded, setExpanded] = useState(false);
   const [sortBy, setSortBy] = useState('together'); // 'together' | 'against'
 
