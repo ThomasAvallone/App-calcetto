@@ -8,6 +8,7 @@ import { generateMatchReport } from '../services/reportService';
 import { exportMatchToSheets } from '../services/sheetsService';
 import { recalculatePlayerStats, updateMatch } from '../firebase/firestore';
 import { fetchWeatherForDate } from '../services/weatherService';
+import { waitUndo } from '../utils/waitUndo';
 import toast from 'react-hot-toast';
 
 const MATCH_DURATION = 60 * 60; // durata regolamentare (per progress bar)
@@ -184,6 +185,12 @@ export default function MatchPage() {
 
   const handleEndMatch = async () => {
     setEnding(true); setEndConfirm(false);
+    const cancelled = await waitUndo('Partita terminata', 5000);
+    if (cancelled) {
+      toast.success('Fine partita annullata');
+      setEnding(false);
+      return;
+    }
     try {
       const snapshot = {
         redScore: match.redScore || 0,

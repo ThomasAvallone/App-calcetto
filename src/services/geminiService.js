@@ -19,6 +19,10 @@ const MODELS = {
   ],
 };
 
+// Modelli "thinking": consumano token per il reasoning interno prima di produrre output.
+// Se non raddoppiamo maxTokens, l'output visibile viene troncato.
+const THINKING_MODELS = new Set(['gemini-3.1-pro-preview']);
+
 // AI call counter — persistito in localStorage, non si azzera al refresh
 const _AI_CALL_KEY = 'calcetto_ai_call_count';
 let _aiCallCount = parseInt(localStorage.getItem(_AI_CALL_KEY) || '0', 10);
@@ -43,12 +47,17 @@ async function callGemini(prompt, { temperature = 0.85, maxTokens = 600, tier = 
         await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt - 1)));
       }
 
+      // Thinking model: serve margine extra per il reasoning
+      const effectiveMaxTokens = THINKING_MODELS.has(model)
+        ? Math.max(maxTokens * 4, 2000)
+        : maxTokens;
+
       const res = await fetch(`${url}?key=${API_KEY}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature, maxOutputTokens: maxTokens },
+          generationConfig: { temperature, maxOutputTokens: effectiveMaxTokens },
         }),
       });
 

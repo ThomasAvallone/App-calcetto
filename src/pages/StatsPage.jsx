@@ -169,7 +169,7 @@ function computeStatsFromMatches(players, matches) {
       if (my > their) s.wins++;
       else if (my < their) s.losses++;
       else s.draws++;
-      if (!m.isHistorical) s.gkMatches++; // tutti ruotano in porta ad ogni partita
+      if (!m.isHistorical) s.gkMatches += 2; // 2 turni in porta per partita (rotazione)
       let gkConcededThisMatch = 0;
       for (const ev of (m.events || [])) {
         if (ev.type === 'goal') {
@@ -485,7 +485,7 @@ export default function StatsPage() {
     assists: { accent: '#63B3ED', getVal: p => p.totalAssists, getLabel: () => 'assist', getSub: p => `${p.totalMatches} partite` },
     winrate: { accent: CLR_DRAW, getVal: p => `${Math.round((p.totalWins + p.totalDraws * 0.5) / p.totalMatches * 100)}`, getLabel: () => '%', getSub: p => `${p.totalWins}V · ${p.totalDraws}P · ${p.totalMatches - p.totalWins - p.totalDraws}S su ${p.totalMatches} partite` },
     matches: { accent: '#A0AEC0', getVal: p => p.totalMatches, getLabel: () => 'pt', getSub: p => `${p.totalWins}V · ${p.totalDraws}P · ${p.totalMatches - p.totalWins - p.totalDraws}S` },
-    gk:        { accent: CLR_WIN, getVal: p => p.gkGoalsConceded, getLabel: () => 'gs', getSub: p => p.gkMatches > 0 ? `${p.gkMatches} pt in porta · ${(p.gkGoalsConceded / p.gkMatches).toFixed(1)} gs/pt · 🧹 ${p.cleanSheets ?? 0} clean sheet` : `${p.gkGoalsConceded} gol subiti` },
+    gk:        { accent: CLR_WIN, getVal: p => p.gkGoalsConceded, getLabel: () => 'gs', getSub: p => p.gkMatches > 0 ? `${p.gkMatches} turni · ${(p.gkGoalsConceded / p.gkMatches).toFixed(2)} gs/turno · 🧹 ${p.cleanSheets ?? 0} clean sheet` : `${p.gkGoalsConceded} gol subiti` },
     autogoals: { accent: CLR_LOSS, getVal: p => p.totalAutogoals, getLabel: () => 'ag', getSub: p => `${p.totalMatches} partite · ${(p.totalAutogoals / Math.max(1, p.totalMatches) * 100).toFixed(1)}% delle partite` },
   };
 

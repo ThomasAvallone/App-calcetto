@@ -8,6 +8,7 @@ import { db } from '../firebase/config';
 import { HISTORICAL_SEASONS, getCurrentRosterPlayers, computeCumulativeStats } from '../data/historicalData';
 import useAuthStore, { selectIsAdmin } from '../store/authStore';
 import { getAICallCount, onAICallCountChange, resetAICallCount } from '../services/geminiService';
+import { exportJSON, exportMatchesCSV, exportPlayersCSV } from '../utils/dataExport';
 import toast from 'react-hot-toast';
 
 const CHANGELOG = [
@@ -468,6 +469,37 @@ export default function AdminPage() {
         >
           {exporting ? '⏳ Preparazione...' : '⬇️ Download Excel (.xlsx)'}
         </button>
+      </div>
+
+      {/* CSV / JSON export (backup locale) */}
+      <div className="card mb-4 stagger-4">
+        <h3 className="mb-1">💾 Backup locale</h3>
+        <p className="text-sm text-muted mb-3">
+          Scarica i dati sul dispositivo in formato CSV o JSON.
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          <button
+            className="btn btn-full"
+            style={{ background: 'rgba(79,209,197,0.12)', color: '#4FD1C5', border: '1px solid rgba(79,209,197,0.4)' }}
+            onClick={() => { exportMatchesCSV(matches); toast.success('CSV partite scaricato'); }}
+          >
+            📄 CSV Partite
+          </button>
+          <button
+            className="btn btn-full"
+            style={{ background: 'rgba(79,209,197,0.12)', color: '#4FD1C5', border: '1px solid rgba(79,209,197,0.4)' }}
+            onClick={() => { exportPlayersCSV(players); toast.success('CSV giocatori scaricato'); }}
+          >
+            👥 CSV Giocatori
+          </button>
+          <button
+            className="btn btn-full"
+            style={{ background: 'rgba(104,211,145,0.12)', color: '#68D391', border: '1px solid rgba(104,211,145,0.4)' }}
+            onClick={() => { exportJSON({ players, matches }); toast.success('JSON backup scaricato'); }}
+          >
+            🗄️ JSON Backup Completo
+          </button>
+        </div>
       </div>
 
       {/* Recalculate Power Index */}

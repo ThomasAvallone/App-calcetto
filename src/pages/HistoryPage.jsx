@@ -119,6 +119,8 @@ export default function HistoryPage() {
   const [winnerFilter, setWinnerFilter] = useState('all');
   const [playerFilter, setPlayerFilter] = useState('');
   const [minGoals, setMinGoals] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   useEffect(() => {
     const unsub = subscribeToMatches(ms => { setMatches(ms); setLoading(false); });
@@ -143,10 +145,22 @@ export default function HistoryPage() {
   const activeFilterCount = (seasonFilter !== 'all' ? 1 : 0)
     + (winnerFilter !== 'all' ? 1 : 0)
     + (playerFilter.trim() ? 1 : 0)
-    + (minGoals !== '' && Number(minGoals) > 0 ? 1 : 0);
+    + (minGoals !== '' && Number(minGoals) > 0 ? 1 : 0)
+    + (dateFrom ? 1 : 0)
+    + (dateTo ? 1 : 0);
 
   const filteredFinished = useMemo(() => {
+    const fromMs = dateFrom ? new Date(dateFrom + 'T00:00:00').getTime() : null;
+    const toMs = dateTo ? new Date(dateTo + 'T23:59:59').getTime() : null;
     return finished.filter(m => {
+      // Date range
+      if (fromMs != null || toMs != null) {
+        const d = safeDate(m.date);
+        const ms = d ? d.getTime() : null;
+        if (ms == null) return false;
+        if (fromMs != null && ms < fromMs) return false;
+        if (toMs != null && ms > toMs) return false;
+      }
       // Season
       if (seasonFilter !== 'all') {
         const season = getMatchSeason(safeDate(m.date));
@@ -174,13 +188,15 @@ export default function HistoryPage() {
       }
       return true;
     });
-  }, [finished, seasonFilter, winnerFilter, playerFilter, minGoals]);
+  }, [finished, seasonFilter, winnerFilter, playerFilter, minGoals, dateFrom, dateTo]);
 
   const clearFilters = () => {
     setSeasonFilter('all');
     setWinnerFilter('all');
     setPlayerFilter('');
     setMinGoals('');
+    setDateFrom('');
+    setDateTo('');
   };
 
   const chipStyle = (active) => ({
@@ -295,6 +311,30 @@ export default function HistoryPage() {
                         {s}
                       </button>
                     ))}
+                  </div>
+                </div>
+
+                {/* Date range */}
+                <div>
+                  <div style={{ fontSize: '0.68rem', color: '#718096', fontWeight: 600, marginBottom: '0.35rem', letterSpacing: '0.04em' }}>INTERVALLO DATE</div>
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    <input
+                      type="date"
+                      className="input"
+                      value={dateFrom}
+                      max={dateTo || undefined}
+                      onChange={e => setDateFrom(e.target.value)}
+                      style={{ fontSize: '0.78rem', padding: '0.4rem 0.55rem', minHeight: 'auto', flex: 1 }}
+                    />
+                    <span style={{ fontSize: '0.75rem', color: '#718096' }}>→</span>
+                    <input
+                      type="date"
+                      className="input"
+                      value={dateTo}
+                      min={dateFrom || undefined}
+                      onChange={e => setDateTo(e.target.value)}
+                      style={{ fontSize: '0.78rem', padding: '0.4rem 0.55rem', minHeight: 'auto', flex: 1 }}
+                    />
                   </div>
                 </div>
 
