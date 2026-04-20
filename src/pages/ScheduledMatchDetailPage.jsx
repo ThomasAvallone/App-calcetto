@@ -1,8 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getMatch, updateMatch, deleteMatch } from '../firebase/firestore';
 import usePlayersStore from '../store/playersStore';
 import useMatchStore from '../store/matchStore';
+import { useMatchesSubscription } from '../hooks/useMatchesSubscription';
 import { generateMatchPreview } from '../services/reportService';
 import { fetchWeatherForDate } from '../services/weatherService';
 import { format } from 'date-fns';
@@ -27,6 +28,21 @@ export default function ScheduledMatchDetailPage() {
   const navigate = useNavigate();
   const { players, balanceTeams } = usePlayersStore();
   const { loadMatch } = useMatchStore();
+  const allMatches = useMatchesSubscription();
+
+  // Giocatori "suggeriti" = presenti nelle ultime 3 partite finite (escludendo questa)
+  const suggestedIds = useMemo(() => {
+    const getMs = d => d?.toMillis ? d.toMillis() : d ? new Date(d).getTime() : 0;
+    const recent = (allMatches || [])
+      .filter(m => m.status === 'finished' && m.id !== id)
+      .sort((a, b) => getMs(b.date) - getMs(a.date))
+      .slice(0, 3);
+    const set = new Set();
+    recent.forEach(m => {
+      [...(m.redTeam || []), ...(m.blueTeam || [])].forEach(p => set.add(p.id));
+    });
+    return set;
+  }, [allMatches, id]);
 
   const [loadingMatch, setLoadingMatch] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -419,6 +435,8 @@ export default function ScheduledMatchDetailPage() {
         const filtered = addSearch
           ? available.filter(p => p.name.toLowerCase().includes(addSearch.toLowerCase()))
           : available;
+        const suggested = filtered.filter(p => suggestedIds.has(p.id));
+        const others = filtered.filter(p => !suggestedIds.has(p.id));
         return (
           <div className="card mb-4">
             <button
@@ -447,15 +465,46 @@ export default function ScheduledMatchDetailPage() {
                       style={{ width: '100%', marginBottom: '0.5rem' }}
                     />
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', maxHeight: '240px', overflowY: 'auto' }}>
-                      {filtered.map(p => (
-                        <div key={p.id} className="flex items-center gap-2" style={{ padding: '0.3rem 0' }}>
-                          <span style={{ flex: 1, fontSize: '0.85rem' }}>{getRoleIcon(p.primaryRole)} {p.name}</span>
-                          <button
-                            onClick={() => handleAddPending(p)}
-                            style={{ background: 'rgba(79,209,197,0.15)', border: '1px solid rgba(79,209,197,0.4)', borderRadius: '6px', color: '#4FD1C5', cursor: 'pointer', padding: '0.2rem 0.6rem', fontSize: '0.75rem', fontWeight: 700 }}
-                          >+ Aggiungi</button>
-                        </div>
-                      ))}
+                      {suggested.length > 0 && (
+                        <>
+                          <div style={{ fontSize: '0.68rem', color: '#F6E05E', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', padding: '0.15rem 0 0.1rem' }}>
+                            ⭐ Suggeriti · ultime 3 partite
+                          </div>
+                          {suggested.map(p => (
+                            <div key={p.id} className="flex items-center gap-2"
+                              style={{
+                                padding: '0.3rem 0.4rem',
+                                background: 'rgba(246,224,94,0.08)',
+                                border: '1px solid rgba(246,224,94,0.25)',
+                                borderRadius: '6px',
+                              }}>
+                              <span style={{ flex: 1, fontSize: '0.85rem' }}>{getRoleIcon(p.primaryRole)} {p.name}</span>
+                              <button
+                                onClick={() => handleAddPending(p)}
+                                style={{ background: 'rgba(79,209,197,0.15)', border: '1px solid rgba(79,209,197,0.4)', borderRadius: '6px', color: '#4FD1C5', cursor: 'pointer', padding: '0.2rem 0.6rem', fontSize: '0.75rem', fontWeight: 700 }}
+                              >+ Aggiungi</button>
+                            </div>
+                          ))}
+                        </>
+                      )}
+                      {others.length > 0 && (
+                        <>
+                          {suggested.length > 0 && (
+                            <div style={{ fontSize: '0.68rem', color: '#718096', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', padding: '0.35rem 0 0.1rem' }}>
+                              Altri
+                            </div>
+                          )}
+                          {others.map(p => (
+                            <div key={p.id} className="flex items-center gap-2" style={{ padding: '0.3rem 0' }}>
+                              <span style={{ flex: 1, fontSize: '0.85rem' }}>{getRoleIcon(p.primaryRole)} {p.name}</span>
+                              <button
+                                onClick={() => handleAddPending(p)}
+                                style={{ background: 'rgba(79,209,197,0.15)', border: '1px solid rgba(79,209,197,0.4)', borderRadius: '6px', color: '#4FD1C5', cursor: 'pointer', padding: '0.2rem 0.6rem', fontSize: '0.75rem', fontWeight: 700 }}
+                              >+ Aggiungi</button>
+                            </div>
+                          ))}
+                        </>
+                      )}
                     </div>
                   </>
                 )}
