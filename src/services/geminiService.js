@@ -176,7 +176,7 @@ ${eventsStr}
 ${hookLines ? `\nSPUNTI NARRATIVI:\n${hookLines}` : ''}
 Scrivi il commento ora:`;
 
-  return callGemini(prompt, { temperature: 0.9, maxTokens: 500 });
+  return callGemini(prompt, { temperature: 0.9, maxTokens: 900 });
 }
 
 // ─── Formazione squadre equilibrate con AI ────────────────────────────────────
@@ -269,7 +269,7 @@ ${fmt(blueTeam)}
 
 Scrivi il pronostico ora:`;
 
-  return callGemini(prompt, { temperature: 0.95, maxTokens: 500 });
+  return callGemini(prompt, { temperature: 0.95, maxTokens: 900 });
 }
 
 // ─── Report mensile/stagionale AI ─────────────────────────────────────────────
@@ -341,7 +341,7 @@ GOL TOTALI NELLE PARTITE CONDIVISE:
 
 Racconta la loro storia ora:`;
 
-  return callGemini(prompt, { temperature: 0.93, maxTokens: 550 });
+  return callGemini(prompt, { temperature: 0.93, maxTokens: 1000 });
 }
 
 // ─── Soprannome AI ────────────────────────────────────────────────────────────
@@ -404,5 +404,5 @@ ${matchLines}
 
 Scrivi l'analisi ora:`;
 
-  return callGemini(prompt, { temperature: 0.92, maxTokens: 400 });
+  return callGemini(prompt, { temperature: 0.92, maxTokens: 1000 });
 }
