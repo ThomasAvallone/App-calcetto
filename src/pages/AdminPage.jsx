@@ -13,6 +13,56 @@ import toast from 'react-hot-toast';
 
 const CHANGELOG = [
   {
+    version: '3.6.0',
+    date: 'Aprile 2026',
+    entries: [
+      { type: 'new', text: 'Partita programmata: nel picker "Aggiungi giocatore" la lista è ora divisa in ⭐ Suggeriti (presenti nelle ultime 3 partite finite, evidenziati in giallo) e Altri — più rapido confermare la rosa abituale' },
+      { type: 'fix', text: 'Analisi AI scheda giocatore, commento post-partita, pronostico pre-partita e rivalità H2H: aumentato maxTokens (400→1000, 500→900, 550→1000) — i testi non vengono più troncati a metà frase' },
+    ],
+  },
+  {
+    version: '3.5.0',
+    date: 'Aprile 2026',
+    entries: [
+      { type: 'new', text: 'Simulatore What-if (Dashboard): scegli due formazioni, bilancia manualmente o via AI e ottieni il pronostico Gemini senza creare una partita reale' },
+      { type: 'new', text: 'Cronologia scontri diretti nella tab H2H (Classifiche): sezione collassabile con data, punteggio, gol dei due giocatori ed esito di ogni sfida tra i due selezionati' },
+      { type: 'new', text: 'Match Replay nel dettaglio partita: riproduzione animata degli eventi uno alla volta (1,2s ciascuno) con punteggio che sale in diretta — ricrea la partita vista dallo spogliatoio' },
+      { type: 'new', text: 'Compatibilità duo nella scheda giocatore: win rate di ogni compagno quando gioca insieme vs quando avversario (min 2 partite), ordinabile per performance insieme o contro' },
+      { type: 'new', text: 'Achievement personali: 18 traguardi in 5 categorie (attacco, presenze, vittorie, portiere, infamia) calcolati on-the-fly — quelli sbloccati come badge, quelli in corso con progress bar' },
+      { type: 'fix', text: 'Risolto crash della tab H2H (useState dentro IIFE violava le Rules of Hooks)' },
+      { type: 'fix', text: 'Match Replay: riscritto il reveal per mostrare solo gli eventi già rivelati (prima erano tutti pre-renderizzati al 30% di opacità) + contatore di avanzamento' },
+      { type: 'fix', text: 'DuoCompatibility e Achievement: default props su allMatches/allPlayers per evitare crash se i dati non sono ancora caricati' },
+    ],
+  },
+  {
+    version: '3.4.0',
+    date: 'Aprile 2026',
+    entries: [
+      { type: 'new', text: 'Gerarchia modelli Gemini con fallback automatico: chain fast (lite → flash → pro) per chiamate brevi, chain pro (pro → lite → flash) per task reasoning; 2 retry con backoff esponenziale (1s, 2s) su 503/429 prima di scalare al modello successivo' },
+      { type: 'new', text: 'Filtro intervallo date nello Storico: seleziona "da/a" per visualizzare solo le partite in un periodo' },
+      { type: 'new', text: 'Backup locale nell\'Admin: scarica CSV partite, CSV giocatori o JSON completo direttamente sul dispositivo — nessun server intermedio' },
+      { type: 'new', text: 'Annulla "Termina partita": toast con countdown di 5s prima del salvataggio definitivo — recupero rapido se la chiusura è accidentale' },
+      { type: 'perf', text: 'Refactor utils/playerStats.js: calcStatsForPlayer, computePowerIndex, computeStreak, computeRecentForm estratte come funzioni pure, testabili in isolamento senza Firestore' },
+      { type: 'perf', text: 'Suite Vitest con 17 test su playerStats — comandi npm test e npm run test:watch' },
+      { type: 'fix', text: 'maxTokens ×4 per i modelli thinking nel fallback chain (evita output troncati quando il tier fast rimbalza su gemini-3.1-pro)' },
+    ],
+  },
+  {
+    version: '3.3.0',
+    date: 'Aprile 2026',
+    entries: [
+      { type: 'new', text: 'Rating peer integrato nel Power Index: ratingBonus = (avgRating - 5.5) × 1.5, attivo dopo ≥3 partite con voti ricevuti — il giudizio dei compagni pesa nel PI finale' },
+      { type: 'new', text: 'Classifica autogol (tab 🤦 Autogol in Classifiche): ranking con percentuale partite con autogol' },
+      { type: 'new', text: 'Freccia trend PI (↑↓→) nel Power Ranking della Dashboard — calcolata sugli ultimi 2 valori di powerHistory' },
+      { type: 'new', text: 'Tracciamento portiere per squadra a livello di partita (clean sheet inclusi): ogni partita salva i turni GK effettivi' },
+      { type: 'fix', text: 'Logica portiere a rotazione: gkMatches = presenze × 2 (ogni giocatore fa 2 turni in porta per partita, uno per tempo) — tutte le medie GK (Power Index, badge Muro/Colabrodo, leaderboard) ora coerenti' },
+      { type: 'fix', text: 'Clean sheet calcolato individualmente per turno di porta, non più per squadra intera' },
+      { type: 'fix', text: 'Stats GK in StatsPage rispettano il filtro periodo (stagione / 30 giorni)' },
+      { type: 'fix', text: 'Partite storiche escluse da streak e recentForm (contavano impropriamente nel momento di forma attuale)' },
+      { type: 'fix', text: 'MatchPage: conferma inline prima di eliminare un evento (doppio tap: ✕ apre conferma → ✓ conferma o ✕ annulla)' },
+    ],
+  },
+  {
     version: '3.2.0',
     date: 'Marzo 2026',
     entries: [
@@ -217,7 +267,6 @@ export default function AdminPage() {
   const [importMatchProgress, setImportMatchProgress] = useState(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showChangelog, setShowChangelog] = useState(false);
-  const [opLog, setOpLog] = useState([]);
 
   useEffect(() => {
     Promise.all([getPlayers(), getMatches(), loadUsers()]).then(([p, m, u]) => {
@@ -230,27 +279,13 @@ export default function AdminPage() {
     return snap.docs.map(d => ({ id: d.id, ...d.data() }));
   }
 
-  function addLog(action, status = 'ok', detail = '') {
-    const entry = {
-      id: Date.now(),
-      time: new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-      user: currentUser?.displayName || currentUser?.email || 'Admin',
-      action,
-      status,
-      detail,
-    };
-    setOpLog(prev => [entry, ...prev]);
-  }
-
   const handleSyncSheets = async () => {
     setSyncing(true);
     try {
       await syncAllHistoryToSheets(matches, players);
       toast.success('Sincronizzazione completata!');
-      addLog('Sync Google Sheets', 'ok', `${matches.length} partite sincronizzate`);
     } catch (e) {
       toast.error('Errore sync: ' + e.message);
-      addLog('Sync Google Sheets', 'err', e.message);
     } finally {
       setSyncing(false);
     }
@@ -261,10 +296,8 @@ export default function AdminPage() {
     try {
       downloadExcel(players, matches);
       toast.success('Download avviato!');
-      addLog('Export Excel', 'ok', `${players.length} giocatori, ${matches.length} partite`);
     } catch (e) {
       toast.error('Errore export: ' + e.message);
-      addLog('Export Excel', 'err', e.message);
     } finally {
       setExporting(false);
     }
@@ -298,12 +331,10 @@ export default function AdminPage() {
         done++;
       }
       toast.success(`${done} giocatori importati con storico!`);
-      addLog('Import Giocatori', 'ok', `${done} giocatori importati`);
       const updated = await getPlayers();
       setPlayers(updated);
     } catch (e) {
       toast.error('Errore importazione: ' + e.message);
-      addLog('Import Giocatori', 'err', e.message);
     } finally {
       setImporting(false);
       setImportProgress(null);
@@ -316,10 +347,8 @@ export default function AdminPage() {
     try {
       await seedHistoricalSeasons(HISTORICAL_SEASONS);
       toast.success(`${HISTORICAL_SEASONS.length} stagioni importate su Firestore!`);
-      addLog('Import Stagioni Storiche', 'ok', `${HISTORICAL_SEASONS.length} stagioni`);
     } catch (e) {
       toast.error('Errore import: ' + e.message);
-      addLog('Import Stagioni Storiche', 'err', e.message);
     } finally {
       setSeeding(false);
     }
@@ -331,10 +360,8 @@ export default function AdminPage() {
       const allIds = players.map(p => p.id);
       await recalculatePlayerStats(allIds);
       toast.success('Power Index ricalcolati per tutti i giocatori!');
-      addLog('Ricalcolo Power Index', 'ok', `${allIds.length} giocatori aggiornati`);
     } catch (e) {
       toast.error('Errore: ' + e.message);
-      addLog('Ricalcolo Power Index', 'err', e.message);
     } finally {
       setRecalculating(false);
     }
@@ -358,12 +385,10 @@ export default function AdminPage() {
         (done, total, matchNum) => setImportMatchProgress({ done, total, matchNum })
       );
       toast.success(`${done} partite storiche importate!`);
-      addLog('Import Partite Storiche', 'ok', `${done} partite importate`);
       const updated = await getMatches();
       setMatches(updated);
     } catch (e) {
       toast.error('Errore importazione partite: ' + e.message);
-      addLog('Import Partite Storiche', 'err', e.message);
     } finally {
       setImportingMatches(false);
       setImportMatchProgress(null);
@@ -372,15 +397,12 @@ export default function AdminPage() {
 
   const handleSetRole = async (uid, newRole) => {
     if (!currentIsAdmin) return;
-    const targetUser = users.find(u => u.id === uid);
     try {
       await updateDoc(doc(db, 'users', uid), { role: newRole });
       setUsers(u => u.map(user => user.id === uid ? { ...user, role: newRole } : user));
       toast.success(`Ruolo aggiornato: ${newRole}`);
-      addLog('Cambio Ruolo Utente', 'ok', `${targetUser?.email} → ${newRole}`);
     } catch (e) {
       toast.error('Errore aggiornamento ruolo: ' + e.message);
-      addLog('Cambio Ruolo Utente', 'err', e.message);
     }
   };
 
@@ -392,10 +414,8 @@ export default function AdminPage() {
       if (!window.confirm(msg)) return;
       await updateMatch(matchId, { events: fixedEvents });
       toast.success('Minuti gol corretti!');
-      addLog('Correggi Minuti Gol', 'ok', `Partita ${matchId}`);
     } catch (e) {
       toast.error('Errore: ' + e.message);
-      addLog('Correggi Minuti Gol', 'err', e.message);
     } finally {
       setFixingMinutes(false);
     }
@@ -574,38 +594,8 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* Operations Log */}
-      <div className="card mb-4 stagger-8">
-        <h3 className="mb-1" style={{ fontSize: '0.95rem' }}>📋 Log Operazioni</h3>
-        <p className="text-xs text-muted mb-3">Azioni eseguite in questa sessione.</p>
-        {opLog.length === 0 ? (
-          <p className="text-xs text-muted" style={{ fontStyle: 'italic' }}>Nessuna operazione eseguita.</p>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-            {opLog.map(entry => (
-              <div key={entry.id} style={{
-                display: 'flex', alignItems: 'flex-start', gap: '0.6rem',
-                padding: '0.5rem 0.6rem', borderRadius: '0.4rem',
-                background: entry.status === 'ok' ? 'rgba(79,209,197,0.06)' : 'rgba(252,129,74,0.06)',
-                border: `1px solid ${entry.status === 'ok' ? 'rgba(79,209,197,0.2)' : 'rgba(252,129,74,0.2)'}`,
-                fontSize: '0.78rem',
-              }}>
-                <span style={{ color: entry.status === 'ok' ? '#4FD1C5' : '#FC814A', flexShrink: 0 }}>
-                  {entry.status === 'ok' ? '✓' : '✗'}
-                </span>
-                <div style={{ flex: 1 }}>
-                  <span style={{ fontWeight: 600, color: '#E2E8F0' }}>{entry.action}</span>
-                  {entry.detail && <span style={{ color: '#718096' }}> — {entry.detail}</span>}
-                  <div style={{ color: '#4A5568', marginTop: '0.1rem' }}>{entry.time} · {entry.user}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
       {/* Changelog */}
-      <div className="card mb-4">
+      <div className="card mb-4 stagger-8">
         <button
           onClick={() => setShowChangelog(v => !v)}
           style={{
