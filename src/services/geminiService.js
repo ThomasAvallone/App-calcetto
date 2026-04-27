@@ -19,9 +19,13 @@ const MODELS = {
   ],
 };
 
-// Modelli "thinking": consumano token per il reasoning interno prima di produrre output.
-// Se non raddoppiamo maxTokens, l'output visibile viene troncato.
-const THINKING_MODELS = new Set(['gemini-3.1-pro-preview']);
+// Tutti i modelli Gemini 3.x preview usano thinking tokens interni che scalano
+// dal budget maxOutputTokens. Senza margine, l'output visibile viene troncato.
+const THINKING_MODELS = new Set([
+  'gemini-3.1-flash-lite-preview',
+  'gemini-3-flash-preview',
+  'gemini-3.1-pro-preview',
+]);
 
 // AI call counter — persistito in localStorage, non si azzera al refresh
 const _AI_CALL_KEY = 'calcetto_ai_call_count';
