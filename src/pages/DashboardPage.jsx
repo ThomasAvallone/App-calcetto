@@ -695,7 +695,7 @@ export default function DashboardPage() {
         })}
       </div>
 
-      {showWhatIf && <WhatIfModal onClose={() => setShowWhatIf(false)} />}
+      {showWhatIf && <WhatIfModal onClose={() => setShowWhatIf(false)} scheduledMatch={nearestScheduled} />}
     </div>
   );
 }
