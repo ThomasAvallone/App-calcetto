@@ -17,10 +17,12 @@ const CHANGELOG = [
     version: '3.7.0',
     date: 'Maggio 2026',
     entries: [
-      { type: 'new', text: 'Editor Power Index nell\'Admin: 16 parametri configurabili raggruppati per area (formula base, attacco, portiere, blend recente/storico, rating peer, decay inattività) — il pannello mostra in tempo reale la formula risultante e i valori correnti' },
+      { type: 'new', text: 'Editor Power Index nell\'Admin: 16 parametri configurabili raggruppati per area (formula base, attacco, portiere, blend recente/storico, rating peer, decay inattività) — il pannello mostra in tempo reale la formula risultante con i valori correnti e calcola automaticamente quando viene effettivamente raggiunto il fattore minimo di decay' },
       { type: 'new', text: 'Salva e Ricalcola: il pulsante salva la configurazione su Firestore e rilancia immediatamente recalculatePlayerStats per tutti i giocatori — le schede giocatore si aggiornano via real-time subscription' },
-      { type: 'new', text: 'DEFAULT_PI_CONFIG esportata da playerStats.js: computePowerIndex e computeCombinedPowerIndex accettano un parametro opzionale cfg (default = valori storici) — retrocompatibile' },
-      { type: 'new', text: 'Hook usePIConfig: sottoscrizione real-time a settings/piConfig — PlayersPage e PiTrendChart usano automaticamente la configurazione corrente per tutti i calcoli on-the-fly' },
+      { type: 'new', text: 'DEFAULT_PI_CONFIG esportata da playerStats.js: computePowerIndex e computeCombinedPowerIndex accettano un parametro opzionale cfg (default = valori storici) — retrocompatibile con tutti i test esistenti (17/17 pass)' },
+      { type: 'new', text: 'Hook usePIConfig: sottoscrizione real-time a settings/piConfig con deduplicazione via JSON key — PlayersPage e PiTrendChart usano automaticamente la configurazione corrente senza render spurii' },
+      { type: 'fix', text: 'Stripping di updatedAt (Timestamp Firestore) dalla config prima del merge in recalculatePlayerStats e nel caricamento dell\'editor Admin — evita che il campo metadata inquini l\'oggetto cfg e venga riscritto su Firestore ad ogni salvataggio' },
+      { type: 'fix', text: 'Descrizione campo "Velocità decay" corretta: il valore non è i giorni per raggiungere il minimo (dipende anche dal fattore minimo stesso) — ora la formula summary mostra il giorno effettivo calcolato come startDays + duration×(1−floor)' },
     ],
   },
   {
@@ -322,7 +324,10 @@ export default function AdminPage() {
   useEffect(() => {
     Promise.all([getPlayers(), getMatches(), loadUsers(), getPIConfig()]).then(([p, m, u, piCfgSaved]) => {
       setPlayers(p); setMatches(m); setUsers(u);
-      if (piCfgSaved) setPICfg({ ...DEFAULT_PI_CONFIG, ...piCfgSaved });
+      if (piCfgSaved) {
+        const { updatedAt: _u, ...cleanCfg } = piCfgSaved;
+        setPICfg({ ...DEFAULT_PI_CONFIG, ...cleanCfg });
+      }
       setLoading(false);
     }).catch(e => { toast.error('Errore caricamento: ' + e.message); setLoading(false); });
   }, []);
@@ -622,7 +627,7 @@ export default function AdminPage() {
               <div style={{ marginTop: '0.5rem', fontSize: '0.68rem', color: '#718096', lineHeight: 1.7 }}>
                 Blend: <span style={{ color: '#A0AEC0' }}>{Math.round(piCfg.recentWeight * 100)}%</span> ultimi <span style={{ color: '#A0AEC0' }}>{piCfg.recentMatchesWindow}</span> match + <span style={{ color: '#A0AEC0' }}>{Math.round((1 - piCfg.recentWeight) * 100)}%</span> storico (min <span style={{ color: '#A0AEC0' }}>{piCfg.minRecentMatchesForBlend}</span> recenti)<br />
                 Rating bonus: (Voto − <span style={{ color: '#A0AEC0' }}>{piCfg.ratingNeutral}</span>) × <span style={{ color: '#A0AEC0' }}>{piCfg.ratingBonusMultiplier}</span> (min <span style={{ color: '#A0AEC0' }}>{piCfg.minRatedMatchesForBonus}</span> partite votate)<br />
-                Decay: da <span style={{ color: '#A0AEC0' }}>{piCfg.activityDecayStartDays}</span>gg inattivo → fattore min <span style={{ color: '#A0AEC0' }}>{piCfg.activityDecayFloor}×</span> in <span style={{ color: '#A0AEC0' }}>{piCfg.activityDecayDuration}</span>gg
+                Decay: da <span style={{ color: '#A0AEC0' }}>{piCfg.activityDecayStartDays}</span>gg inattivo → fattore min <span style={{ color: '#A0AEC0' }}>{piCfg.activityDecayFloor}×</span> raggiunto in ~<span style={{ color: '#A0AEC0' }}>{Math.round(piCfg.activityDecayStartDays + piCfg.activityDecayDuration * (1 - piCfg.activityDecayFloor))}</span>gg totali
               </div>
             </div>
 
@@ -663,7 +668,7 @@ export default function AdminPage() {
             <PISection label="Decay Inattività">
               <PIField label="Giorni prima del decay" desc="Dopo X giorni senza giocare inizia il decadimento" value={piCfg.activityDecayStartDays} min={7} max={180} step={1} onChange={v => setPICfg(c => ({ ...c, activityDecayStartDays: v }))} />
               <PIField label="Fattore minimo" desc="Moltiplicatore minimo per inattività totale" value={piCfg.activityDecayFloor} min={0.1} max={0.95} step={0.05} onChange={v => setPICfg(c => ({ ...c, activityDecayFloor: v }))} />
-              <PIField label="Giorni al minimo" desc="Giorni dopo l'inizio del decay per raggiungere il minimo" value={piCfg.activityDecayDuration} min={90} max={1095} step={30} onChange={v => setPICfg(c => ({ ...c, activityDecayDuration: v }))} />
+              <PIField label="Velocità decay" desc="Più alto = decay più lento. Il fattore minimo è raggiunto dopo circa startDays + duration×(1-floor) giorni" value={piCfg.activityDecayDuration} min={90} max={1095} step={30} onChange={v => setPICfg(c => ({ ...c, activityDecayDuration: v }))} />
             </PISection>
 
             {/* Actions */}

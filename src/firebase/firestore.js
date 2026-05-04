@@ -120,7 +120,9 @@ export async function recalculatePlayerStats(playerIds, { cachedMatches, cachedP
     cachedPlayers || getPlayers(),
     getDoc(doc(db, 'settings', 'piConfig')),
   ]);
-  const cfg = { ...DEFAULT_PI_CONFIG, ...(piConfigSnap.exists() ? piConfigSnap.data() : {}) };
+  // Strip server metadata fields (updatedAt) before merging into formula config
+  const { updatedAt: _u, ...piConfigData } = piConfigSnap.exists() ? piConfigSnap.data() : {};
+  const cfg = { ...DEFAULT_PI_CONFIG, ...piConfigData };
   // Map playerId → player doc (for historicalStats and existing powerHistory)
   const playerMap = new Map(allPlayers.map(p => [p.id, p]));
   const playerHistoricalMap = new Map(allPlayers.map(p => [p.id, p.historicalStats]));
