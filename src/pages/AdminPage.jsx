@@ -322,7 +322,7 @@ export default function AdminPage() {
   const [piSaving, setPISaving] = useState(false);
 
   useEffect(() => {
-    Promise.all([getPlayers(), getMatches(), loadUsers(), getPIConfig()]).then(([p, m, u, piCfgSaved]) => {
+    Promise.all([getPlayers(), getMatches(), loadUsers(), getPIConfig().catch(() => null)]).then(([p, m, u, piCfgSaved]) => {
       setPlayers(p); setMatches(m); setUsers(u);
       if (piCfgSaved) {
         const { updatedAt: _u, ...cleanCfg } = piCfgSaved;

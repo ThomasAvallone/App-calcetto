@@ -70,5 +70,11 @@ service cloud.firestore {
       allow read: if isAuth();
       allow write: if isAdmin();
     }
+
+    // Settings (piConfig, ecc.): authenticated users can read; only admins can write
+    match /settings/{settingId} {
+      allow read: if isAuth();
+      allow write: if isAdmin();
+    }
   }
 }
