@@ -3,6 +3,26 @@
 
 import { getMs } from './dateUtils';
 
+export const DEFAULT_PI_CONFIG = {
+  base: 50,
+  winRateMultiplier: 20,
+  drawValue: 0.5,
+  attackMultiplier: 6,
+  goalWeight: 3,
+  assistWeight: 2,
+  autogoalPenalty: 2,
+  gkPenaltyMultiplier: 2,
+  recentMatchesWindow: 20,
+  minRecentMatchesForBlend: 3,
+  recentWeight: 0.6,
+  ratingNeutral: 5.5,
+  ratingBonusMultiplier: 1.5,
+  minRatedMatchesForBonus: 3,
+  activityDecayStartDays: 30,
+  activityDecayFloor: 0.5,
+  activityDecayDuration: 730,
+};
+
 export function calcStatsForPlayer(matchList, pid) {
   const s = {
     goals: 0, assists: 0, autogoals: 0,
@@ -31,18 +51,18 @@ export function calcStatsForPlayer(matchList, pid) {
   return s;
 }
 
-export function computePowerIndex(stats) {
-  if (!stats) return 50;
+export function computePowerIndex(stats, cfg = DEFAULT_PI_CONFIG) {
+  if (!stats) return cfg.base;
   const { goals = 0, assists = 0, autogoals = 0, gkGoalsConceded = 0, gkMatches = 0, wins = 0, draws = 0, matches = 0 } = stats;
-  if (matches === 0) return 50;
-  const winRate = (wins + draws * 0.5) / matches;
-  const attackPerMatch = (goals * 3 + assists * 2 - autogoals * 2) / matches;
-  const gkPenalty = gkMatches > 0 ? (gkGoalsConceded / gkMatches) * 2 : 0;
-  const raw = 50 + winRate * 20 + attackPerMatch * 6 - gkPenalty;
+  if (matches === 0) return cfg.base;
+  const winRate = (wins + draws * cfg.drawValue) / matches;
+  const attackPerMatch = (goals * cfg.goalWeight + assists * cfg.assistWeight - autogoals * cfg.autogoalPenalty) / matches;
+  const gkPenalty = gkMatches > 0 ? (gkGoalsConceded / gkMatches) * cfg.gkPenaltyMultiplier : 0;
+  const raw = cfg.base + winRate * cfg.winRateMultiplier + attackPerMatch * cfg.attackMultiplier - gkPenalty;
   return Math.max(0, Math.min(100, Math.round(raw * 10) / 10));
 }
 
-export function computeCombinedPowerIndex(stats, historicalStats) {
+export function computeCombinedPowerIndex(stats, historicalStats, cfg = DEFAULT_PI_CONFIG) {
   const combined = {
     goals: (stats?.goals || 0) + (historicalStats?.goals || 0),
     assists: (stats?.assists || 0) + (historicalStats?.assists || 0),
@@ -53,7 +73,7 @@ export function computeCombinedPowerIndex(stats, historicalStats) {
     draws: (stats?.draws || 0) + (historicalStats?.draws || 0),
     matches: (stats?.matches || 0) + (historicalStats?.matches || 0),
   };
-  return computePowerIndex(combined);
+  return computePowerIndex(combined, cfg);
 }
 
 function filterPlayerMatches(allMatches, playerId, prefiltered) {

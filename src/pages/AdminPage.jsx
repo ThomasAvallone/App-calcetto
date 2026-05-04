@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useSyncExternalStore } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getMatches, getPlayers, seedHistoricalSeasons, createPlayer, importHistoricalMatches, recalculatePlayerStats, updateMatch, fixLastMatchGoalMinutes } from '../firebase/firestore';
+import { getMatches, getPlayers, seedHistoricalSeasons, createPlayer, importHistoricalMatches, recalculatePlayerStats, updateMatch, fixLastMatchGoalMinutes, getPIConfig, setPIConfig as savePIConfig } from '../firebase/firestore';
 import { syncAllHistoryToSheets } from '../services/sheetsService';
 import { downloadExcel } from '../services/excelService';
 import { doc, getDocs, collection, updateDoc } from 'firebase/firestore';
@@ -9,9 +9,20 @@ import { HISTORICAL_SEASONS, getCurrentRosterPlayers, computeCumulativeStats } f
 import useAuthStore, { selectIsAdmin } from '../store/authStore';
 import { getAICallCount, onAICallCountChange, resetAICallCount } from '../services/geminiService';
 import { exportJSON, exportMatchesCSV, exportPlayersCSV } from '../utils/dataExport';
+import { DEFAULT_PI_CONFIG } from '../utils/playerStats';
 import toast from 'react-hot-toast';
 
 const CHANGELOG = [
+  {
+    version: '3.7.0',
+    date: 'Maggio 2026',
+    entries: [
+      { type: 'new', text: 'Editor Power Index nell\'Admin: 16 parametri configurabili raggruppati per area (formula base, attacco, portiere, blend recente/storico, rating peer, decay inattività) — il pannello mostra in tempo reale la formula risultante e i valori correnti' },
+      { type: 'new', text: 'Salva e Ricalcola: il pulsante salva la configurazione su Firestore e rilancia immediatamente recalculatePlayerStats per tutti i giocatori — le schede giocatore si aggiornano via real-time subscription' },
+      { type: 'new', text: 'DEFAULT_PI_CONFIG esportata da playerStats.js: computePowerIndex e computeCombinedPowerIndex accettano un parametro opzionale cfg (default = valori storici) — retrocompatibile' },
+      { type: 'new', text: 'Hook usePIConfig: sottoscrizione real-time a settings/piConfig — PlayersPage e PiTrendChart usano automaticamente la configurazione corrente per tutti i calcoli on-the-fly' },
+    ],
+  },
   {
     version: '3.6.0',
     date: 'Aprile 2026',
@@ -245,6 +256,43 @@ const TYPE_STYLE = {
   improve: { label: 'IMPROVE', color: '#B794F4', bg: 'rgba(183,148,244,0.12)' },
 };
 
+function PISection({ label, children }) {
+  return (
+    <div style={{ marginBottom: '1rem' }}>
+      <div style={{ fontSize: '0.7rem', color: '#718096', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '0.5rem', paddingBottom: '0.25rem', borderBottom: '1px solid #2D3748' }}>
+        {label}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function PIField({ label, desc, value, min, max, step, onChange, unit = '' }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#E2E8F0' }}>{label}</div>
+        <div style={{ fontSize: '0.68rem', color: '#4A5568', lineHeight: 1.3 }}>{desc}</div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0 }}>
+        <button
+          style={{ background: 'none', border: '1px solid #4A5568', color: '#A0AEC0', borderRadius: '4px', width: '28px', height: '28px', cursor: 'pointer', fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={() => onChange(Math.max(min, Math.round((value - step) * 100) / 100))}
+        >−</button>
+        <div style={{ width: '52px', textAlign: 'center', fontSize: '0.85rem', fontWeight: 700, color: '#F6E05E' }}>
+          {value}{unit}
+        </div>
+        <button
+          style={{ background: 'none', border: '1px solid #4A5568', color: '#A0AEC0', borderRadius: '4px', width: '28px', height: '28px', cursor: 'pointer', fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={() => onChange(Math.min(max, Math.round((value + step) * 100) / 100))}
+        >+</button>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const navigate = useNavigate();
   const currentIsAdmin = useAuthStore(selectIsAdmin);
@@ -267,10 +315,15 @@ export default function AdminPage() {
   const [importMatchProgress, setImportMatchProgress] = useState(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showChangelog, setShowChangelog] = useState(false);
+  const [showPIEditor, setShowPIEditor] = useState(false);
+  const [piCfg, setPICfg] = useState(DEFAULT_PI_CONFIG);
+  const [piSaving, setPISaving] = useState(false);
 
   useEffect(() => {
-    Promise.all([getPlayers(), getMatches(), loadUsers()]).then(([p, m, u]) => {
-      setPlayers(p); setMatches(m); setUsers(u); setLoading(false);
+    Promise.all([getPlayers(), getMatches(), loadUsers(), getPIConfig()]).then(([p, m, u, piCfgSaved]) => {
+      setPlayers(p); setMatches(m); setUsers(u);
+      if (piCfgSaved) setPICfg({ ...DEFAULT_PI_CONFIG, ...piCfgSaved });
+      setLoading(false);
     }).catch(e => { toast.error('Errore caricamento: ' + e.message); setLoading(false); });
   }, []);
 
@@ -421,6 +474,20 @@ export default function AdminPage() {
     }
   };
 
+  const handlePISave = async () => {
+    setPISaving(true);
+    try {
+      await savePIConfig(piCfg);
+      const allIds = players.map(p => p.id);
+      await recalculatePlayerStats(allIds);
+      toast.success('PI aggiornato e ricalcolato per tutti i giocatori!');
+    } catch (e) {
+      toast.error('Errore: ' + e.message);
+    } finally {
+      setPISaving(false);
+    }
+  };
+
   if (loading) return (
     <div className="page-content" style={{ textAlign: 'center', paddingTop: '3rem', color: '#718096' }}>
       Caricamento pannello admin...
@@ -522,7 +589,107 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {/* Recalculate Power Index */}
+      {/* PI Formula Editor */}
+      <div className="card mb-4 stagger-5" style={{ border: '1px solid rgba(246,224,94,0.2)', background: 'rgba(246,224,94,0.02)' }}>
+        <button
+          onClick={() => setShowPIEditor(v => !v)}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'inherit' }}
+        >
+          <h3 style={{ margin: 0, fontSize: '0.95rem', color: '#F6E05E' }}>⚡ Editor Power Index</h3>
+          <span style={{ color: '#718096', fontSize: '0.85rem', transition: 'transform 0.2s', display: 'inline-block', transform: showPIEditor ? 'rotate(180deg)' : 'rotate(0deg)' }}>▼</span>
+        </button>
+        <p className="text-xs text-muted" style={{ marginTop: '0.35rem', marginBottom: 0 }}>
+          Modula i pesi della formula e ricalcola tutti i PI con un click.
+        </p>
+
+        {showPIEditor && (
+          <div style={{ marginTop: '1.25rem' }}>
+
+            {/* Formula summary */}
+            <div style={{ background: '#1A202C', border: '1px solid #2D3748', borderRadius: '8px', padding: '0.85rem 1rem', marginBottom: '1.25rem', fontFamily: 'monospace' }}>
+              <div style={{ fontSize: '0.7rem', color: '#F6E05E', fontWeight: 700, marginBottom: '0.4rem', letterSpacing: '0.06em' }}>FORMULA ATTUALE</div>
+              <div style={{ fontSize: '0.72rem', color: '#A0AEC0', lineHeight: 1.7 }}>
+                <span style={{ color: '#4FD1C5' }}>PI</span> = <span style={{ color: '#F6E05E' }}>{piCfg.base}</span>
+                {' '}+ WinRate × <span style={{ color: '#F6E05E' }}>{piCfg.winRateMultiplier}</span>
+                {' '}+ AttaccoPerMatch × <span style={{ color: '#F6E05E' }}>{piCfg.attackMultiplier}</span>
+                {' '}− GKPenalty
+              </div>
+              <div style={{ fontSize: '0.68rem', color: '#718096', lineHeight: 1.7 }}>
+                AttaccoPerMatch = (Gol×<span style={{ color: '#A0AEC0' }}>{piCfg.goalWeight}</span> + Assist×<span style={{ color: '#A0AEC0' }}>{piCfg.assistWeight}</span> − Autogol×<span style={{ color: '#A0AEC0' }}>{piCfg.autogoalPenalty}</span>) / Partite<br />
+                GKPenalty = GolSubiti/TurniPortiere × <span style={{ color: '#A0AEC0' }}>{piCfg.gkPenaltyMultiplier}</span><br />
+                WinRate = (Vittorie + Pari×<span style={{ color: '#A0AEC0' }}>{piCfg.drawValue}</span>) / Partite
+              </div>
+              <div style={{ marginTop: '0.5rem', fontSize: '0.68rem', color: '#718096', lineHeight: 1.7 }}>
+                Blend: <span style={{ color: '#A0AEC0' }}>{Math.round(piCfg.recentWeight * 100)}%</span> ultimi <span style={{ color: '#A0AEC0' }}>{piCfg.recentMatchesWindow}</span> match + <span style={{ color: '#A0AEC0' }}>{Math.round((1 - piCfg.recentWeight) * 100)}%</span> storico (min <span style={{ color: '#A0AEC0' }}>{piCfg.minRecentMatchesForBlend}</span> recenti)<br />
+                Rating bonus: (Voto − <span style={{ color: '#A0AEC0' }}>{piCfg.ratingNeutral}</span>) × <span style={{ color: '#A0AEC0' }}>{piCfg.ratingBonusMultiplier}</span> (min <span style={{ color: '#A0AEC0' }}>{piCfg.minRatedMatchesForBonus}</span> partite votate)<br />
+                Decay: da <span style={{ color: '#A0AEC0' }}>{piCfg.activityDecayStartDays}</span>gg inattivo → fattore min <span style={{ color: '#A0AEC0' }}>{piCfg.activityDecayFloor}×</span> in <span style={{ color: '#A0AEC0' }}>{piCfg.activityDecayDuration}</span>gg
+              </div>
+            </div>
+
+            {/* ── Sezione: Formula base ── */}
+            <PISection label="Formula Base">
+              <PIField label="Valore base" desc="PI di partenza (giocatore neutro)" value={piCfg.base} min={20} max={80} step={1} onChange={v => setPICfg(c => ({ ...c, base: v }))} />
+              <PIField label="× Win rate" desc="Punti aggiunti a win rate 100%" value={piCfg.winRateMultiplier} min={5} max={50} step={1} onChange={v => setPICfg(c => ({ ...c, winRateMultiplier: v }))} />
+              <PIField label="Valore pari" desc="Un pari vale X di una vittoria" value={piCfg.drawValue} min={0} max={1} step={0.1} onChange={v => setPICfg(c => ({ ...c, drawValue: v }))} />
+            </PISection>
+
+            {/* ── Sezione: Attacco ── */}
+            <PISection label="Componente Attacco">
+              <PIField label="× Attacco/match" desc="Scala l'intero contributo offensivo" value={piCfg.attackMultiplier} min={1} max={20} step={0.5} onChange={v => setPICfg(c => ({ ...c, attackMultiplier: v }))} />
+              <PIField label="Peso gol" desc="Un gol vale X in AttaccoPerMatch" value={piCfg.goalWeight} min={0} max={10} step={0.5} onChange={v => setPICfg(c => ({ ...c, goalWeight: v }))} />
+              <PIField label="Peso assist" desc="Un assist vale X in AttaccoPerMatch" value={piCfg.assistWeight} min={0} max={10} step={0.5} onChange={v => setPICfg(c => ({ ...c, assistWeight: v }))} />
+              <PIField label="Penalità autogol" desc="Un autogol detrae X in AttaccoPerMatch" value={piCfg.autogoalPenalty} min={0} max={10} step={0.5} onChange={v => setPICfg(c => ({ ...c, autogoalPenalty: v }))} />
+            </PISection>
+
+            {/* ── Sezione: Portiere ── */}
+            <PISection label="Componente Portiere">
+              <PIField label="× Penalità GK" desc="Gol subiti/turno × questo valore" value={piCfg.gkPenaltyMultiplier} min={0} max={10} step={0.5} onChange={v => setPICfg(c => ({ ...c, gkPenaltyMultiplier: v }))} />
+            </PISection>
+
+            {/* ── Sezione: Blend ── */}
+            <PISection label="Blend Recente / Storico">
+              <PIField label="Finestra recente (match)" desc="Quante ultime partite definiscono la forma recente" value={piCfg.recentMatchesWindow} min={3} max={50} step={1} onChange={v => setPICfg(c => ({ ...c, recentMatchesWindow: v }))} />
+              <PIField label="Peso forma recente %" desc="% del PI recente nel blend (il resto è storico)" value={Math.round(piCfg.recentWeight * 100)} min={10} max={100} step={5} onChange={v => setPICfg(c => ({ ...c, recentWeight: v / 100 }))} unit="%" />
+              <PIField label="Min match per blend" desc="Minimo match recenti per attivare il blend" value={piCfg.minRecentMatchesForBlend} min={1} max={15} step={1} onChange={v => setPICfg(c => ({ ...c, minRecentMatchesForBlend: v }))} />
+            </PISection>
+
+            {/* ── Sezione: Rating bonus ── */}
+            <PISection label="Bonus Rating Peer">
+              <PIField label="× Bonus rating" desc="Ogni punto sopra/sotto la media scala il PI di X" value={piCfg.ratingBonusMultiplier} min={0} max={5} step={0.25} onChange={v => setPICfg(c => ({ ...c, ratingBonusMultiplier: v }))} />
+              <PIField label="Min partite votate" desc="Minimo partite con voto per applicare il bonus" value={piCfg.minRatedMatchesForBonus} min={1} max={15} step={1} onChange={v => setPICfg(c => ({ ...c, minRatedMatchesForBonus: v }))} />
+            </PISection>
+
+            {/* ── Sezione: Decay ── */}
+            <PISection label="Decay Inattività">
+              <PIField label="Giorni prima del decay" desc="Dopo X giorni senza giocare inizia il decadimento" value={piCfg.activityDecayStartDays} min={7} max={180} step={1} onChange={v => setPICfg(c => ({ ...c, activityDecayStartDays: v }))} />
+              <PIField label="Fattore minimo" desc="Moltiplicatore minimo per inattività totale" value={piCfg.activityDecayFloor} min={0.1} max={0.95} step={0.05} onChange={v => setPICfg(c => ({ ...c, activityDecayFloor: v }))} />
+              <PIField label="Giorni al minimo" desc="Giorni dopo l'inizio del decay per raggiungere il minimo" value={piCfg.activityDecayDuration} min={90} max={1095} step={30} onChange={v => setPICfg(c => ({ ...c, activityDecayDuration: v }))} />
+            </PISection>
+
+            {/* Actions */}
+            <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem' }}>
+              <button
+                className="btn btn-ghost"
+                style={{ flex: 1 }}
+                onClick={() => setPICfg(DEFAULT_PI_CONFIG)}
+                disabled={piSaving}
+              >
+                ↩ Reset default
+              </button>
+              <button
+                className="btn"
+                style={{ flex: 2, background: 'rgba(246,224,94,0.15)', color: '#F6E05E', border: '1px solid rgba(246,224,94,0.4)', fontWeight: 700 }}
+                onClick={handlePISave}
+                disabled={piSaving}
+              >
+                {piSaving ? '⏳ Salvataggio e ricalcolo...' : '💾 Salva e Ricalcola Tutti'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Recalculate Power Index (quick button) */}
       <div className="card mb-4 stagger-5">
         <h3 className="mb-1">⚡ Ricalcola Power Index</h3>
         <p className="text-sm text-muted mb-3">

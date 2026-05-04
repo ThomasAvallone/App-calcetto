@@ -3,7 +3,8 @@ import { persist } from 'zustand/middleware';
 import {
   createMatch, updateMatch, getMatch,
   saveMatchTimerState, getMatchTimerState,
-  subscribeToMatch, subscribeToMatchState
+  subscribeToMatch, subscribeToMatchState,
+  recordGoalEvent,
 } from '../firebase/firestore';
 
 // ─── STORE ────────────────────────────────────────────────────────────────────
@@ -128,11 +129,12 @@ const useMatchStore = create(
           minute,
           timestamp: Date.now(),
         };
+        // Optimistic update immediato — la subscription Firestore confermerà la verità
         const redScore = team === 'red' ? (match.redScore || 0) + 1 : (match.redScore || 0);
         const blueScore = team === 'blue' ? (match.blueScore || 0) + 1 : (match.blueScore || 0);
-        const events = [...(match.events || []), goalEvent];
-        await updateMatch(activeMatchId, { events, redScore, blueScore });
-        set({ match: { ...match, events, redScore, blueScore }, goalModal: null });
+        set({ match: { ...match, events: [...(match.events || []), goalEvent], redScore, blueScore } });
+        // Scrittura atomica: arrayUnion + increment prevengono race condition
+        await recordGoalEvent(activeMatchId, goalEvent);
       },
 
       async recordAutogoal({ team, scorerId, scorerName, gkConcededId, gkConcededName }) {
@@ -147,11 +149,11 @@ const useMatchStore = create(
           gkConcededName: gkConcededName || null,
           minute, timestamp: Date.now(),
         };
+        // Autogoal: la squadra avversaria segna
         const redScore = team === 'blue' ? (match.redScore || 0) + 1 : (match.redScore || 0);
         const blueScore = team === 'red' ? (match.blueScore || 0) + 1 : (match.blueScore || 0);
-        const events = [...(match.events || []), autogoalEvent];
-        await updateMatch(activeMatchId, { events, redScore, blueScore });
-        set({ match: { ...match, events, redScore, blueScore } });
+        set({ match: { ...match, events: [...(match.events || []), autogoalEvent], redScore, blueScore } });
+        await recordGoalEvent(activeMatchId, autogoalEvent);
       },
 
       async deleteEvent(eventId) {

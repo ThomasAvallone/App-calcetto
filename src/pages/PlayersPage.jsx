@@ -3,6 +3,7 @@ import usePlayersStore from '../store/playersStore';
 import useAuthStore, { selectIsAdmin } from '../store/authStore';
 import { computeCombinedPowerIndex, recalculatePlayerStats, updatePlayer } from '../firebase/firestore';
 import { useMatchesSubscription } from '../hooks/useMatchesSubscription';
+import { usePIConfig } from '../hooks/usePIConfig';
 import { HISTORICAL_SEASONS, suggestHistoricalNames, computeCumulativeStats, getUnlinkedNames } from '../data/historicalData';
 import toast from 'react-hot-toast';
 import { getMs } from '../utils/dateUtils';
@@ -123,6 +124,7 @@ export default function PlayersPage() {
   const { players, addPlayer, updatePlayer: editPlayer, removePlayer } = usePlayersStore();
   const { role } = useAuthStore();
   const isAdmin = useAuthStore(selectIsAdmin);
+  const piConfig = usePIConfig();
 
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(defaultForm);
@@ -327,7 +329,7 @@ export default function PlayersPage() {
       if (editId) {
         // Recompute power index combining app stats + new historicalStats
         const currentPlayer = players.find(p => p.id === editId);
-        const pi = computeCombinedPowerIndex(currentPlayer?.stats, historicalStats);
+        const pi = computeCombinedPowerIndex(currentPlayer?.stats, historicalStats, piConfig);
         await editPlayer(editId, { ...playerData, powerIndex: pi });
         // Recalculate p.stats so all-time leaderboard picks up the new historicalStats
         await recalculatePlayerStats([editId]);
@@ -613,7 +615,7 @@ export default function PlayersPage() {
           ))}
         </div>
 
-        <PiTrendChart playerMatches={playerMatchesMap[p.id] || []} playerId={p.id} playerPi={p.powerIndex} />
+        <PiTrendChart playerMatches={playerMatchesMap[p.id] || []} playerId={p.id} playerPi={p.powerIndex} piConfig={piConfig} />
 
         <AiTrendCard player={p} playerMatches={playerMatchesMap[p.id] || []} />
 

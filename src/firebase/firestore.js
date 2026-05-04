@@ -1,11 +1,12 @@
 import {
   collection, doc, getDocs, getDoc, addDoc, setDoc, updateDoc,
   deleteDoc, query, orderBy, limit, where, serverTimestamp,
-  onSnapshot, writeBatch, Timestamp
+  onSnapshot, writeBatch, Timestamp, arrayUnion, increment
 } from 'firebase/firestore';
 import { db } from './config';
 import { getMs } from '../utils/dateUtils';
 import {
+  DEFAULT_PI_CONFIG,
   calcStatsForPlayer,
   computePowerIndex,
   computeCombinedPowerIndex,
@@ -14,7 +15,7 @@ import {
 } from '../utils/playerStats';
 
 // Re-export per retrocompatibilità con i moduli che importano da firebase/firestore
-export { computePowerIndex, computeCombinedPowerIndex, computeStreak, computeRecentForm };
+export { DEFAULT_PI_CONFIG, computePowerIndex, computeCombinedPowerIndex, computeStreak, computeRecentForm };
 
 // ─── PLAYERS ─────────────────────────────────────────────────────────────────
 
@@ -82,6 +83,19 @@ export async function updateMatch(id, data) {
   await updateDoc(doc(db, 'matches', id), { ...data, updatedAt: serverTimestamp() });
 }
 
+// Scrittura atomica di un evento gol/autogol: arrayUnion previene race condition
+// se due admin registrano gol contemporaneamente (increment è atomico su Firestore).
+export async function recordGoalEvent(matchId, event) {
+  const pointTeam = event.type === 'autogoal'
+    ? (event.team === 'red' ? 'blue' : 'red')
+    : event.team;
+  await updateDoc(doc(db, 'matches', matchId), {
+    events: arrayUnion(event),
+    ...(pointTeam === 'red' ? { redScore: increment(1) } : { blueScore: increment(1) }),
+    updatedAt: serverTimestamp(),
+  });
+}
+
 export async function deleteMatch(id) {
   await deleteDoc(doc(db, 'matches', id));
 }
@@ -100,12 +114,13 @@ export function subscribeToMatches(callback) {
 
 // ─── POWER INDEX RECALCULATION ────────────────────────────────────────────────
 
-const RECENT_MATCHES_WINDOW = 20; // last N matches for recent PI
-
 export async function recalculatePlayerStats(playerIds, { cachedMatches, cachedPlayers } = {}) {
-  const [allMatches, allPlayers] = (cachedMatches && cachedPlayers)
-    ? [cachedMatches, cachedPlayers]
-    : await Promise.all([getMatches(), getPlayers()]);
+  const [allMatches, allPlayers, piConfigSnap] = await Promise.all([
+    cachedMatches || getMatches(),
+    cachedPlayers || getPlayers(),
+    getDoc(doc(db, 'settings', 'piConfig')),
+  ]);
+  const cfg = { ...DEFAULT_PI_CONFIG, ...(piConfigSnap.exists() ? piConfigSnap.data() : {}) };
   // Map playerId → player doc (for historicalStats and existing powerHistory)
   const playerMap = new Map(allPlayers.map(p => [p.id, p]));
   const playerHistoricalMap = new Map(allPlayers.map(p => [p.id, p.historicalStats]));
@@ -148,41 +163,42 @@ export async function recalculatePlayerStats(playerIds, { cachedMatches, cachedP
       stats.matches += historicalStats.matches || 0;
     }
 
-    // Recent stats (last 20 app matches – historical are too old to affect recent form)
-    const recentStats = calcStatsForPlayer(appMatches.slice(0, RECENT_MATCHES_WINDOW), pid);
+    // Recent stats (last N app matches – historical are too old to affect recent form)
+    const recentStats = calcStatsForPlayer(appMatches.slice(0, cfg.recentMatchesWindow), pid);
 
-    // Calculate both PIs
-    const overallPI = computePowerIndex(stats);
-    const recentPI = computePowerIndex(recentStats);
+    // Calculate both PIs using the current config
+    const overallPI = computePowerIndex(stats, cfg);
+    const recentPI = computePowerIndex(recentStats, cfg);
 
-    // Activity decay: penalize inactive players (30+ days without playing)
+    // Activity decay: penalize inactive players
     let activityFactor = 1;
     if (playerMatches.length > 0) {
       const lastMatchMs = getMs(playerMatches[0].date);
       const daysSinceLastMatch = (now - lastMatchMs) / (1000 * 60 * 60 * 24);
-      if (daysSinceLastMatch > 30) {
-        // Decay from 1.0 at 30 days → 0.5 floor at ~1 year
-        activityFactor = Math.max(0.5, 1 - (daysSinceLastMatch - 30) / 730);
+      if (daysSinceLastMatch > cfg.activityDecayStartDays) {
+        activityFactor = Math.max(
+          cfg.activityDecayFloor,
+          1 - (daysSinceLastMatch - cfg.activityDecayStartDays) / cfg.activityDecayDuration,
+        );
       }
     } else {
-      activityFactor = 0.5;
+      activityFactor = cfg.activityDecayFloor;
     }
 
-    // Blend: 60% recent + 40% overall (need at least 3 recent matches)
-    const blendedPI = recentStats.matches >= 3
-      ? recentPI * 0.6 + overallPI * 0.4
+    // Blend: recentWeight% recent + (1-recentWeight)% overall
+    const blendedPI = recentStats.matches >= cfg.minRecentMatchesForBlend
+      ? recentPI * cfg.recentWeight + overallPI * (1 - cfg.recentWeight)
       : overallPI;
 
     const recentForm = computeRecentForm(playerMatches, pid, true);
     const streak = computeStreak(playerMatches, pid, true);
 
-    // Bonus da rating peer: sposta il PI di ±qualche punto se il giocatore è
-    // stato votato in almeno 3 partite recenti. Scala 1-10, neutro a 5.5.
-    const ratingBonus = (recentForm && recentForm.ratedMatches >= 3)
-      ? (recentForm.avg - 5.5) * 1.5
+    // Bonus da rating peer
+    const ratingBonus = (recentForm && recentForm.ratedMatches >= cfg.minRatedMatchesForBonus)
+      ? (recentForm.avg - cfg.ratingNeutral) * cfg.ratingBonusMultiplier
       : 0;
 
-    // Apply activity decay (il bonus rating decade anch'esso se inattivo)
+    // Apply activity decay
     const finalPI = Math.max(0, Math.min(100, Math.round((blendedPI + ratingBonus) * activityFactor * 10) / 10));
 
     // Append snapshot to powerHistory (keep last 30 entries, one per recalc date)
@@ -305,6 +321,26 @@ export async function setAICache(key, data) {
   await setDoc(doc(db, 'settings', `aiCache_${key}`), {
     ...data,
     updatedAt: serverTimestamp(),
+  });
+}
+
+// ─── PI CONFIG ────────────────────────────────────────────────────────────────
+
+export async function getPIConfig() {
+  const snap = await getDoc(doc(db, 'settings', 'piConfig'));
+  return snap.exists() ? snap.data() : null;
+}
+
+export async function setPIConfig(config) {
+  await setDoc(doc(db, 'settings', 'piConfig'), {
+    ...config,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export function subscribeToPIConfig(callback) {
+  return onSnapshot(doc(db, 'settings', 'piConfig'), snap => {
+    callback(snap.exists() ? snap.data() : null);
   });
 }
 

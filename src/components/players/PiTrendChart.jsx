@@ -1,9 +1,10 @@
 import React, { useMemo } from 'react';
-import { computePowerIndex } from '../../firebase/firestore';
+import { computePowerIndex, DEFAULT_PI_CONFIG } from '../../firebase/firestore';
 import { getMs } from '../../utils/dateUtils';
 import { CLR_MUTED } from '../../constants/colors';
 
-export default function PiTrendChart({ playerMatches, playerId, playerPi }) {
+export default function PiTrendChart({ playerMatches, playerId, playerPi, piConfig }) {
+  const cfg = piConfig || DEFAULT_PI_CONFIG;
   const points = useMemo(() => {
     const played = playerMatches
       .filter(m => !m.isHistorical)
@@ -31,7 +32,7 @@ export default function PiTrendChart({ playerMatches, playerId, playerPi }) {
           if (ev.gkConcededId === playerId) s.gkGoalsConceded++;
         }
       }
-      return { pi: computePowerIndex(s), date: played[absIdx].date };
+      return { pi: computePowerIndex(s, cfg), date: played[absIdx].date };
     });
 
     if (computed.length > 0 && playerPi != null) {
@@ -39,7 +40,7 @@ export default function PiTrendChart({ playerMatches, playerId, playerPi }) {
     }
 
     return computed;
-  }, [playerMatches, playerId, playerPi]);
+  }, [playerMatches, playerId, playerPi, cfg]);
 
   if (points.length < 2) return null;
 
