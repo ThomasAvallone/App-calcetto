@@ -34,6 +34,6 @@ jobs:
           VITE_GEMINI_API_KEY: ${{ secrets.VITE_GEMINI_API_KEY }}
 
       - name: Deploy to Firebase Hosting
-        run: npx firebase-tools deploy --only hosting --project calcetto-app-336ae --token "$FIREBASE_TOKEN"
+        run: npx firebase-tools deploy --only hosting,firestore:rules --project calcetto-app-336ae --token "$FIREBASE_TOKEN"
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
