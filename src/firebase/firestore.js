@@ -118,7 +118,7 @@ export async function recalculatePlayerStats(playerIds, { cachedMatches, cachedP
   const [allMatches, allPlayers, piConfigSnap] = await Promise.all([
     cachedMatches || getMatches(),
     cachedPlayers || getPlayers(),
-    getDoc(doc(db, 'settings', 'piConfig')),
+    getDoc(doc(db, 'settings', 'piConfig')).catch(() => ({ exists: () => false })),
   ]);
   // Strip server metadata fields (updatedAt) before merging into formula config
   const { updatedAt: _u, ...piConfigData } = piConfigSnap.exists() ? piConfigSnap.data() : {};
