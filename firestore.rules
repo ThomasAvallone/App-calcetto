@@ -71,10 +71,11 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Settings (piConfig, ecc.): authenticated users can read; only admins can write
+    // Settings (piConfig, ecc.): authenticated users can read; only admins can write.
+    // Exception: aiCache_* documents are ephemeral read-cache and can be written by any auth user.
     match /settings/{settingId} {
       allow read: if isAuth();
-      allow write: if isAdmin();
+      allow write: if isAdmin() || (isAuth() && settingId.matches('aiCache_.*'));
     }
   }
 }

@@ -341,9 +341,11 @@ export async function setPIConfig(config) {
 }
 
 export function subscribeToPIConfig(callback) {
-  return onSnapshot(doc(db, 'settings', 'piConfig'), snap => {
-    callback(snap.exists() ? snap.data() : null);
-  });
+  return onSnapshot(
+    doc(db, 'settings', 'piConfig'),
+    snap => { callback(snap.exists() ? snap.data() : null); },
+    () => { callback(null); },
+  );
 }
 
 // ─── SCHEDULED MATCH ─────────────────────────────────────────────────────────

@@ -96,7 +96,7 @@ export default function ReportAITab({ finishedMatches, players, reportText, setR
       const text = await generatePeriodReport(periodLabel, stats);
       setReportText(text);
       setReportStale(false);
-      setAICache(`report_${reportPeriod}`, { text, lastMatchId, generatedAt: new Date().toISOString() });
+      setAICache(`report_${reportPeriod}`, { text, lastMatchId, generatedAt: new Date().toISOString() }).catch(() => {});
     } catch (e) {
       toast.error('Report AI: ' + e.message);
     } finally {

@@ -843,7 +843,7 @@ export default function StatsPage() {
                 setRivalryText(text);
                 setRivalryStale(false);
                 const key = `rivalry_${[h2hP1, h2hP2].sort().join('_')}`;
-                setAICache(key, { text, lastMatchId, generatedAt: new Date().toISOString() });
+                setAICache(key, { text, lastMatchId, generatedAt: new Date().toISOString() }).catch(() => {});
               } catch (e) { toast.error('Rivalità AI: ' + e.message); }
               finally { setRivalryLoading(false); }
             };

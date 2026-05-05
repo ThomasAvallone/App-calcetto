@@ -74,7 +74,7 @@ export default function HallTab({ finishedMatches, players, hallText, setHallTex
       const text = await generateHallOfFame(stats);
       setHallText(text);
       setHallStale(false);
-      setAICache('hall', { text, lastMatchId, generatedAt: new Date().toISOString() });
+      setAICache('hall', { text, lastMatchId, generatedAt: new Date().toISOString() }).catch(() => {});
     } catch (e) {
       toast.error('Hall of Fame AI: ' + e.message);
     } finally {
