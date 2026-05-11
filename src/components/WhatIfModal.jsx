@@ -274,7 +274,15 @@ export default function WhatIfModal({ onClose, scheduledMatch }) {
               <div style={{ background: 'rgba(246,173,85,0.04)', border: '1px solid rgba(246,173,85,0.35)', borderRadius: '8px', padding: '0.75rem', marginBottom: '0.65rem' }}>
                 <div className="flex items-center justify-between mb-2">
                   <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#F6AD55' }}>🔮 Pronostico AI</span>
-                  <button onClick={() => setPrediction('')} style={{ fontSize: '0.7rem', color: '#718096', background: 'none', border: 'none', cursor: 'pointer' }}>✕</button>
+                  <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                    <button
+                      onClick={() => navigator.clipboard.writeText(prediction).then(() => toast.success('Pronostico copiato!'))}
+                      style={{ fontSize: '0.7rem', fontWeight: 700, color: '#F6AD55', background: 'rgba(246,173,85,0.1)', border: '1px solid rgba(246,173,85,0.3)', borderRadius: '5px', padding: '0.2rem 0.45rem', cursor: 'pointer' }}
+                    >
+                      📋 Copia
+                    </button>
+                    <button onClick={() => setPrediction('')} style={{ fontSize: '0.7rem', color: '#718096', background: 'none', border: 'none', cursor: 'pointer' }}>✕</button>
+                  </div>
                 </div>
                 <p style={{ fontSize: '0.82rem', color: '#CBD5E0', lineHeight: 1.75, margin: 0, whiteSpace: 'pre-wrap' }}>{prediction}</p>
               </div>
