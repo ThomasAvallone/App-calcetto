@@ -37,6 +37,12 @@ export default function DashboardPage() {
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [nextMatchWeather, setNextMatchWeather] = useState(null);
   const [showWhatIf, setShowWhatIf] = useState(false);
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(t);
+  }, []);
 
   const recentMatches = allMatches.filter(m => m.status !== 'scheduled').slice(0, 5);
   const finishedMatches = allMatches.filter(m => m.status === 'finished');
@@ -123,6 +129,23 @@ export default function DashboardPage() {
   const nearestDate = nearestScheduled ? safeDate(nearestScheduled.date) : null;
   const nearestCountdown = nearestDate ? getCountdown(nearestDate.toISOString()) : null;
 
+  // Imminent match: within -5min of the scheduled time, OR up to 2h past (admin may open the app late).
+  // Banner only shown to admins because they're the only ones who can start a match.
+  const imminentMatch = isAdmin ? scheduledMatches.find(m => {
+    const d = safeDate(m.date);
+    if (!d) return false;
+    const diff = d.getTime() - now;
+    return diff <= 5 * 60 * 1000 && diff >= -2 * 60 * 60 * 1000;
+  }) : null;
+  const imminentDate = imminentMatch ? safeDate(imminentMatch.date) : null;
+  const imminentDiffMs = imminentDate ? imminentDate.getTime() - now : 0;
+  const imminentIsLate = imminentDiffMs <= 0;
+  const imminentLabel = imminentDate ? (
+    imminentDiffMs > 0
+      ? (() => { const m = Math.max(1, Math.ceil(imminentDiffMs / 60000)); return m === 1 ? 'tra 1 minuto' : `tra ${m} minuti`; })()
+      : (() => { const m = Math.floor(-imminentDiffMs / 60000); return m === 0 ? 'è ora!' : `in ritardo di ${m} min`; })()
+  ) : '';
+
   return (
     <div className="page-content">
 
@@ -153,6 +176,67 @@ export default function DashboardPage() {
           </svg>
         </button>
       </div>
+
+      {/* ── Imminent match: prominent start CTA (admins only) ───────────────── */}
+      {imminentMatch && imminentDate && (
+        <div
+          className="card mb-4 stagger-1"
+          style={{
+            background: imminentIsLate
+              ? 'linear-gradient(135deg, rgba(246,173,85,0.18) 0%, rgba(252,129,129,0.08) 100%)'
+              : 'linear-gradient(135deg, rgba(79,209,197,0.22) 0%, rgba(104,211,145,0.08) 100%)',
+            border: `2px solid ${imminentIsLate ? '#F6AD55' : '#4FD1C5'}`,
+            boxShadow: `0 0 28px ${imminentIsLate ? 'rgba(246,173,85,0.35)' : 'rgba(79,209,197,0.35)'}`,
+            padding: '1rem',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.6rem' }}>
+            <span style={{ fontSize: '1.3rem' }}>🚀</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{
+                fontWeight: 800,
+                fontSize: '0.92rem',
+                color: imminentIsLate ? '#F6AD55' : '#4FD1C5',
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+              }}>
+                {imminentIsLate ? 'Partita pronta da avviare' : 'Partita imminente'}
+              </div>
+              <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)', fontWeight: 600, marginTop: '0.1rem' }}>
+                {format(imminentDate, "EEE d MMM 'alle' HH:mm", { locale: it })} · <span style={{ color: imminentIsLate ? '#F6AD55' : '#4FD1C5' }}>{imminentLabel}</span>
+              </div>
+              {((imminentMatch.redTeam || []).length > 0 || (imminentMatch.blueTeam || []).length > 0) && (
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
+                  🔴 {(imminentMatch.redTeam || []).map(p => p.name).join(', ') || '—'}
+                  {' · '}
+                  🔵 {(imminentMatch.blueTeam || []).map(p => p.name).join(', ') || '—'}
+                </div>
+              )}
+            </div>
+          </div>
+          <button
+            className="btn animate-pulse"
+            style={{
+              width: '100%',
+              padding: '0.95rem',
+              fontSize: '1.05rem',
+              fontWeight: 800,
+              letterSpacing: '0.04em',
+              border: 'none',
+              borderRadius: '10px',
+              cursor: 'pointer',
+              background: imminentIsLate
+                ? 'linear-gradient(135deg, #F6AD55 0%, #ED8936 100%)'
+                : 'linear-gradient(135deg, #4FD1C5 0%, #38B2AC 100%)',
+              color: '#1A202C',
+              boxShadow: `0 4px 14px ${imminentIsLate ? 'rgba(246,173,85,0.4)' : 'rgba(79,209,197,0.4)'}`,
+            }}
+            onClick={() => handleStartScheduled(imminentMatch.id)}
+          >
+            ▶️ AVVIA PARTITA
+          </button>
+        </div>
+      )}
 
       {/* ── Quick Stats ─────────────────────────────────────────────────────── */}
       <div className="grid-3 mb-4 stagger-2">
@@ -260,7 +344,7 @@ export default function DashboardPage() {
       })()}
 
       {/* ── Scheduled match countdown + weather ─────────────────────────────── */}
-      {nearestScheduled && nearestDate && nearestCountdown && (
+      {nearestScheduled && nearestDate && nearestCountdown && imminentMatch?.id !== nearestScheduled.id && (
         <div
           className="card mb-4 stagger-3"
           style={{
