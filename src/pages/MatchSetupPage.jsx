@@ -166,7 +166,7 @@ export default function MatchSetupPage() {
       const pool = players.filter(p => [...teams.red, ...teams.blue].some(t => t.id === p.id));
       const redFull  = teams.red.map(t  => pool.find(p => p.id === t.id) || t);
       const blueFull = teams.blue.map(t => pool.find(p => p.id === t.id) || t);
-      const text = await generateMatchPrediction(redFull, blueFull);
+      const text = await generateMatchPrediction(redFull, blueFull, weather);
       setPrediction(text);
     } catch (e) {
       toast.error('Pronostico AI non disponibile: ' + e.message);

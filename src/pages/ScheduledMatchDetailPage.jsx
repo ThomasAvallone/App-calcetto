@@ -6,6 +6,7 @@ import useMatchStore from '../store/matchStore';
 import { useMatchesSubscription } from '../hooks/useMatchesSubscription';
 import { generateMatchPreview } from '../services/reportService';
 import { fetchWeatherForDate } from '../services/weatherService';
+import { downloadICS } from '../utils/calendarUtils';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import toast from 'react-hot-toast';
@@ -548,7 +549,7 @@ export default function ScheduledMatchDetailPage() {
       </div>}
 
       {/* Actions */}
-      <div className="flex gap-3">
+      <div className="flex gap-3 mb-2">
         <button
           className="btn btn-ghost btn-lg"
           style={{ flex: 1 }}
@@ -566,6 +567,19 @@ export default function ScheduledMatchDetailPage() {
           🚀 Inizia Partita
         </button>
       </div>
+      <button
+        className="btn btn-ghost btn-full"
+        style={{ fontSize: '0.85rem', color: '#A0AEC0' }}
+        onClick={() => {
+          const matchObj = {
+            id, date: matchDate ? new Date(matchDate) : new Date(),
+            redTeam: teams.red, blueTeam: teams.blue,
+          };
+          downloadICS(matchObj, `calcetto-${id.slice(0, 8)}.ics`);
+        }}
+      >
+        📅 Aggiungi al calendario
+      </button>
     </div>
   );
 }

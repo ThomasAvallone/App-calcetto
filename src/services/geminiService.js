@@ -247,7 +247,12 @@ Rispondi ESCLUSIVAMENTE con un JSON valido (niente testo prima o dopo):
 }
 
 // ─── Previsione risultato pre-partita ─────────────────────────────────────────
-export async function generateMatchPrediction(redTeam, blueTeam) {
+const WEATHER_LABELS_IT = {
+  sunny: 'Soleggiato ☀️', cloudy: 'Nuvoloso ☁️', rainy: 'Pioggia 🌧️',
+  cold: 'Freddo 🥶', hot: 'Caldo 🔥', wind: 'Vento 💨',
+};
+
+export async function generateMatchPrediction(redTeam, blueTeam, weather) {
   const fmt = team => team.map(p => {
     const pi = (p.powerIndex || 50).toFixed(1);
     const role = p.primaryRole || 'N/A';
@@ -259,9 +264,14 @@ export async function generateMatchPrediction(redTeam, blueTeam) {
   const redPI = redTeam.reduce((s, p) => s + (p.powerIndex || 50), 0).toFixed(1);
   const bluePI = blueTeam.reduce((s, p) => s + (p.powerIndex || 50), 0).toFixed(1);
 
+  const weatherLine = weather?.condition
+    ? `\nMETEO: ${WEATHER_LABELS_IT[weather.condition] || weather.condition}${weather.temp ? ` (${weather.temp}°C)` : ''}`
+    : '';
+
   const prompt = `Sei un pronosticatore calcistico saccente e spesso sbagliato. \
 Analizza le due squadre di calcetto e fai un pronostico divertente e sarcastico in italiano, \
 circa 3 paragrafi. Cita i nomi dei giocatori, fai battute, esagera difetti e pregi. \
+Se le condizioni meteo sono particolari, commentale con ironia. \
 Concludi con un risultato finale "pronosticato" (tipo "3-2 per i Rossi" o "0-0 imbarazzante"). \
 Non usare markdown, solo prosa.
 
@@ -269,7 +279,7 @@ SQUADRA ROSSA (PI totale: ${redPI}):
 ${fmt(redTeam)}
 
 SQUADRA BLU (PI totale: ${bluePI}):
-${fmt(blueTeam)}
+${fmt(blueTeam)}${weatherLine}
 
 Scrivi il pronostico ora:`;
 
@@ -277,9 +287,16 @@ Scrivi il pronostico ora:`;
 }
 
 // ─── Report mensile/stagionale AI ─────────────────────────────────────────────
-export async function generatePeriodReport(periodLabel, topStats) {
+export async function generatePeriodReport(periodLabel, topStats, weatherStats) {
   const { topScorer, topAssist, topWinRate, mostMatches, topAutogoal, worstGk, matchCount, totalGoals, bestStreak, worstStreak } = topStats;
   const line = (label, val) => val ? `\n- ${label}: ${val}` : '';
+
+  const weatherLines = Array.isArray(weatherStats) && weatherStats.length > 0
+    ? '\n\nMETEO & RENDIMENTO:\n' + weatherStats
+        .filter(w => w.matches >= 2)
+        .map(w => `- ${w.label}: ${w.matches} partite, ${w.avgGoals} gol/partita${w.mvp ? `, MVP ${w.mvp.name} (${w.mvp.goals}G ${w.mvp.assists}A)` : ''}`)
+        .join('\n')
+    : '';
 
   const prompt = `Sei il cronista ufficiale di un torneo di calcetto amatoriale tra amici. \
 Scrivi un report del periodo "${periodLabel}" in italiano, nello stile di un giornale sportivo: \
@@ -288,7 +305,7 @@ Circa 4 paragrafi. No markdown, solo prosa.
 
 STATISTICHE DEL PERIODO:
 - Partite disputate: ${matchCount}
-- Gol totali: ${totalGoals}${line('Capocannoniere', topScorer ? `${topScorer.name} con ${topScorer.goals} gol` : null)}${line('Top Assistman', topAssist ? `${topAssist.name} con ${topAssist.assists} assist` : null)}${line('Miglior Win Rate', topWinRate ? `${topWinRate.name} (${topWinRate.pct}%, min 5 partite)` : null)}${line('Più presente', mostMatches ? `${mostMatches.name} con ${mostMatches.matches} partite` : null)}${line('Re degli Autogol', topAutogoal ? `${topAutogoal.name} con ${topAutogoal.autogoals} autogol` : null)}${line('Peggior Portiere', worstGk ? `${worstGk.name} con ${worstGk.goals} gol subiti` : null)}${line('Streak migliore', bestStreak ? `${bestStreak.name}: ${bestStreak.count} vittorie consecutive` : null)}${line('Streak peggiore', worstStreak ? `${worstStreak.name}: ${worstStreak.count} sconfitte consecutive` : null)}
+- Gol totali: ${totalGoals}${line('Capocannoniere', topScorer ? `${topScorer.name} con ${topScorer.goals} gol` : null)}${line('Top Assistman', topAssist ? `${topAssist.name} con ${topAssist.assists} assist` : null)}${line('Miglior Win Rate', topWinRate ? `${topWinRate.name} (${topWinRate.pct}%, min 5 partite)` : null)}${line('Più presente', mostMatches ? `${mostMatches.name} con ${mostMatches.matches} partite` : null)}${line('Re degli Autogol', topAutogoal ? `${topAutogoal.name} con ${topAutogoal.autogoals} autogol` : null)}${line('Peggior Portiere', worstGk ? `${worstGk.name} con ${worstGk.goals} gol subiti` : null)}${line('Streak migliore', bestStreak ? `${bestStreak.name}: ${bestStreak.count} vittorie consecutive` : null)}${line('Streak peggiore', worstStreak ? `${worstStreak.name}: ${worstStreak.count} sconfitte consecutive` : null)}${weatherLines}
 
 Scrivi il report ora:`;
 

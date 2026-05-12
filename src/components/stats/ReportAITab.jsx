@@ -10,7 +10,7 @@ export const REPORT_PERIODS = [
   { key: 'all',    label: 'All-time' },
 ];
 
-export default function ReportAITab({ finishedMatches, players, reportText, setReportText, reportLoading, setReportLoading, reportPeriod, setReportPeriod, lastMatchId }) {
+export default function ReportAITab({ finishedMatches, players, reportText, setReportText, reportLoading, setReportLoading, reportPeriod, setReportPeriod, lastMatchId, weatherStats }) {
   const [reportStale, setReportStale] = useState(false);
 
   useEffect(() => {
@@ -93,7 +93,7 @@ export default function ReportAITab({ finishedMatches, players, reportText, setR
       const periodLabel = REPORT_PERIODS.find(p => p.key === reportPeriod)?.label || reportPeriod;
       const stats = buildStats(reportPeriod);
       if (stats.matchCount === 0) { toast('Nessuna partita nel periodo selezionato'); setReportLoading(false); return; }
-      const text = await generatePeriodReport(periodLabel, stats);
+      const text = await generatePeriodReport(periodLabel, stats, weatherStats);
       setReportText(text);
       setReportStale(false);
       setAICache(`report_${reportPeriod}`, { text, lastMatchId, generatedAt: new Date().toISOString() }).catch(() => {});

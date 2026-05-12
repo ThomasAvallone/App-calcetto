@@ -6,6 +6,7 @@ import { it } from 'date-fns/locale';
 import { generateMatchReport } from '../services/reportService';
 import toast from 'react-hot-toast';
 import { safeDate } from '../utils/dateUtils';
+import { downloadICS } from '../utils/calendarUtils';
 
 function getMatchSeason(d) {
   if (!d) return null;
@@ -245,7 +246,16 @@ export default function HistoryPage() {
 
       {scheduled.length > 0 && (
         <>
-          <h3 className="text-sm text-muted mb-2">DA GIOCARE ({scheduled.length})</h3>
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm text-muted">DA GIOCARE ({scheduled.length})</h3>
+            <button
+              onClick={() => downloadICS(scheduled, 'calcetto-programmate.ics')}
+              style={{ fontSize: '0.72rem', color: '#718096', background: 'none', border: '1px solid rgba(74,85,104,0.5)', borderRadius: '6px', padding: '0.2rem 0.5rem', cursor: 'pointer' }}
+              title="Esporta tutte al calendario"
+            >
+              📅 Esporta tutte
+            </button>
+          </div>
           {scheduled.map(m => <ScheduledCard key={m.id} match={m} />)}
           <div style={{ height: '0.5rem' }} />
         </>

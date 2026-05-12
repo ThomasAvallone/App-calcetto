@@ -9,6 +9,7 @@ import { getAICache, setAICache } from '../firebase/firestore';
 import toast from 'react-hot-toast';
 import ReportAITab from '../components/stats/ReportAITab';
 import HallTab from '../components/stats/HallTab';
+import { computeWeatherStats } from '../utils/weatherStats';
 
 const LEADERBOARD_TABS = [
   { key: 'goals',   label: '⚽ Gol' },
@@ -21,6 +22,7 @@ const LEADERBOARD_TABS = [
   { key: 'duo',     label: '👥 Duo' },
   { key: 'h2h',     label: '⚔️ H2H' },
   { key: 'squadre', label: '🆚 Squadre' },
+  { key: 'meteo',   label: '🌤️ Meteo' },
   { key: 'report',  label: '📝 Report AI' },
   { key: 'hall',    label: '🏛️ Hall' },
 ];
@@ -273,6 +275,8 @@ export default function StatsPage() {
   const [hallLoading, setHallLoading] = useState(false);
 
   const finishedMatches = useMemo(() => allMatches.filter(m => m.status === 'finished'), [allMatches]);
+
+  const weatherStats = useMemo(() => computeWeatherStats(finishedMatches), [finishedMatches]);
 
   // ID dell'ultima partita conclusa — usato per rilevare staleness delle cache AI
   const lastMatchId = finishedMatches[0]?.id ?? null;
@@ -560,7 +564,7 @@ export default function StatsPage() {
 
   const cfg = tabConfig[tab];
   const list = rankings[tab] || [];
-  const isSpecialTab = tab === 'duo' || tab === 'h2h' || tab === 'squadre' || tab === 'report' || tab === 'hall';
+  const isSpecialTab = tab === 'duo' || tab === 'h2h' || tab === 'squadre' || tab === 'meteo' || tab === 'report' || tab === 'hall';
   const currentAccent = cfg?.accent || '#4FD1C5';
 
   return (
@@ -571,7 +575,7 @@ export default function StatsPage() {
       <div className="stagger-2" style={{ display: 'flex', gap: '0.4rem', marginBottom: '1rem', overflowX: 'auto', paddingBottom: '0.25rem' }}>
         {LEADERBOARD_TABS.map(t => {
           const isActive = tab === t.key;
-          const accent = t.key === 'duo' ? '#B794F4' : t.key === 'h2h' ? '#F6AD55' : t.key === 'classifica' ? '#F6E05E' : t.key === 'squadre' ? '#FC8181' : t.key === 'report' ? '#68D391' : t.key === 'hall' ? '#FBD38D' : tabConfig[t.key]?.accent || '#4FD1C5';
+          const accent = t.key === 'duo' ? '#B794F4' : t.key === 'h2h' ? '#F6AD55' : t.key === 'classifica' ? '#F6E05E' : t.key === 'squadre' ? '#FC8181' : t.key === 'meteo' ? '#90CDF4' : t.key === 'report' ? '#68D391' : t.key === 'hall' ? '#FBD38D' : tabConfig[t.key]?.accent || '#4FD1C5';
           return (
             <button
               key={t.key}
@@ -895,6 +899,60 @@ export default function StatsPage() {
         </div>
       )}
 
+      {/* Meteo tab */}
+      {tab === 'meteo' && (
+        <div>
+          {weatherStats.length === 0 ? (
+            <div className="card" style={{ textAlign: 'center', padding: '2rem', color: '#718096' }}>
+              <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🌤️</div>
+              <p style={{ fontSize: '0.88rem' }}>Nessuna partita con dati meteo disponibile</p>
+            </div>
+          ) : (
+            weatherStats.map(w => {
+              const total = w.redWins + w.blueWins + w.draws || 1;
+              const redPct  = Math.round((w.redWins  / total) * 100);
+              const bluePct = Math.round((w.blueWins / total) * 100);
+              const drawPct = 100 - redPct - bluePct;
+              return (
+                <div key={w.key} className="card mb-3" style={{ border: `1px solid ${w.color}33` }}>
+                  {/* Header */}
+                  <div className="flex items-center justify-between mb-3">
+                    <div style={{ fontWeight: 700, fontSize: '1rem', color: w.color }}>
+                      {w.label}
+                    </div>
+                    <div style={{ fontSize: '0.78rem', color: '#718096' }}>
+                      {w.matches} partite · {w.avgGoals} gol/partita
+                    </div>
+                  </div>
+
+                  {/* Win rate bar */}
+                  <div style={{ marginBottom: '0.75rem' }}>
+                    <div style={{ display: 'flex', borderRadius: '6px', overflow: 'hidden', height: '10px', gap: '2px' }}>
+                      <div style={{ flex: redPct,  background: '#FC8181', borderRadius: '4px 0 0 4px' }} />
+                      <div style={{ flex: drawPct, background: '#4A5568' }} />
+                      <div style={{ flex: bluePct, background: '#63B3ED', borderRadius: '0 4px 4px 0' }} />
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.68rem', color: '#718096', marginTop: '0.3rem' }}>
+                      <span style={{ color: '#FC8181' }}>🔴 {redPct}% ({w.redWins}V)</span>
+                      <span>🤝 {drawPct}% ({w.draws}P)</span>
+                      <span style={{ color: '#63B3ED' }}>{bluePct}% ({w.blueWins}V) 🔵</span>
+                    </div>
+                  </div>
+
+                  {/* MVP */}
+                  {w.mvp && (
+                    <div style={{ fontSize: '0.78rem', color: '#A0AEC0', borderTop: '1px solid #2D3748', paddingTop: '0.5rem' }}>
+                      ⭐ MVP con questa condizione: <strong style={{ color: w.color }}>{w.mvp.name}</strong>
+                      {' '}— {w.mvp.goals}G {w.mvp.assists}A
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+
       {/* Report AI tab */}
       {tab === 'report' && (
         <ReportAITab
@@ -907,6 +965,7 @@ export default function StatsPage() {
           reportPeriod={reportPeriod}
           setReportPeriod={setReportPeriod}
           lastMatchId={lastMatchId}
+          weatherStats={weatherStats}
         />
       )}
 
