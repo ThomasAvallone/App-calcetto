@@ -291,9 +291,11 @@ export async function generatePeriodReport(periodLabel, topStats, weatherStats) 
   const { topScorer, topAssist, topWinRate, mostMatches, topAutogoal, worstGk, matchCount, totalGoals, bestStreak, worstStreak } = topStats;
   const line = (label, val) => val ? `\n- ${label}: ${val}` : '';
 
-  const weatherLines = Array.isArray(weatherStats) && weatherStats.length > 0
-    ? '\n\nMETEO & RENDIMENTO:\n' + weatherStats
-        .filter(w => w.matches >= 2)
+  const filteredWeather = Array.isArray(weatherStats)
+    ? weatherStats.filter(w => w.matches >= 2)
+    : [];
+  const weatherLines = filteredWeather.length > 0
+    ? '\n\nMETEO & RENDIMENTO:\n' + filteredWeather
         .map(w => `- ${w.label}: ${w.matches} partite, ${w.avgGoals} gol/partita${w.mvp ? `, MVP ${w.mvp.name} (${w.mvp.goals}G ${w.mvp.assists}A)` : ''}`)
         .join('\n')
     : '';

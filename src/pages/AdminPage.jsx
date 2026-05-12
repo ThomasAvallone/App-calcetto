@@ -14,6 +14,30 @@ import toast from 'react-hot-toast';
 
 const CHANGELOG = [
   {
+    version: '3.8.0',
+    date: 'Maggio 2026',
+    entries: [
+      { type: 'new', text: 'Export calendario .ics per partite programmate: bottone "📅 Aggiungi al calendario" nella scheda della singola partita scarica un file iCalendar standard (compatibile iOS, Google Calendar, Outlook); nello Storico, nell\'intestazione DA GIOCARE, bottone "📅 Esporta tutte" che scarica un singolo file con tutte le partite future' },
+      { type: 'new', text: 'Tab Meteo nelle Classifiche: per ogni condizione (Soleggiato/Nuvoloso/Pioggia/Freddo/Caldo/Vento) mostra n. partite, media gol/partita, barra colorata con win rate Rossi/Pareggi/Blu, e MVP (giocatore con più gol+assist in quelle condizioni)' },
+      { type: 'new', text: 'Meteo passato all\'AI: il report periodico Gemini include una sezione "METEO & RENDIMENTO" con stats per condizione (≥2 partite); il pronostico pre-partita riceve la condizione meteo corrente e il modello la commenta con ironia' },
+      { type: 'new', text: 'Coriandoli colorati post-partita: a fine match i confetti usano i colori della squadra vincente (rosso o blu) invece di palette neutra — niente coriandoli in caso di pareggio' },
+      { type: 'new', text: 'Indicatore offline durante la partita live: se la connessione si interrompe compare un banner rosso che avvisa l\'admin che gli eventi potrebbero non sincronizzarsi con Firestore' },
+      { type: 'fix', text: 'matchStore.loadMatch: aggiunto try/catch + cancellation token per impedire subscription leak quando si naviga rapidamente tra partite diverse — chiamate concorrenti non sovrappongono più subscription a Firestore' },
+      { type: 'fix', text: 'Falso bounce/coriandoli al refresh: prevRedScore/prevBlueScore inizializzati a null invece di 0 — riaprendo una partita con punteggio già 3-2 l\'animazione non si attiva spuriamente' },
+      { type: 'fix', text: 'handleGkConcededSelected: wrap in try/catch con toast d\'errore — se Firestore fallisce durante recordGoal/recordAutogoal lo stato dei modal viene resettato comunque e l\'utente vede un messaggio chiaro' },
+      { type: 'fix', text: 'deleteEvent atomico: usa arrayRemove + increment(-1) invece di sovrascrivere l\'intero array events — elimina race condition con recordGoalEvent (arrayUnion) se due admin registrano eventi contemporaneamente' },
+      { type: 'fix', text: 'ScheduledMatchDetailPage: loadedRef resettato quando cambia il param id — navigando da una partita programmata a un\'altra non si vedono più i dati della precedente' },
+      { type: 'fix', text: 'MatchSetupPage.handleStartMatch: fetchWeatherForDate ora usa la data della partita (selezionata dall\'utente), non più new Date() al momento dell\'avvio — il meteo registrato corrisponde davvero alla partita' },
+      { type: 'fix', text: 'Bottoni gol nascosti durante il countdown "Fine partita": prima era possibile registrare un gol durante i 5 secondi di annullamento, lasciando lo store in stato inconsistente' },
+      { type: 'fix', text: 'setTimeout del report modal salvato in ref con clearTimeout su unmount — eliminato warning React per setState su componente smontato' },
+      { type: 'fix', text: 'DashboardPage AVVIA: stato loading sul bottone durante l\'attesa della transizione status→active + loadMatch + navigate — niente doppio click accidentale' },
+      { type: 'fix', text: 'Validazione data in MatchSetupPage.handlePlanEmpty: se l\'utente non sceglie una data, errore esplicito invece di salvare la partita con la data corrente' },
+      { type: 'fix', text: 'Temperatura meteo normalizzata sempre a stringa nello state (incluso dopo fetchWeatherForDate) + inputMode="numeric" — previene problemi di input di cifre sequenziali su alcuni browser' },
+      { type: 'fix', text: 'ICS line folding RFC 5545: linee >75 byte (es. DESCRIPTION con 10 nomi giocatori) ripiegate con CRLF + spazio, gestendo correttamente i confini delle sequenze UTF-8 (emoji multi-byte)' },
+      { type: 'fix', text: 'generatePeriodReport: header "METEO & RENDIMENTO" emesso solo se ci sono condizioni con ≥2 partite — niente più sezione vuota nel prompt AI' },
+    ],
+  },
+  {
     version: '3.7.0',
     date: 'Maggio 2026',
     entries: [
