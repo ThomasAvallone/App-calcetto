@@ -16,6 +16,7 @@ import AiNicknameCard from '../components/players/AiNicknameCard';
 import { PiArc, getRoleIcon, PlayerAvatar, PlayerMatchHistory, PlayerRecords, PlayerBadges, PowerIndexChart, StreakBadge } from '../components/players/PlayerDetailComponents';
 import DuoCompatibility from '../components/players/DuoCompatibility';
 import PlayerAchievements from '../components/players/PlayerAchievements';
+import PlayerWeatherStats from '../components/players/PlayerWeatherStats';
 
 const ROLES = ['Portiere', 'Difensore', 'Centrocampista', 'Attaccante'];
 
@@ -622,6 +623,8 @@ export default function PlayersPage() {
         <PlayerRecords playerMatches={playerMatchesMap[p.id] || []} player={p} />
 
         <PlayerBadges player={p} seasonStats={playerSeasonStats[p.id]} allMatches={finishedMatches} />
+
+        <PlayerWeatherStats playerMatches={playerMatchesMap[p.id] || []} playerId={p.id} />
 
         {hasHistory && (
           <div className="card mb-4" style={{ background: 'rgba(246,224,94,0.05)', border: '1px solid rgba(246,224,94,0.2)' }}>

@@ -74,3 +74,33 @@ export function weatherStatsForAI(weatherStats) {
     );
   return lines.length > 0 ? '\n\nMETEO & RENDIMENTO:\n' + lines.join('\n') : '';
 }
+
+// Per-player weather breakdown: W/D/L + goals/assists per condition
+export function computePlayerWeatherStats(playerMatches, playerId) {
+  const conds = {};
+  for (const m of playerMatches) {
+    const cond = m.weather?.condition;
+    if (!cond) continue;
+    if (!conds[cond]) {
+      conds[cond] = {
+        key: cond,
+        label: WEATHER_LABELS[cond] || cond,
+        color: WEATHER_COLORS[cond] || '#A0AEC0',
+        matches: 0, wins: 0, draws: 0, losses: 0, goals: 0, assists: 0,
+      };
+    }
+    const c = conds[cond];
+    c.matches++;
+    const inRed  = (m.redTeam  || []).some(p => p.id === playerId);
+    const redWon = (m.redScore || 0) > (m.blueScore || 0);
+    const blueWon = (m.blueScore || 0) > (m.redScore || 0);
+    if (redWon === blueWon) c.draws++;
+    else if ((inRed && redWon) || (!inRed && blueWon)) c.wins++;
+    else c.losses++;
+    for (const ev of (m.events || [])) {
+      if (ev.type === 'goal' && ev.scorerId === playerId) c.goals++;
+      if (ev.assistId === playerId) c.assists++;
+    }
+  }
+  return Object.values(conds).sort((a, b) => b.matches - a.matches);
+}
