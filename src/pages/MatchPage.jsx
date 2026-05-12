@@ -481,11 +481,17 @@ export default function MatchPage() {
             </div>
           )}
 
-          {/* Share button */}
-          <button className="btn btn-full mt-1" style={{ background: '#25D366', color: '#fff', fontWeight: 700, border: 'none' }}
-            onClick={handleShare}>
-            {canShare ? '📤 Condividi' : '💬 Condividi su WhatsApp'}
-          </button>
+          {/* Share + Copy row — sempre visibili subito sotto il tabellino */}
+          <div className="flex gap-2 mt-1">
+            <button className="btn" style={{ flex: 1, background: '#25D366', color: '#fff', fontWeight: 700, border: 'none' }}
+              onClick={handleShare}>
+              {canShare ? '📤 Condividi' : '💬 WhatsApp'}
+            </button>
+            <button className="btn btn-teal" style={{ flex: 1 }}
+              onClick={() => navigator.clipboard.writeText(reportText).then(() => toast.success('Copiato!'))}>
+              📋 Copia
+            </button>
+          </div>
 
           {/* Full report (collapsible) */}
           <details style={{ marginTop: '0.75rem' }}>
@@ -497,10 +503,6 @@ export default function MatchPage() {
             </pre>
           </details>
 
-          <button className="btn btn-teal btn-full mt-2"
-            onClick={() => navigator.clipboard.writeText(reportText).then(() => toast.success('Copiato!'))}>
-            📋 Copia Verdetto
-          </button>
           <button className="btn btn-ghost btn-full mt-2" onClick={() => { setReportModal(false); navigate('/'); }}>
             Torna alla Home
           </button>
