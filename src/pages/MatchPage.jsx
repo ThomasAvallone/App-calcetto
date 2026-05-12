@@ -134,7 +134,22 @@ export default function MatchPage() {
   const redTeam = match.redTeam || [];
   const blueTeam = match.blueTeam || [];
 
-  const handleTimerToggle = () => { if (isRunning) pauseTimer(); else startTimer(); };
+  // Al primo ▶ Avvia di una partita, congela il meteo reale del momento (sostituisce
+  // la previsione salvata al setup). Idempotente via match.startedAt — sui successivi
+  // pause/resume e su refresh non rifetcha.
+  const captureLiveWeatherOnFirstStart = async () => {
+    if (!activeMatchId || match.startedAt) return;
+    const updates = { startedAt: Date.now() };
+    const w = await fetchWeatherForDate(new Date()).catch(() => null);
+    if (w) updates.weather = w;
+    await updateMatch(activeMatchId, updates).catch(() => {});
+  };
+
+  const handleTimerToggle = () => {
+    if (isRunning) { pauseTimer(); return; }
+    startTimer();
+    captureLiveWeatherOnFirstStart();
+  };
 
   const handleGoalTap = (team) => {
     if (!isAdmin || isFinished) return;
