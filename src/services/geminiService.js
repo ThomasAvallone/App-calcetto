@@ -8,21 +8,21 @@ const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 // Gerarchia modelli: fast = velocità/costo, pro = ragionamento/qualità
 const MODELS = {
   fast: [
-    'gemini-3.1-flash-lite-preview',
+    'gemini-3.1-flash-lite',
     'gemini-3-flash-preview',
     'gemini-3.1-pro-preview',
   ],
   pro: [
     'gemini-3.1-pro-preview',
-    'gemini-3.1-flash-lite-preview',
+    'gemini-3.1-flash-lite',
     'gemini-3-flash-preview',
   ],
 };
 
-// Tutti i modelli Gemini 3.x preview usano thinking tokens interni che scalano
+// I modelli Gemini 3.x usano thinking tokens interni che scalano
 // dal budget maxOutputTokens. Senza margine, l'output visibile viene troncato.
 const THINKING_MODELS = new Set([
-  'gemini-3.1-flash-lite-preview',
+  'gemini-3.1-flash-lite',
   'gemini-3-flash-preview',
   'gemini-3.1-pro-preview',
 ]);
