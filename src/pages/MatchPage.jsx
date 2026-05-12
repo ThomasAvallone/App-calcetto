@@ -240,7 +240,10 @@ export default function MatchPage() {
       });
       const report = generateMatchReport(match, players);
       const extraFields = { report };
-      if (!match.weather?.temp) {
+      // Read fresh match from store (avoids stale closure — weather may have been
+      // captured at first timer start after this component rendered).
+      const freshMatch = useMatchStore.getState().match;
+      if (!freshMatch?.weather?.temp) {
         const w = await fetchWeatherForDate(new Date()).catch(() => null);
         if (w) extraFields.weather = w;
       }
@@ -644,7 +647,7 @@ export default function MatchPage() {
                     deleteConfirmId === ev.id ? (
                       <div style={{ display: 'flex', gap: '4px' }}>
                         <button style={{ background: '#FC8181', border: 'none', cursor: 'pointer', color: '#1A202C', padding: '3px 7px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 700 }}
-                          onClick={() => { deleteEvent(ev.id).then(() => toast.success('Evento eliminato')); setDeleteConfirmId(null); }}>✓</button>
+                          onClick={() => { setDeleteConfirmId(null); deleteEvent(ev.id).then(() => toast.success('Evento eliminato')).catch(e => toast.error('Errore eliminazione: ' + (e?.message || 'riprova'))); }}>✓</button>
                         <button style={{ background: 'none', border: '1px solid #4A5568', cursor: 'pointer', color: '#A0AEC0', padding: '3px 7px', borderRadius: '4px', fontSize: '0.75rem' }}
                           onClick={() => setDeleteConfirmId(null)}>✕</button>
                       </div>

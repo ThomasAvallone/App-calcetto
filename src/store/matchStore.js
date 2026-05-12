@@ -183,8 +183,13 @@ const useMatchStore = create(
           else if (ev.type === 'autogoal') { if (ev.team === 'red') blueScore++; else redScore++; }
         }
         set({ match: { ...match, events, redScore, blueScore } });
-        // Atomic removal via arrayRemove + decrement (no race with concurrent recordGoalEvent)
-        await deleteGoalEvent(activeMatchId, event);
+        try {
+          // Atomic removal via arrayRemove + decrement (no race with concurrent recordGoalEvent)
+          await deleteGoalEvent(activeMatchId, event);
+        } catch (e) {
+          set({ match }); // Rollback optimistic update
+          throw e;
+        }
       },
 
       async endMatch() {
