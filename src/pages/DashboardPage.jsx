@@ -38,6 +38,7 @@ export default function DashboardPage() {
   const [nextMatchWeather, setNextMatchWeather] = useState(null);
   const [showWhatIf, setShowWhatIf] = useState(false);
   const [now, setNow] = useState(Date.now());
+  const [starting, setStarting] = useState(false);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 30000);
@@ -117,12 +118,14 @@ export default function DashboardPage() {
   }, [finishedMatches]);
 
   const handleStartScheduled = async (matchId) => {
+    setStarting(true);
     try {
       await updateMatch(matchId, { status: 'active' });
       await loadMatch(matchId);
       navigate(`/match/${matchId}`);
     } catch (e) {
       toast.error('Errore: ' + e.message);
+      setStarting(false);
     }
   };
 
@@ -232,8 +235,9 @@ export default function DashboardPage() {
               boxShadow: `0 4px 14px ${imminentIsLate ? 'rgba(246,173,85,0.4)' : 'rgba(79,209,197,0.4)'}`,
             }}
             onClick={() => handleStartScheduled(imminentMatch.id)}
+            disabled={starting}
           >
-            ▶️ AVVIA PARTITA
+            {starting ? '⏳ Avvio in corso...' : '▶️ AVVIA PARTITA'}
           </button>
         </div>
       )}

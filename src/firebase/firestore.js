@@ -1,7 +1,7 @@
 import {
   collection, doc, getDocs, getDoc, addDoc, setDoc, updateDoc,
   deleteDoc, query, orderBy, limit, where, serverTimestamp,
-  onSnapshot, writeBatch, Timestamp, arrayUnion, increment
+  onSnapshot, writeBatch, Timestamp, arrayUnion, arrayRemove, increment
 } from 'firebase/firestore';
 import { db } from './config';
 import { getMs } from '../utils/dateUtils';
@@ -92,6 +92,17 @@ export async function recordGoalEvent(matchId, event) {
   await updateDoc(doc(db, 'matches', matchId), {
     events: arrayUnion(event),
     ...(pointTeam === 'red' ? { redScore: increment(1) } : { blueScore: increment(1) }),
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export async function deleteGoalEvent(matchId, event) {
+  const pointTeam = event.type === 'autogoal'
+    ? (event.team === 'red' ? 'blue' : 'red')
+    : event.team;
+  await updateDoc(doc(db, 'matches', matchId), {
+    events: arrayRemove(event),
+    ...(pointTeam === 'red' ? { redScore: increment(-1) } : { blueScore: increment(-1) }),
     updatedAt: serverTimestamp(),
   });
 }

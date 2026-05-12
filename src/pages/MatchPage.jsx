@@ -43,24 +43,38 @@ export default function MatchPage() {
   const [endConfirm, setEndConfirm] = useState(false);
   const [ending, setEnding] = useState(false);
   const [goalFlash, setGoalFlash] = useState(null);   // 'red' | 'blue' | null
-  const [showConfetti, setShowConfetti] = useState(false);
+  const [showConfetti, setShowConfetti] = useState(null); // null | 'red' | 'blue'
   const [scoreBounce, setScoreBounce] = useState(null); // 'red' | 'blue' | null
   const [scoreShake, setScoreShake] = useState(null);   // 'red' | 'blue' | null
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
-  const prevRedScore  = useRef(0);
-  const prevBlueScore = useRef(0);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const prevRedScore  = useRef(null); // null on first render to avoid false bounce on load
+  const prevBlueScore = useRef(null);
 
   const timerRef = useRef(null);
+  const reportTimeoutRef = useRef(null);
 
-  // Bounce/shake when scores change
+  // Bounce/shake when scores change — skip the initial load to avoid false bounce on refresh
   useEffect(() => {
-    const red  = match?.redScore  || 0;
-    const blue = match?.blueScore || 0;
-    if (red  > prevRedScore.current)  { setScoreBounce('red');  setTimeout(() => setScoreBounce(null), 450); }
-    if (blue > prevBlueScore.current) { setScoreBounce('blue'); setTimeout(() => setScoreBounce(null), 450); }
+    const red  = match?.redScore  ?? 0;
+    const blue = match?.blueScore ?? 0;
+    if (prevRedScore.current !== null  && red  > prevRedScore.current)  { setScoreBounce('red');  setTimeout(() => setScoreBounce(null), 450); }
+    if (prevBlueScore.current !== null && blue > prevBlueScore.current) { setScoreBounce('blue'); setTimeout(() => setScoreBounce(null), 450); }
     prevRedScore.current  = red;
     prevBlueScore.current = blue;
   }, [match?.redScore, match?.blueScore]);
+
+  // Online/offline indicator
+  useEffect(() => {
+    const onOnline  = () => setIsOnline(true);
+    const onOffline = () => setIsOnline(false);
+    window.addEventListener('online',  onOnline);
+    window.addEventListener('offline', onOffline);
+    return () => { window.removeEventListener('online', onOnline); window.removeEventListener('offline', onOffline); };
+  }, []);
+
+  // Cleanup report modal timeout on unmount
+  useEffect(() => () => { if (reportTimeoutRef.current) clearTimeout(reportTimeoutRef.current); }, []);
 
   useEffect(() => {
     // Always load when match is null (e.g. after page refresh, persist restores
@@ -166,17 +180,21 @@ export default function MatchPage() {
     setPendingGkConceded(false);
     if (!pendingGoalData) return;
     const gkFields = { gkConcededId: player?.id || null, gkConcededName: player?.name || null };
-    if (pendingGoalData._autogoal) {
-      await recordAutogoal({ team: pendingGoalData.team, scorerId: pendingGoalData.scorerId, scorerName: pendingGoalData.scorerName, ...gkFields });
-      toast.success(`🤦 Autogol di ${pendingGoalData.scorerName}`);
-      setScoreShake(pendingGoalData.team);
-      setTimeout(() => setScoreShake(null), 450);
-    } else {
-      await recordGoal({ ...pendingGoalData, ...gkFields });
-      const assistMsg = pendingGoalData.assistId ? ` (assist: ${pendingGoalData.assistName})` : '';
-      toast.success(`⚽ Gol di ${pendingGoalData.scorerName}${assistMsg}!`);
-      setGoalFlash(pendingGoalData.team);
-      setTimeout(() => setGoalFlash(null), 600);
+    try {
+      if (pendingGoalData._autogoal) {
+        await recordAutogoal({ team: pendingGoalData.team, scorerId: pendingGoalData.scorerId, scorerName: pendingGoalData.scorerName, ...gkFields });
+        toast.success(`🤦 Autogol di ${pendingGoalData.scorerName}`);
+        setScoreShake(pendingGoalData.team);
+        setTimeout(() => setScoreShake(null), 450);
+      } else {
+        await recordGoal({ ...pendingGoalData, ...gkFields });
+        const assistMsg = pendingGoalData.assistId ? ` (assist: ${pendingGoalData.assistName})` : '';
+        toast.success(`⚽ Gol di ${pendingGoalData.scorerName}${assistMsg}!`);
+        setGoalFlash(pendingGoalData.team);
+        setTimeout(() => setGoalFlash(null), 600);
+      }
+    } catch (e) {
+      toast.error('Errore registrazione gol: ' + e.message);
     }
     setPendingGoalData(null);
     setSelectedScorer(null);
@@ -214,8 +232,9 @@ export default function MatchPage() {
       if (activeMatchId) await updateMatch(activeMatchId, extraFields);
       setReportText(report);
       setMatchSummary(snapshot);
-      setShowConfetti(true);
-      setTimeout(() => { setShowConfetti(false); setReportModal(true); }, 2200);
+      const confettiWinner = snapshot.redScore > snapshot.blueScore ? 'red' : snapshot.blueScore > snapshot.redScore ? 'blue' : null;
+      if (confettiWinner) setShowConfetti(confettiWinner);
+      reportTimeoutRef.current = setTimeout(() => { setShowConfetti(null); setReportModal(true); }, 2200);
     } catch (e) {
       toast.error('Errore: ' + e.message);
     } finally {
@@ -476,7 +495,14 @@ export default function MatchPage() {
   return (
     <div className="page-content" style={{ paddingTop: '1rem' }}>
 
-      {showConfetti && <Confetti />}
+      {showConfetti && <Confetti winner={showConfetti} />}
+
+      {/* Offline indicator */}
+      {!isOnline && !isFinished && (
+        <div style={{ textAlign: 'center', marginBottom: '0.5rem', padding: '0.35rem 0.75rem', borderRadius: '8px', background: 'rgba(252,129,129,0.12)', border: '1px solid rgba(252,129,129,0.35)', fontSize: '0.78rem', color: '#FC8181' }}>
+          ⚠️ Connessione assente — i dati potrebbero non sincronizzarsi
+        </div>
+      )}
 
       {/* Goal flash overlay */}
       {goalFlash && (
@@ -542,7 +568,7 @@ export default function MatchPage() {
       </div>
 
       {/* Goal Buttons */}
-      {isAdmin && !isFinished && (
+      {isAdmin && !isFinished && !ending && (
         <div className="card mb-4">
           <h3 className="mb-3" style={{ fontSize: '0.9rem', color: '#A0AEC0' }}>⚽ REGISTRA EVENTO</h3>
           <div className="grid-2 mb-2">

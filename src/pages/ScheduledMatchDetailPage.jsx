@@ -59,6 +59,12 @@ export default function ScheduledMatchDetailPage() {
   const playersRef = useRef(players);
   useEffect(() => { playersRef.current = players; }, [players]);
 
+  // Reset guard when navigating to a different match id
+  useEffect(() => {
+    loadedRef.current = false;
+    setLoadingMatch(true);
+  }, [id]);
+
   useEffect(() => {
     if (players.length === 0 || loadedRef.current) return;
     loadedRef.current = true;
@@ -71,7 +77,8 @@ export default function ScheduledMatchDetailPage() {
       const red = (m.redTeam || []).map(enrich);
       const blue = (m.blueTeam || []).map(enrich);
       const pending = (m.pendingPlayers || []).map(enrich);
-      const w = m.weather || { condition: 'cloudy', temp: '', description: '' };
+      const wRaw = m.weather || { condition: 'cloudy', temp: '', description: '' };
+      const w = { ...wRaw, temp: wRaw.temp != null && wRaw.temp !== '' ? String(wRaw.temp) : '' };
       const d = safeDate(m.date) || new Date();
       setTeams({ red, blue });
       setPendingPlayers(pending);
@@ -337,6 +344,7 @@ export default function ScheduledMatchDetailPage() {
               setWeather(w);
               regen(teams, matchDate, w);
             }}
+            inputMode="numeric"
           />
         </div>
       </div>

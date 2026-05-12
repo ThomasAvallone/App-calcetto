@@ -1,10 +1,11 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import toast from 'react-hot-toast';
 import {
   createMatch, updateMatch, getMatch,
   saveMatchTimerState, getMatchTimerState,
   subscribeToMatch, subscribeToMatchState,
-  recordGoalEvent,
+  recordGoalEvent, deleteGoalEvent,
 } from '../firebase/firestore';
 
 // ─── STORE ────────────────────────────────────────────────────────────────────
@@ -24,40 +25,53 @@ const useMatchStore = create(
       goalModal: null,
       unsubscribeMatch: null,
       unsubscribeState: null,
+      _loadToken: 0,
 
       async loadMatch(matchId) {
-        const { unsubscribeMatch } = get();
+        const { unsubscribeMatch, unsubscribeState } = get();
         if (unsubscribeMatch) unsubscribeMatch();
-        const [match, timerState] = await Promise.all([
-          getMatch(matchId),
-          getMatchTimerState(matchId),
-        ]);
-        if (!match) return;
-        set({
-          activeMatchId: matchId,
-          match,
-          timerState: {
-            ...DEFAULT_TIMER_STATE,
-            isRunning: timerState?.isRunning || false,
-            startTimestamp: timerState?.startTimestamp || null,
-            elapsedMs: timerState?.elapsedMs || 0,
-          },
-        });
-        const unsub = subscribeToMatch(matchId, (updatedMatch) => {
-          if (updatedMatch) set({ match: updatedMatch });
-        });
-        const unsubState = subscribeToMatchState(matchId, (state) => {
-          if (state) {
-            set({
-              timerState: {
-                isRunning: state.isRunning || false,
-                startTimestamp: state.startTimestamp || null,
-                elapsedMs: state.elapsedMs || 0,
-              }
-            });
-          }
-        });
-        set({ unsubscribeMatch: unsub, unsubscribeState: unsubState });
+        if (unsubscribeState) unsubscribeState();
+        // Cancellation token: stale loads/subscriptions are silently ignored
+        const token = Date.now() + Math.random();
+        set({ _loadToken: token, unsubscribeMatch: null, unsubscribeState: null });
+        try {
+          const [match, timerState] = await Promise.all([
+            getMatch(matchId),
+            getMatchTimerState(matchId),
+          ]);
+          if (get()._loadToken !== token) return; // superseded by a newer loadMatch call
+          if (!match) return;
+          set({
+            activeMatchId: matchId,
+            match,
+            timerState: {
+              ...DEFAULT_TIMER_STATE,
+              isRunning: timerState?.isRunning || false,
+              startTimestamp: timerState?.startTimestamp || null,
+              elapsedMs: timerState?.elapsedMs || 0,
+            },
+          });
+          const unsub = subscribeToMatch(matchId, (updatedMatch) => {
+            if (get()._loadToken !== token) return;
+            if (updatedMatch) set({ match: updatedMatch });
+          });
+          const unsubState = subscribeToMatchState(matchId, (state) => {
+            if (get()._loadToken !== token) return;
+            if (state) {
+              set({
+                timerState: {
+                  isRunning: state.isRunning || false,
+                  startTimestamp: state.startTimestamp || null,
+                  elapsedMs: state.elapsedMs || 0,
+                }
+              });
+            }
+          });
+          set({ unsubscribeMatch: unsub, unsubscribeState: unsubState });
+        } catch (e) {
+          if (get()._loadToken !== token) return;
+          toast.error('Impossibile caricare la partita');
+        }
       },
 
       unloadMatch() {
@@ -159,14 +173,18 @@ const useMatchStore = create(
       async deleteEvent(eventId) {
         const { activeMatchId, match } = get();
         if (!activeMatchId || !match) return;
+        const event = (match.events || []).find(e => e.id === eventId);
+        if (!event) return;
+        // Optimistic update
         const events = (match.events || []).filter(e => e.id !== eventId);
         let redScore = 0, blueScore = 0;
         for (const ev of events) {
           if (ev.type === 'goal') { if (ev.team === 'red') redScore++; else blueScore++; }
           else if (ev.type === 'autogoal') { if (ev.team === 'red') blueScore++; else redScore++; }
         }
-        await updateMatch(activeMatchId, { events, redScore, blueScore });
         set({ match: { ...match, events, redScore, blueScore } });
+        // Atomic removal via arrayRemove + decrement (no race with concurrent recordGoalEvent)
+        await deleteGoalEvent(activeMatchId, event);
       },
 
       async endMatch() {

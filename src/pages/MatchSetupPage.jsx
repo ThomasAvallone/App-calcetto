@@ -35,12 +35,13 @@ export default function MatchSetupPage() {
   };
 
   const handlePlanEmpty = async () => {
+    if (!matchDate) { toast.error('Seleziona una data prima di pianificare'); return; }
     setLoading(true);
     try {
       await createNewMatch({
         redTeam: [], blueTeam: [], pendingPlayers: [], weather,
         redScore: 0, blueScore: 0, status: 'scheduled',
-        date: matchDate ? new Date(matchDate) : new Date(),
+        date: new Date(matchDate),
         events: [],
       });
       toast.success('Partita pianificata! Aggiungi i giocatori dallo storico.');
@@ -110,8 +111,11 @@ export default function MatchSetupPage() {
       const date = matchDate ? new Date(matchDate) : new Date();
       let currentWeather = weather;
       if (!currentWeather.temp) {
-        const fw = await fetchWeatherForDate(new Date()).catch(() => null);
-        if (fw) { currentWeather = fw; setWeather(fw); }
+        const fw = await fetchWeatherForDate(date).catch(() => null);
+        if (fw) {
+          currentWeather = fw;
+          setWeather({ ...fw, temp: fw.temp != null ? String(fw.temp) : '' });
+        }
       }
       const matchId = await createNewMatch({
         redTeam: teams.red.map(p => ({ id: p.id, name: p.name, primaryRole: p.primaryRole || '' })),
@@ -423,6 +427,7 @@ export default function MatchSetupPage() {
           <input className="input" type="number" placeholder="°C (opt.)"
             value={weather.temp}
             onChange={e => setWeather(w => ({ ...w, temp: e.target.value }))}
+            inputMode="numeric"
           />
         </div>
       </div>
