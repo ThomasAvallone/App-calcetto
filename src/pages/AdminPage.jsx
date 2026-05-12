@@ -14,6 +14,16 @@ import toast from 'react-hot-toast';
 
 const CHANGELOG = [
   {
+    version: '3.9.0',
+    date: 'Maggio 2026',
+    entries: [
+      { type: 'new', text: 'Rendimento per meteo nella scheda giocatore: nuova sezione "🌤️ Meteo & Rendimento" che mostra — per ogni condizione atmosferica in cui il giocatore ha giocato — vittorie/pareggi/sconfitte, percentuale vittoria colorata (verde ≥60%, giallo ≥40%, rosso <40%), barra W/D/L e gol+assist in quelle partite. La sezione appare solo se esistono partite con dati meteo; le partite storiche senza campo weather vengono filtrate automaticamente' },
+      { type: 'fix', text: 'deleteEvent: aggiunto try/catch con rollback dell\'aggiornamento ottimistico — se Firestore lancia un\'eccezione (es. permesso revocato), l\'evento torna visibile nell\'UI e viene mostrato un toast d\'errore. Prima il fallimento era silenzioso e l\'UI restava in stato inconsistente fino al prossimo snapshot' },
+      { type: 'fix', text: 'Delete button nella cronaca partita live: aggiunto .catch() al call site — in caso di errore viene ora mostrato un toast "Errore eliminazione: …" invece di un unhandled promise rejection silenzioso' },
+      { type: 'fix', text: 'handleEndMatch: la verifica "weather già catturato" usa useMatchStore.getState().match (lettura sincrona dallo store) invece del match del closure — dopo i vari await di endMatch+recalculate il match nel closure può essere stale e non riflettere il meteo catturato al primo Avvia, causando un re-fetch ridondante che sovrascriveva il dato corretto' },
+    ],
+  },
+  {
     version: '3.8.0',
     date: 'Maggio 2026',
     entries: [
