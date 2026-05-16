@@ -128,6 +128,7 @@ export default function MatchPage() {
 
   const isRunning = timerState.isRunning;
   const isFinished = match.status === 'finished';
+  const canShare = typeof navigator.share === 'function';
   const progress = Math.min((displayTime / MATCH_DURATION) * 100, 100);
   const isOvertime = displayTime >= MATCH_DURATION;
   const isNearEnd = !isOvertime && displayTime >= (MATCH_DURATION - 5 * 60);
@@ -235,14 +236,14 @@ export default function MatchPage() {
       await endMatch();
       const allIds = [...snapshot.redTeam.map(p => p.id), ...snapshot.blueTeam.map(p => p.id)];
       await recalculatePlayerStats(allIds);
-      await exportMatchToSheets(match, players).catch(() => {
+      // Read fresh match from store: dopo gli await (waitUndo, endMatch, recalculate)
+      // il match del closure può essere stale rispetto agli ultimi eventi/meteo.
+      const freshMatch = useMatchStore.getState().match || match;
+      await exportMatchToSheets(freshMatch, players).catch(() => {
         toast.error('Export Google Sheets fallito');
       });
-      const report = generateMatchReport(match, players);
+      const report = generateMatchReport(freshMatch, players);
       const extraFields = { report };
-      // Read fresh match from store (avoids stale closure — weather may have been
-      // captured at first timer start after this component rendered).
-      const freshMatch = useMatchStore.getState().match;
       if (!freshMatch?.weather?.temp) {
         const w = await fetchWeatherForDate(new Date()).catch(() => null);
         if (w) extraFields.weather = w;
@@ -400,7 +401,6 @@ export default function MatchPage() {
     })() : null;
 
     const shareText = reportText;
-    const canShare = typeof navigator.share === 'function';
     const handleShare = () => {
       if (canShare) {
         navigator.share({ title: 'Risultato Calcetto', text: shareText }).catch(() => {});
@@ -586,6 +586,36 @@ export default function MatchPage() {
           </div>
         )}
       </div>
+
+      {/* Share buttons (finished match) — recovery path se il modal è stato chiuso */}
+      {isFinished && (
+        <div className="card mb-4">
+          <h3 className="mb-3" style={{ fontSize: '0.9rem', color: '#A0AEC0' }}>📤 CONDIVIDI RISULTATO</h3>
+          <div className="flex gap-2">
+            <button className="btn" style={{ flex: 1, background: '#25D366', color: '#fff', fontWeight: 700, border: 'none' }}
+              onClick={() => {
+                const text = match.report || generateMatchReport(match, players);
+                if (canShare) {
+                  navigator.share({ title: 'Risultato Calcetto', text }).catch(() => {});
+                } else {
+                  window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
+                }
+              }}>
+              {canShare ? '📤 Condividi' : '💬 WhatsApp'}
+            </button>
+            <button className="btn btn-teal" style={{ flex: 1 }}
+              onClick={() => {
+                const text = match.report || generateMatchReport(match, players);
+                navigator.clipboard.writeText(text).then(() => toast.success('Copiato!'));
+              }}>
+              📋 Copia
+            </button>
+          </div>
+          <button className="btn btn-ghost btn-full mt-2" onClick={() => navigate('/')}>
+            🏠 Torna alla Home
+          </button>
+        </div>
+      )}
 
       {/* Goal Buttons */}
       {isAdmin && !isFinished && !ending && (

@@ -1,9 +1,14 @@
 import React, { useMemo } from 'react';
 import { computePlayerWeatherStats } from '../../utils/weatherStats';
 
+// Soglia minima di partite per condizione meteo: sotto questa, il dato è
+// statisticamente irrilevante (es. "100% vittorie con Pioggia" su 1 partita).
+const MIN_MATCHES_PER_CONDITION = 2;
+
 export default function PlayerWeatherStats({ playerMatches, playerId }) {
   const stats = useMemo(
-    () => computePlayerWeatherStats(playerMatches, playerId),
+    () => computePlayerWeatherStats(playerMatches, playerId)
+      .filter(s => s.matches >= MIN_MATCHES_PER_CONDITION),
     [playerMatches, playerId],
   );
 

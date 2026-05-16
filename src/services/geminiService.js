@@ -398,7 +398,9 @@ DATI GIOCATORE: ${player.name}
 
 // ─── Analisi trend giocatore ──────────────────────────────────────────────────
 // recentData: array di max 4 oggetti { result: 'W'|'L'|'D', goals, assists, autogoals }
-export async function generatePlayerTrendAnalysis(player, recentData) {
+// weatherStats: array opzionale di { label, matches, wins, draws, losses, goals, assists }
+//   filtrato a ≥2 partite per condizione (small-sample escluso).
+export async function generatePlayerTrendAnalysis(player, recentData, weatherStats = []) {
   const matchLines = recentData.map((m, i) => {
     const res    = m.result === 'W' ? 'Vittoria' : m.result === 'L' ? 'Sconfitta' : 'Pareggio';
     const parts  = [];
@@ -412,10 +414,21 @@ export async function generatePlayerTrendAnalysis(player, recentData) {
     ? `${player.streak.count} ${player.streak.type === 'win' ? 'vittorie' : 'sconfitte'} consecutive`
     : 'nessuna streak attiva';
 
+  const significantWeather = (weatherStats || []).filter(w => w.matches >= 2);
+  const weatherBlock = significantWeather.length > 0
+    ? '\n\nRENDIMENTO PER METEO (≥2 partite):\n' + significantWeather.map(w => {
+        const total = w.wins + w.draws + w.losses;
+        const wr = total ? Math.round((w.wins / total) * 100) : 0;
+        return `- ${w.label}: ${w.matches}p, ${wr}% vittoria, ${w.goals}G ${w.assists}A`;
+      }).join('\n')
+    : '';
+
   const prompt = `Sei un analista sportivo sarcastico, divertente e tagliente che commenta le prestazioni \
 di un giocatore di calcetto amatoriale tra amici. \
 Scrivi un'analisi del suo momento di forma in italiano: circa 3 paragrafi brevi. \
 Sii diretto, ironico, a tratti brutale ma bonario — come farebbe un amico. \
+Se ci sono dati meteo significativi e mostrano un pattern marcato (es. molto meglio col sole, \
+disastro sotto la pioggia), commentalo con ironia; altrimenti ignorali. \
 Non usare markdown, asterischi o titoli. Solo prosa.
 
 DATI DI ${player.name.toUpperCase()}:
@@ -423,7 +436,7 @@ Power Index attuale: ${(player.powerIndex || 50).toFixed(1)} / 100
 Streak: ${streakStr}
 
 ULTIME ${recentData.length} PARTITE:
-${matchLines}
+${matchLines}${weatherBlock}
 
 Scrivi l'analisi ora:`;
 

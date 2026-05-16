@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { updatePlayer } from '../../firebase/firestore';
 import { getMs } from '../../utils/dateUtils';
 import { generatePlayerTrendAnalysis } from '../../services/geminiService';
+import { computePlayerWeatherStats } from '../../utils/weatherStats';
 import toast from 'react-hot-toast';
 
 export default function AiTrendCard({ player, playerMatches }) {
@@ -49,7 +50,11 @@ export default function AiTrendCard({ player, playerMatches }) {
         return { result, goals, assists, autogoals };
       });
 
-      const text = await generatePlayerTrendAnalysis(player, recentData);
+      const weatherStats = computePlayerWeatherStats(
+        playerMatches.filter(m => !m.isHistorical),
+        player.id,
+      );
+      const text = await generatePlayerTrendAnalysis(player, recentData, weatherStats);
       setPendingText(text);
       const latestMatch = played[played.length - 1];
       await updatePlayer(player.id, {

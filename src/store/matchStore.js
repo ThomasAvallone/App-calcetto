@@ -187,7 +187,18 @@ const useMatchStore = create(
           // Atomic removal via arrayRemove + decrement (no race with concurrent recordGoalEvent)
           await deleteGoalEvent(activeMatchId, event);
         } catch (e) {
-          set({ match }); // Rollback optimistic update
+          // Rollback letto dallo stato corrente (evita di sovrascrivere update arrivati
+          // dalla subscription Firestore tra l'optimistic set e l'errore).
+          const cur = get().match;
+          if (cur && !(cur.events || []).some(ev => ev.id === eventId)) {
+            const restoredEvents = [...(cur.events || []), event];
+            let r = 0, b = 0;
+            for (const ev of restoredEvents) {
+              if (ev.type === 'goal') { if (ev.team === 'red') r++; else b++; }
+              else if (ev.type === 'autogoal') { if (ev.team === 'red') b++; else r++; }
+            }
+            set({ match: { ...cur, events: restoredEvents, redScore: r, blueScore: b } });
+          }
           throw e;
         }
       },
