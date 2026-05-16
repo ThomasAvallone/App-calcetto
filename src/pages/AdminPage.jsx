@@ -2,7 +2,6 @@ import React, { useState, useEffect, useSyncExternalStore } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getMatches, getPlayers, seedHistoricalSeasons, createPlayer, importHistoricalMatches, recalculatePlayerStats, updateMatch, fixLastMatchGoalMinutes, getPIConfig, setPIConfig as savePIConfig } from '../firebase/firestore';
 import { syncAllHistoryToSheets } from '../services/sheetsService';
-import { downloadExcel } from '../services/excelService';
 import { doc, getDocs, collection, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { HISTORICAL_SEASONS, getCurrentRosterPlayers, computeCumulativeStats } from '../data/historicalData';
@@ -13,6 +12,20 @@ import { DEFAULT_PI_CONFIG } from '../utils/playerStats';
 import toast from 'react-hot-toast';
 
 const CHANGELOG = [
+  {
+    version: '3.10.0',
+    date: 'Maggio 2026',
+    entries: [
+      { type: 'new', text: 'Registrazione gol con voce: bottone "🎙️ Registra con voce" nella card evento live — parla "gol Marco assist Luca portiere Gianni" in italiano, il parser trova i giocatori nel team attivo e registra direttamente senza toccare i modal. Se il portiere non viene detto apre solo il modal GK; se il nome è ambiguo mostra un toast con il testo trascritto' },
+      { type: 'new', text: 'Distribuzione gol per minuto nella scheda giocatore: istogramma ⏱️ con fasce da 10 minuti (0-9\', 10-19\', …, 60\'+) che mostra gol (verde), assist (blu) e autogol (rosso) — visibile solo se esistono eventi con dato minuto' },
+      { type: 'new', text: 'Badge meteo in "Rendimento stagionale": 5 nuovi badge — ☀️ Re del Sole (≥70% vittorie col sole, min 3 partite), 🌧️ Re del Fango (pioggia), 🥶 Inossidabile (freddo+vento combinati), 🌈 All Weather (almeno 1 vittoria in 4+ condizioni diverse), ⛈️ Meteoropatico (≤30% vittorie in qualche condizione con min 4 partite)' },
+      { type: 'new', text: 'Vibrazione haptic sul gol: navigator.vibrate([100,50,100]) dopo gol regolare, vibrate([80]) dopo autogol — feedback fisico immediato su mobile senza nessuna configurazione' },
+      { type: 'new', text: 'Warning limite eventi nel doc partita: banner arancione a ≥50 eventi, rosso a ≥100 — ricorda all\'admin che il documento Firestore cresce linearmente e suggerisce di terminare la partita' },
+      { type: 'new', text: 'E2E Playwright: suite in e2e/golden-path.spec.ts con smoke test (carica senza errori JS), test autenticati (dashboard, giocatori, storico) e golden path completo (setup→gol→fine→modal). Richede npx playwright install chromium + E2E_EMAIL/E2E_PASSWORD env. Comandi: npm run test:e2e, npm run test:e2e:ui' },
+      { type: 'perf', text: 'Lazy-load xlsx: il chunk vendor-xlsx (282KB gzip 95KB) viene ora caricato solo al click di "Download Excel" in Admin invece di essere nel bundle iniziale — first paint su mobile sensibilmente più veloce' },
+      { type: 'fix', text: 'Aria-label su bottoni icona-only in MatchPage: bottone chiudi verdetto ("Chiudi verdetto"), conferma/annulla eliminazione evento ("Conferma eliminazione", "Annulla eliminazione"), bottone elimina ("Elimina evento") — accessibilità screen reader' },
+    ],
+  },
   {
     version: '3.9.0',
     date: 'Maggio 2026',
@@ -398,6 +411,7 @@ export default function AdminPage() {
   const handleExcelDownload = async () => {
     setExporting(true);
     try {
+      const { downloadExcel } = await import('../services/excelService');
       downloadExcel(players, matches);
       toast.success('Download avviato!');
     } catch (e) {

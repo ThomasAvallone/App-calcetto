@@ -48,6 +48,8 @@ export default function MatchPage() {
   const [scoreShake, setScoreShake] = useState(null);   // 'red' | 'blue' | null
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [voiceListening, setVoiceListening] = useState(false);
+  const [voiceTranscript, setVoiceTranscript] = useState('');
   const prevRedScore  = useRef(null); // null on first render to avoid false bounce on load
   const prevBlueScore = useRef(null);
 
@@ -146,6 +148,89 @@ export default function MatchPage() {
     await updateMatch(activeMatchId, updates).catch(() => {});
   };
 
+  // ── Voice input helpers ─────────────────────────────────────────────────────
+  const hasSpeech = typeof window !== 'undefined' &&
+    ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window);
+
+  const findPlayer = (word, pool) => {
+    if (!word) return null;
+    const w = word.toLowerCase();
+    return pool.find(p => {
+      const parts = p.name.toLowerCase().split(/\s+/);
+      return parts.some(part => part.startsWith(w) || w.startsWith(part));
+    }) || null;
+  };
+
+  const parseVoiceGoal = (transcript) => {
+    const text = transcript.toLowerCase().trim();
+    const allPlayers = [...redTeam, ...blueTeam];
+    const isAutogoal = text.includes('autogol');
+    // "gol Marco" / "autogol Thomas" — first word after keyword
+    const scorerMatch = text.match(/(?:autogol|gol)\s+(\S+)/);
+    const scorer = scorerMatch ? findPlayer(scorerMatch[1], allPlayers) : null;
+    const assistMatch = text.match(/assist\s+(\S+)/);
+    const assist = assistMatch ? findPlayer(assistMatch[1], allPlayers) : null;
+    const gkMatch = text.match(/portiere\s+(\S+)/);
+    const gk = gkMatch ? findPlayer(gkMatch[1], allPlayers) : null;
+    const team = scorer
+      ? (redTeam.some(p => p.id === scorer.id) ? 'red' : 'blue')
+      : null;
+    return { isAutogoal, scorer, assist, gk, team };
+  };
+
+  const handleVoiceInput = () => {
+    if (!hasSpeech || voiceListening) return;
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const rec = new SR();
+    rec.lang = 'it-IT';
+    rec.continuous = false;
+    rec.interimResults = false;
+    setVoiceListening(true);
+    setVoiceTranscript('');
+    rec.onresult = (e) => {
+      const transcript = e.results[0][0].transcript;
+      setVoiceTranscript(transcript);
+      setVoiceListening(false);
+      const parsed = parseVoiceGoal(transcript);
+      if (!parsed.scorer) {
+        toast(`🎙️ Non ho capito il marcatore — riprova o usa i bottoni.\n"${transcript}"`, { duration: 4000 });
+        return;
+      }
+      if (!parsed.team) return;
+      // Enough data → go straight to GK step (skip manual modals)
+      setPendingGoalData({
+        team: parsed.team,
+        scorerId: parsed.scorer.id,
+        scorerName: parsed.scorer.name,
+        ...(parsed.isAutogoal ? { _autogoal: true } : {
+          assistId: parsed.assist?.id || null,
+          assistName: parsed.assist?.name || null,
+        }),
+      });
+      if (parsed.gk) {
+        // All data present → record immediately
+        const gkFields = { gkConcededId: parsed.gk.id, gkConcededName: parsed.gk.name };
+        if (parsed.isAutogoal) {
+          recordAutogoal({ team: parsed.team, scorerId: parsed.scorer.id, scorerName: parsed.scorer.name, ...gkFields })
+            .then(() => { toast.success(`🤦 Autogol di ${parsed.scorer.name}`); navigator.vibrate?.([80]); })
+            .catch(e => toast.error('Errore: ' + e.message));
+        } else {
+          recordGoal({ team: parsed.team, scorerId: parsed.scorer.id, scorerName: parsed.scorer.name, ...gkFields,
+            assistId: parsed.assist?.id || null, assistName: parsed.assist?.name || null })
+            .then(() => { toast.success(`⚽ Gol di ${parsed.scorer.name}!`); navigator.vibrate?.([100, 50, 100]); })
+            .catch(e => toast.error('Errore: ' + e.message));
+          setPendingGoalData(null);
+        }
+      } else {
+        // Missing GK → open GK selection modal
+        setPendingGkConceded(true);
+      }
+    };
+    rec.onerror = () => { setVoiceListening(false); toast.error('Microfono non disponibile'); };
+    rec.onend = () => setVoiceListening(false);
+    rec.start();
+  };
+
   const handleTimerToggle = () => {
     if (isRunning) { pauseTimer(); return; }
     startTimer();
@@ -200,12 +285,14 @@ export default function MatchPage() {
       if (pendingGoalData._autogoal) {
         await recordAutogoal({ team: pendingGoalData.team, scorerId: pendingGoalData.scorerId, scorerName: pendingGoalData.scorerName, ...gkFields });
         toast.success(`🤦 Autogol di ${pendingGoalData.scorerName}`);
+        navigator.vibrate?.([80]);
         setScoreShake(pendingGoalData.team);
         setTimeout(() => setScoreShake(null), 450);
       } else {
         await recordGoal({ ...pendingGoalData, ...gkFields });
         const assistMsg = pendingGoalData.assistId ? ` (assist: ${pendingGoalData.assistName})` : '';
         toast.success(`⚽ Gol di ${pendingGoalData.scorerName}${assistMsg}!`);
+        navigator.vibrate?.([100, 50, 100]);
         setGoalFlash(pendingGoalData.team);
         setTimeout(() => setGoalFlash(null), 600);
       }
@@ -415,7 +502,7 @@ export default function MatchPage() {
         <div className="modal animate-slide-up" style={{ maxHeight: '92vh', overflowY: 'auto' }}>
           <div className="flex items-center justify-between mb-3">
             <h2 className="modal-title" style={{ marginBottom: 0 }}>🏆 Verdetto Finale</h2>
-            <button className="btn btn-ghost btn-icon" onClick={() => { setReportModal(false); navigate('/'); }}>
+            <button className="btn btn-ghost btn-icon" aria-label="Chiudi verdetto" onClick={() => { setReportModal(false); navigate('/'); }}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
                 <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
               </svg>
@@ -617,6 +704,19 @@ export default function MatchPage() {
         </div>
       )}
 
+      {/* Event limit warning — Firestore doc grows with each event */}
+      {isAdmin && !isFinished && (match.events || []).length >= 50 && (
+        <div style={{ marginBottom: '0.75rem', padding: '0.5rem 0.75rem', borderRadius: '8px',
+          background: (match.events || []).length >= 100 ? 'rgba(252,129,129,0.15)' : 'rgba(246,173,85,0.12)',
+          border: `1px solid ${(match.events || []).length >= 100 ? 'rgba(252,129,129,0.4)' : 'rgba(246,173,85,0.35)'}`,
+          fontSize: '0.78rem',
+          color: (match.events || []).length >= 100 ? '#FC8181' : '#F6AD55' }}>
+          {(match.events || []).length >= 100
+            ? `🔴 ${(match.events || []).length} eventi — documento vicino al limite tecnico, termina la partita`
+            : `⚠️ ${(match.events || []).length} eventi registrati — considera di terminare la partita a breve`}
+        </div>
+      )}
+
       {/* Goal Buttons */}
       {isAdmin && !isFinished && !ending && (
         <div className="card mb-4">
@@ -631,6 +731,21 @@ export default function MatchPage() {
             <button className="btn btn-ghost text-sm" onClick={() => handleAutogoalTap('red')} style={{ fontSize: '0.8rem' }}>🤦 Autogol Rossi</button>
             <button className="btn btn-ghost text-sm" onClick={() => handleAutogoalTap('blue')} style={{ fontSize: '0.8rem' }}>🤦 Autogol Blu</button>
           </div>
+          {hasSpeech && (
+            <button
+              className="btn btn-ghost btn-full mt-2"
+              onClick={handleVoiceInput}
+              disabled={voiceListening}
+              aria-label="Registra gol con voce"
+              style={{ borderColor: voiceListening ? '#FC8181' : 'rgba(159,122,234,0.4)', color: voiceListening ? '#FC8181' : '#9F7AEA', fontSize: '0.85rem', animation: voiceListening ? 'pulse 1s infinite' : 'none' }}>
+              {voiceListening ? '🔴 In ascolto...' : '🎙️ Registra con voce'}
+            </button>
+          )}
+          {voiceTranscript && !voiceListening && (
+            <div style={{ marginTop: '0.4rem', fontSize: '0.72rem', color: '#718096', textAlign: 'center', fontStyle: 'italic' }}>
+              "{voiceTranscript}"
+            </div>
+          )}
         </div>
       )}
 
@@ -678,13 +793,13 @@ export default function MatchPage() {
                   {isAdmin && (
                     deleteConfirmId === ev.id ? (
                       <div style={{ display: 'flex', gap: '4px' }}>
-                        <button style={{ background: '#FC8181', border: 'none', cursor: 'pointer', color: '#1A202C', padding: '3px 7px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 700 }}
+                        <button aria-label="Conferma eliminazione" style={{ background: '#FC8181', border: 'none', cursor: 'pointer', color: '#1A202C', padding: '3px 7px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 700 }}
                           onClick={() => { setDeleteConfirmId(null); deleteEvent(ev.id).then(() => toast.success('Evento eliminato')).catch(e => toast.error('Errore eliminazione: ' + (e?.message || 'riprova'))); }}>✓</button>
-                        <button style={{ background: 'none', border: '1px solid #4A5568', cursor: 'pointer', color: '#A0AEC0', padding: '3px 7px', borderRadius: '4px', fontSize: '0.75rem' }}
+                        <button aria-label="Annulla eliminazione" style={{ background: 'none', border: '1px solid #4A5568', cursor: 'pointer', color: '#A0AEC0', padding: '3px 7px', borderRadius: '4px', fontSize: '0.75rem' }}
                           onClick={() => setDeleteConfirmId(null)}>✕</button>
                       </div>
                     ) : (
-                      <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#FC8181', padding: '4px', fontSize: '0.8rem' }}
+                      <button aria-label="Elimina evento" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#FC8181', padding: '4px', fontSize: '0.8rem' }}
                         onClick={() => setDeleteConfirmId(ev.id)}>✕</button>
                     )
                   )}

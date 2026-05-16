@@ -1,4 +1,13 @@
 import { getMs } from './dateUtils';
+import { computePlayerWeatherStats } from './weatherStats';
+
+// Helper usato dai badge meteo: filtra le partite del giocatore e calcola le stats meteo.
+function _getWeatherStats(player, allMatches) {
+  const playerMatches = (allMatches || []).filter(m =>
+    [...(m.redTeam || []), ...(m.blueTeam || [])].some(pl => pl.id === player.id)
+  );
+  return computePlayerWeatherStats(playerMatches, player.id);
+}
 
 // Each badge definition uses:
 //   s       → season stats (goals, assists, autogoals, matches, wins, draws, losses, gkMatches, gkGoalsConceded)
@@ -455,6 +464,67 @@ export const BADGE_DEFS = [
       (s.matches || 0) >= 15 &&
       (s.goals || 0) <= 2 &&
       (s.assists || 0) <= 2,
+  },
+
+  // ── METEO ─────────────────────────────────────────────────────────────────────
+  {
+    id: 're_del_sole',
+    icon: '☀️',
+    label: 'Re del Sole',
+    desc: '≥70% vittorie con tempo soleggiato (min 3 partite)',
+    positive: true,
+    check: (_s, p, matches) => {
+      const ws = _getWeatherStats(p, matches);
+      const s = ws.find(w => w.key === 'sunny');
+      return s && s.matches >= 3 && s.wins / s.matches >= 0.7;
+    },
+  },
+  {
+    id: 're_del_fango',
+    icon: '🌧️',
+    label: 'Re del Fango',
+    desc: '≥70% vittorie sotto la pioggia (min 3 partite)',
+    positive: true,
+    check: (_s, p, matches) => {
+      const ws = _getWeatherStats(p, matches);
+      const s = ws.find(w => w.key === 'rainy');
+      return s && s.matches >= 3 && s.wins / s.matches >= 0.7;
+    },
+  },
+  {
+    id: 'inossidabile',
+    icon: '🥶',
+    label: 'Inossidabile',
+    desc: '≥70% vittorie con freddo o vento (min 3 partite combinate)',
+    positive: true,
+    check: (_s, p, matches) => {
+      const ws = _getWeatherStats(p, matches);
+      const combined = ws.filter(w => w.key === 'cold' || w.key === 'wind');
+      const tot = combined.reduce((a, b) => ({ matches: a.matches + b.matches, wins: a.wins + b.wins }), { matches: 0, wins: 0 });
+      return tot.matches >= 3 && tot.wins / tot.matches >= 0.7;
+    },
+  },
+  {
+    id: 'all_weather',
+    icon: '🌈',
+    label: 'All Weather',
+    desc: 'Almeno 1 vittoria in 4+ condizioni meteo diverse',
+    positive: true,
+    check: (_s, p, matches) => {
+      const ws = _getWeatherStats(p, matches);
+      return ws.filter(w => w.wins >= 1).length >= 4;
+    },
+  },
+  {
+    id: 'meteoropatico',
+    icon: '⛈️',
+    label: 'Meteoropatico',
+    desc: '≤30% vittorie in qualche condizione meteo (min 4 partite) — il meteo lo distrugge',
+    positive: false,
+    check: (_s, p, matches) => {
+      const ws = _getWeatherStats(p, matches);
+      return ws.some(w => w.matches >= 4 && w.wins / w.matches <= 0.3);
+    },
   },
 ];
 

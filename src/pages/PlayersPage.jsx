@@ -17,6 +17,7 @@ import { PiArc, getRoleIcon, PlayerAvatar, PlayerMatchHistory, PlayerRecords, Pl
 import DuoCompatibility from '../components/players/DuoCompatibility';
 import PlayerAchievements from '../components/players/PlayerAchievements';
 import PlayerWeatherStats from '../components/players/PlayerWeatherStats';
+import GoalMinuteChart from '../components/players/GoalMinuteChart';
 
 const ROLES = ['Portiere', 'Difensore', 'Centrocampista', 'Attaccante'];
 
@@ -625,6 +626,8 @@ export default function PlayersPage() {
         <PlayerBadges player={p} seasonStats={playerSeasonStats[p.id]} allMatches={finishedMatches} />
 
         <PlayerWeatherStats playerMatches={playerMatchesMap[p.id] || []} playerId={p.id} />
+
+        <GoalMinuteChart playerMatches={playerMatchesMap[p.id] || []} playerId={p.id} />
 
         {hasHistory && (
           <div className="card mb-4" style={{ background: 'rgba(246,224,94,0.05)', border: '1px solid rgba(246,224,94,0.2)' }}>

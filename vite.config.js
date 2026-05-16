@@ -50,6 +50,9 @@ export default defineConfig({
   resolve: {
     alias: { '@': '/src' }
   },
+  test: {
+    exclude: ['node_modules', 'e2e'],
+  },
   build: {
     chunkSizeWarningLimit: 800,
     rollupOptions: {
