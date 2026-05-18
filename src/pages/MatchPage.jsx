@@ -9,6 +9,7 @@ import { exportMatchToSheets } from '../services/sheetsService';
 import { recalculatePlayerStats, updateMatch } from '../firebase/firestore';
 import { fetchWeatherForDate } from '../services/weatherService';
 import { waitUndo } from '../utils/waitUndo';
+import { parseVoiceGoal } from '../utils/voiceParser';
 import toast from 'react-hot-toast';
 
 const MATCH_DURATION = 60 * 60; // durata regolamentare (per progress bar)
@@ -50,6 +51,8 @@ export default function MatchPage() {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [voiceListening, setVoiceListening] = useState(false);
   const [voiceTranscript, setVoiceTranscript] = useState('');
+  const recognitionRef = useRef(null);
+  const voiceTranscriptTimerRef = useRef(null);
   const prevRedScore  = useRef(null); // null on first render to avoid false bounce on load
   const prevBlueScore = useRef(null);
 
@@ -77,6 +80,15 @@ export default function MatchPage() {
 
   // Cleanup report modal timeout on unmount
   useEffect(() => () => { if (reportTimeoutRef.current) clearTimeout(reportTimeoutRef.current); }, []);
+
+  // Cleanup voice recognition + transcript-clear timer on unmount
+  useEffect(() => () => {
+    if (recognitionRef.current) {
+      try { recognitionRef.current.abort(); } catch { /* ignore */ }
+      recognitionRef.current = null;
+    }
+    if (voiceTranscriptTimerRef.current) clearTimeout(voiceTranscriptTimerRef.current);
+  }, []);
 
   useEffect(() => {
     // Always load when match is null (e.g. after page refresh, persist restores
@@ -152,30 +164,9 @@ export default function MatchPage() {
   const hasSpeech = typeof window !== 'undefined' &&
     ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window);
 
-  const findPlayer = (word, pool) => {
-    if (!word) return null;
-    const w = word.toLowerCase();
-    return pool.find(p => {
-      const parts = p.name.toLowerCase().split(/\s+/);
-      return parts.some(part => part.startsWith(w) || w.startsWith(part));
-    }) || null;
-  };
-
-  const parseVoiceGoal = (transcript) => {
-    const text = transcript.toLowerCase().trim();
-    const allPlayers = [...redTeam, ...blueTeam];
-    const isAutogoal = text.includes('autogol');
-    // "gol Marco" / "autogol Thomas" — first word after keyword
-    const scorerMatch = text.match(/(?:autogol|gol)\s+(\S+)/);
-    const scorer = scorerMatch ? findPlayer(scorerMatch[1], allPlayers) : null;
-    const assistMatch = text.match(/assist\s+(\S+)/);
-    const assist = assistMatch ? findPlayer(assistMatch[1], allPlayers) : null;
-    const gkMatch = text.match(/portiere\s+(\S+)/);
-    const gk = gkMatch ? findPlayer(gkMatch[1], allPlayers) : null;
-    const team = scorer
-      ? (redTeam.some(p => p.id === scorer.id) ? 'red' : 'blue')
-      : null;
-    return { isAutogoal, scorer, assist, gk, team };
+  const scheduleTranscriptClear = () => {
+    if (voiceTranscriptTimerRef.current) clearTimeout(voiceTranscriptTimerRef.current);
+    voiceTranscriptTimerRef.current = setTimeout(() => setVoiceTranscript(''), 6000);
   };
 
   const handleVoiceInput = () => {
@@ -185,50 +176,75 @@ export default function MatchPage() {
     rec.lang = 'it-IT';
     rec.continuous = false;
     rec.interimResults = false;
+    recognitionRef.current = rec;
     setVoiceListening(true);
     setVoiceTranscript('');
-    rec.onresult = (e) => {
+    rec.onresult = async (e) => {
       const transcript = e.results[0][0].transcript;
       setVoiceTranscript(transcript);
-      setVoiceListening(false);
-      const parsed = parseVoiceGoal(transcript);
-      if (!parsed.scorer) {
+      scheduleTranscriptClear();
+      const parsed = parseVoiceGoal(transcript, redTeam, blueTeam);
+      if (!parsed.scorer || !parsed.team) {
         toast(`🎙️ Non ho capito il marcatore — riprova o usa i bottoni.\n"${transcript}"`, { duration: 4000 });
         return;
       }
-      if (!parsed.team) return;
-      // Enough data → go straight to GK step (skip manual modals)
-      setPendingGoalData({
-        team: parsed.team,
-        scorerId: parsed.scorer.id,
-        scorerName: parsed.scorer.name,
-        ...(parsed.isAutogoal ? { _autogoal: true } : {
-          assistId: parsed.assist?.id || null,
-          assistName: parsed.assist?.name || null,
-        }),
-      });
+      // Visual feedback immediato (overlay flash) anche per voice
+      if (!parsed.isAutogoal) {
+        setGoalFlash(parsed.team);
+        setTimeout(() => setGoalFlash(null), 600);
+      } else {
+        setScoreShake(parsed.team);
+        setTimeout(() => setScoreShake(null), 450);
+      }
       if (parsed.gk) {
-        // All data present → record immediately
+        // Tutti i dati presenti → registra direttamente
         const gkFields = { gkConcededId: parsed.gk.id, gkConcededName: parsed.gk.name };
-        if (parsed.isAutogoal) {
-          recordAutogoal({ team: parsed.team, scorerId: parsed.scorer.id, scorerName: parsed.scorer.name, ...gkFields })
-            .then(() => { toast.success(`🤦 Autogol di ${parsed.scorer.name}`); navigator.vibrate?.([80]); })
-            .catch(e => toast.error('Errore: ' + e.message));
-        } else {
-          recordGoal({ team: parsed.team, scorerId: parsed.scorer.id, scorerName: parsed.scorer.name, ...gkFields,
-            assistId: parsed.assist?.id || null, assistName: parsed.assist?.name || null })
-            .then(() => { toast.success(`⚽ Gol di ${parsed.scorer.name}!`); navigator.vibrate?.([100, 50, 100]); })
-            .catch(e => toast.error('Errore: ' + e.message));
-          setPendingGoalData(null);
+        try {
+          if (parsed.isAutogoal) {
+            await recordAutogoal({ team: parsed.team, scorerId: parsed.scorer.id, scorerName: parsed.scorer.name, ...gkFields });
+            toast.success(`🤦 Autogol di ${parsed.scorer.name} (🧤 ${parsed.gk.name})`);
+            navigator.vibrate?.([80]);
+          } else {
+            await recordGoal({
+              team: parsed.team, scorerId: parsed.scorer.id, scorerName: parsed.scorer.name, ...gkFields,
+              assistId: parsed.assist?.id || null, assistName: parsed.assist?.name || null,
+            });
+            const assistMsg = parsed.assist ? ` (assist: ${parsed.assist.name})` : '';
+            toast.success(`⚽ Gol di ${parsed.scorer.name}${assistMsg}`);
+            navigator.vibrate?.([100, 50, 100]);
+          }
+        } catch (err) {
+          toast.error('Errore registrazione: ' + (err?.message || 'riprova'));
         }
       } else {
-        // Missing GK → open GK selection modal
+        // Manca portiere → apri solo il modal GK con scorer/assist precompilati
+        setPendingGoalData({
+          team: parsed.team,
+          scorerId: parsed.scorer.id,
+          scorerName: parsed.scorer.name,
+          ...(parsed.isAutogoal ? { _autogoal: true } : {
+            assistId: parsed.assist?.id || null,
+            assistName: parsed.assist?.name || null,
+          }),
+        });
         setPendingGkConceded(true);
       }
     };
-    rec.onerror = () => { setVoiceListening(false); toast.error('Microfono non disponibile'); };
-    rec.onend = () => setVoiceListening(false);
-    rec.start();
+    rec.onerror = (e) => {
+      setVoiceListening(false);
+      // 'no-speech' è normale (utente non ha parlato): non mostriamo errore
+      if (e?.error && e.error !== 'no-speech' && e.error !== 'aborted') {
+        toast.error('Microfono non disponibile');
+      }
+    };
+    rec.onend = () => { setVoiceListening(false); recognitionRef.current = null; };
+    try {
+      rec.start();
+    } catch {
+      // Già in ascolto o errore di avvio
+      setVoiceListening(false);
+      recognitionRef.current = null;
+    }
   };
 
   const handleTimerToggle = () => {

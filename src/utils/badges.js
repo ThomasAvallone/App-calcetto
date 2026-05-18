@@ -2,8 +2,12 @@ import { getMs } from './dateUtils';
 import { computePlayerWeatherStats } from './weatherStats';
 
 // Helper usato dai badge meteo: filtra le partite del giocatore e calcola le stats meteo.
+// Esclude esplicitamente partite storiche e non terminate (defensive: computePlayerWeatherStats
+// già salta quelle senza weather.condition, ma è bene non dipendere dall'implementazione).
 function _getWeatherStats(player, allMatches) {
   const playerMatches = (allMatches || []).filter(m =>
+    !m.isHistorical &&
+    m.status === 'finished' &&
     [...(m.redTeam || []), ...(m.blueTeam || [])].some(pl => pl.id === player.id)
   );
   return computePlayerWeatherStats(playerMatches, player.id);
