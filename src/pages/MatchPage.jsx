@@ -51,9 +51,11 @@ export default function MatchPage() {
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [voiceListening, setVoiceListening] = useState(false);
+  const [voiceProcessing, setVoiceProcessing] = useState(false);
   const [voiceTranscript, setVoiceTranscript] = useState('');
   const recognitionRef = useRef(null);
   const voiceTranscriptTimerRef = useRef(null);
+  const isMountedRef = useRef(true);
   const prevRedScore  = useRef(null); // null on first render to avoid false bounce on load
   const prevBlueScore = useRef(null);
 
@@ -84,6 +86,7 @@ export default function MatchPage() {
 
   // Cleanup voice recognition + transcript-clear timer on unmount
   useEffect(() => () => {
+    isMountedRef.current = false;
     if (recognitionRef.current) {
       try { recognitionRef.current.abort(); } catch { /* ignore */ }
       recognitionRef.current = null;
@@ -214,7 +217,7 @@ export default function MatchPage() {
   };
 
   const handleVoiceInput = () => {
-    if (!hasSpeech || voiceListening) return;
+    if (!hasSpeech || voiceListening || voiceProcessing) return;
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     const rec = new SR();
     rec.lang = 'it-IT';
@@ -227,40 +230,53 @@ export default function MatchPage() {
       const transcript = e.results[0][0].transcript;
       setVoiceTranscript(transcript);
       scheduleTranscriptClear();
-      // 1) Tentativo rule-based (istantaneo, offline-capable)
-      const parsed = parseVoiceGoal(transcript, redTeam, blueTeam);
-      if (parsed.scorer && parsed.team) {
-        await applyParsedGoal(parsed);
-        return;
-      }
-      // 2) Fallback Gemini per frasi creative / errori di trascrizione
-      const toastId = toast.loading('🤔 Chiedo a Gemini…');
+      // voiceProcessing keeps the button disabled during the full async chain,
+      // because rec.onend fires as soon as we hit the first await below.
+      setVoiceProcessing(true);
       try {
-        const aiParsed = await parseVoiceGoalWithAI(transcript, redTeam, blueTeam);
-        toast.dismiss(toastId);
-        if (!aiParsed.scorer || !aiParsed.team) {
-          toast(`🎙️ Non ho capito il marcatore — riprova o usa i bottoni.\n"${transcript}"`, { duration: 4000 });
+        // 1) Tentativo rule-based (istantaneo, offline-capable)
+        const parsed = parseVoiceGoal(transcript, redTeam, blueTeam);
+        if (parsed.scorer && parsed.team) {
+          if (!isMountedRef.current) return;
+          await applyParsedGoal(parsed);
           return;
         }
-        await applyParsedGoal(aiParsed);
-      } catch (err) {
-        toast.dismiss(toastId);
-        toast.error(`🎙️ Gemini non riesce a interpretare: "${transcript}"`, { duration: 4000 });
+        // 2) Fallback Gemini per frasi creative / errori di trascrizione
+        const toastId = toast.loading('🤔 Chiedo a Gemini…');
+        try {
+          const aiParsed = await parseVoiceGoalWithAI(transcript, redTeam, blueTeam);
+          toast.dismiss(toastId);
+          if (!isMountedRef.current) return;
+          if (!aiParsed.scorer || !aiParsed.team) {
+            toast(`🎙️ Non ho capito il marcatore — riprova o usa i bottoni.\n"${transcript}"`, { duration: 4000 });
+            return;
+          }
+          await applyParsedGoal(aiParsed);
+        } catch (err) {
+          toast.dismiss(toastId);
+          if (!isMountedRef.current) return;
+          toast.error(`🎙️ Gemini non riesce a interpretare: "${transcript}"`, { duration: 4000 });
+        }
+      } finally {
+        if (isMountedRef.current) setVoiceProcessing(false);
       }
     };
     rec.onerror = (e) => {
-      setVoiceListening(false);
+      if (isMountedRef.current) setVoiceListening(false);
       // 'no-speech' è normale (utente non ha parlato): non mostriamo errore
       if (e?.error && e.error !== 'no-speech' && e.error !== 'aborted') {
         toast.error('Microfono non disponibile');
       }
     };
-    rec.onend = () => { setVoiceListening(false); recognitionRef.current = null; };
+    rec.onend = () => {
+      if (isMountedRef.current) setVoiceListening(false);
+      recognitionRef.current = null;
+    };
     try {
       rec.start();
     } catch {
       // Già in ascolto o errore di avvio
-      setVoiceListening(false);
+      if (isMountedRef.current) setVoiceListening(false);
       recognitionRef.current = null;
     }
   };
@@ -769,10 +785,10 @@ export default function MatchPage() {
             <button
               className="btn btn-ghost btn-full mt-2"
               onClick={handleVoiceInput}
-              disabled={voiceListening}
+              disabled={voiceListening || voiceProcessing}
               aria-label="Registra gol con voce"
-              style={{ borderColor: voiceListening ? '#FC8181' : 'rgba(159,122,234,0.4)', color: voiceListening ? '#FC8181' : '#9F7AEA', fontSize: '0.85rem', animation: voiceListening ? 'pulse 1s infinite' : 'none' }}>
-              {voiceListening ? '🔴 In ascolto...' : '🎙️ Registra con voce'}
+              style={{ borderColor: (voiceListening || voiceProcessing) ? '#FC8181' : 'rgba(159,122,234,0.4)', color: (voiceListening || voiceProcessing) ? '#FC8181' : '#9F7AEA', fontSize: '0.85rem', animation: (voiceListening || voiceProcessing) ? 'pulse 1s infinite' : 'none' }}>
+              {voiceListening ? '🔴 In ascolto...' : voiceProcessing ? '⏳ Elaboro con Gemini...' : '🎙️ Registra con voce'}
             </button>
           )}
           {voiceTranscript && !voiceListening && (
