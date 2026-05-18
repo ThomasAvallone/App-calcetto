@@ -45,7 +45,7 @@ export default function GoalMinuteChart({ playerMatches, playerId }) {
           const pctAutogoals = maxTotal ? (b.autogoals / maxTotal) * 100 : 0;
           return (
             <div key={b.label} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span style={{ fontSize: '0.68rem', color: '#4A5568', minWidth: '28px', textAlign: 'right', flexShrink: 0 }}>
+              <span style={{ fontSize: '0.68rem', color: '#718096', minWidth: '28px', textAlign: 'right', flexShrink: 0 }}>
                 {b.label}
               </span>
               <div style={{ flex: 1, display: 'flex', height: 12, borderRadius: 4, overflow: 'hidden', background: '#2D3748' }}>

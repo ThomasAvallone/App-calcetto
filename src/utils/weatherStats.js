@@ -99,7 +99,7 @@ export function computePlayerWeatherStats(playerMatches, playerId) {
     else c.losses++;
     for (const ev of (m.events || [])) {
       if (ev.type === 'goal' && ev.scorerId === playerId) c.goals++;
-      if (ev.assistId === playerId) c.assists++;
+      if (ev.type === 'goal' && ev.assistId === playerId) c.assists++;
     }
   }
   return Object.values(conds).sort((a, b) => b.matches - a.matches);

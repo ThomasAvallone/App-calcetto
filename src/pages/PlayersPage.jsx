@@ -140,6 +140,13 @@ export default function PlayersPage() {
 
   useEffect(() => { setStatView('season'); }, [selectedPlayer]);
 
+  // Resetta selectedPlayer se il giocatore viene eliminato mentre la scheda è aperta
+  useEffect(() => {
+    if (selectedPlayer && !players.find(pl => pl.id === selectedPlayer)) {
+      setSelectedPlayer(null);
+    }
+  }, [players, selectedPlayer]);
+
   // Historical linking state
   const [linkedNames, setLinkedNames] = useState([]);
   const [showAllHistorical, setShowAllHistorical] = useState(false);
@@ -267,6 +274,8 @@ export default function PlayersPage() {
 
   const filtered = players.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
   const ranking = [...filtered].sort((a, b) => (b.powerIndex || 50) - (a.powerIndex || 50));
+  // Ranking globale (non filtrato dalla ricerca) — usato solo per il glow top-3 dell'arco PI
+  const globalRanking = [...players].sort((a, b) => (b.powerIndex || 50) - (a.powerIndex || 50));
 
   // Suggestions based on current form name
   const suggestions = useMemo(() => {
@@ -377,8 +386,8 @@ export default function PlayersPage() {
 
   if (selectedPlayer) {
     const p = players.find(pl => pl.id === selectedPlayer);
-    if (!p) { setSelectedPlayer(null); return null; }
-    const playerRank = ranking.findIndex(r => r.id === p.id);
+    if (!p) return null; // Giocatore eliminato: useEffect reimposta selectedPlayer
+    const playerRank = globalRanking.findIndex(r => r.id === p.id);
 
     const as = p.stats || {};
     const total = {
