@@ -9,7 +9,7 @@ import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 import WhatIfModal from '../components/WhatIfModal';
-import { safeDate } from '../utils/dateUtils';
+import { safeDate, getMs } from '../utils/dateUtils';
 import { CLR_WIN, CLR_LOSS, CLR_MUTED } from '../constants/colors';
 import { fetchWeatherForDate } from '../services/weatherService';
 
@@ -45,20 +45,21 @@ export default function DashboardPage() {
     return () => clearInterval(t);
   }, []);
 
-  const recentMatches = allMatches.filter(m => m.status !== 'scheduled').slice(0, 5);
-  const finishedMatches = allMatches.filter(m => m.status === 'finished');
-  const scheduledMatches = allMatches
+  const finishedMatches = useMemo(() => allMatches.filter(m => m.status === 'finished'), [allMatches]);
+  // Ultime Partite: solo quelle finite. Le 'active' sono già nel banner Live sopra (no doppione).
+  const recentMatches = useMemo(() => finishedMatches.slice(0, 5), [finishedMatches]);
+  const scheduledMatches = useMemo(() => allMatches
     .filter(m => m.status === 'scheduled')
-    .sort((a, b) => {
-      const aD = safeDate(a.date)?.getTime() || 0;
-      const bD = safeDate(b.date)?.getTime() || 0;
-      return aD - bD;
-    });
-  const nearestScheduled = scheduledMatches.find(m => {
+    .sort((a, b) => (safeDate(a.date)?.getTime() || 0) - (safeDate(b.date)?.getTime() || 0)),
+    [allMatches]);
+  const nearestScheduled = useMemo(() => scheduledMatches.find(m => {
     const d = safeDate(m.date);
-    return d && d.getTime() > Date.now();
-  });
-  const totalGoals = finishedMatches.reduce((s, m) => s + (m.redScore || 0) + (m.blueScore || 0), 0);
+    return d && d.getTime() > now;
+  }), [scheduledMatches, now]);
+  const totalGoals = useMemo(
+    () => finishedMatches.reduce((s, m) => s + (m.redScore || 0) + (m.blueScore || 0), 0),
+    [finishedMatches],
+  );
 
   useEffect(() => {
     if (!nearestScheduled) { setNextMatchWeather(null); return; }
@@ -67,35 +68,40 @@ export default function DashboardPage() {
     if (nearestScheduled.weather?.condition) {
       setNextMatchWeather(nearestScheduled.weather);
     }
-    fetchWeatherForDate(d).then(w => { if (w) setNextMatchWeather(w); });
+    // Cancellation flag: previene setState su componente smontato o sovrascritture out-of-order
+    // se l'utente cambia rapidamente partita programmata mentre il fetch è in volo.
+    let cancelled = false;
+    fetchWeatherForDate(d).then(w => { if (!cancelled && w) setNextMatchWeather(w); });
+    return () => { cancelled = true; };
   }, [nearestScheduled?.id]);
 
-  const seasonStartMs = (() => {
-    const now = new Date();
-    const year = now.getMonth() >= 8 ? now.getFullYear() : now.getFullYear() - 1;
+  const seasonStartMs = useMemo(() => {
+    const n = new Date();
+    const year = n.getMonth() >= 8 ? n.getFullYear() : n.getFullYear() - 1;
     return new Date(year, 8, 1).getTime();
-  })();
-  const getMs = d => d?.toMillis ? d.toMillis() : d ? new Date(d).getTime() : 0;
-  const seasonMatchesPerPlayer = new Set();
-  finishedMatches.forEach(m => {
-    if (getMs(m.date) >= seasonStartMs) {
-      [...(m.redTeam || []), ...(m.blueTeam || [])].forEach(p => seasonMatchesPerPlayer.add(p.id));
-    }
-  });
+  }, []);
+  const seasonMatchesPerPlayer = useMemo(() => {
+    const s = new Set();
+    finishedMatches.forEach(m => {
+      if (getMs(m.date) >= seasonStartMs) {
+        [...(m.redTeam || []), ...(m.blueTeam || [])].forEach(p => s.add(p.id));
+      }
+    });
+    return s;
+  }, [finishedMatches, seasonStartMs]);
 
   const ranking = getRanking().slice(0, 5);
 
   const coppaDiLatta = useMemo(() => {
-    const now = Date.now();
-    const cutoff = now - 30 * 24 * 60 * 60 * 1000;
-    const getMs = d => d?.toMillis ? d.toMillis() : d ? new Date(d).getTime() : 0;
+    const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
     const monthly = finishedMatches.filter(m => getMs(m.date) >= cutoff);
     if (monthly.length === 0) return null;
 
     const ps = {};
     for (const m of monthly) {
       for (const p of [...(m.redTeam || []), ...(m.blueTeam || [])]) {
-        if (!ps[p.id]) ps[p.id] = { name: p.name, goals: 0, assists: 0, autogoals: 0, gkGoalsConceded: 0 };
+        if (!ps[p.id]) ps[p.id] = { name: p.name, goals: 0, assists: 0, autogoals: 0, gkGoalsConceded: 0, matchesPlayed: 0 };
+        ps[p.id].matchesPlayed++;
       }
       for (const ev of (m.events || [])) {
         if (ev.type === 'goal') {
@@ -107,12 +113,16 @@ export default function DashboardPage() {
       }
     }
     const list = Object.values(ps);
-    const topScorer   = list.filter(p => p.goals > 0).sort((a, b) => b.goals - a.goals)[0] || null;
-    const topAssist   = list.filter(p => p.assists > 0).sort((a, b) => b.assists - a.assists)[0] || null;
+    // Soglie minime per evitare award banali (es. "Bomber con 1 gol")
+    const topScorer   = list.filter(p => p.goals   >= 3).sort((a, b) => b.goals   - a.goals  )[0] || null;
+    const topAssist   = list.filter(p => p.assists >= 3).sort((a, b) => b.assists - a.assists)[0] || null;
     const topAutogoal = list.filter(p => p.autogoals > 0).sort((a, b) => b.autogoals - a.autogoals)[0] || null;
-    const worstGk     = list
-      .filter(p => p.gkGoalsConceded >= 2)
-      .sort((a, b) => b.gkGoalsConceded - a.gkGoalsConceded)[0] || null;
+    // Peggior portiere: ranking per rate (gol/turno) invece di count assoluto, così
+    // chi gioca tante partite non "vince" automaticamente. Convenzione: 2 turni per partita.
+    const worstGk = list
+      .filter(p => p.matchesPlayed >= 2 && p.gkGoalsConceded >= 2)
+      .map(p => ({ ...p, gkRate: p.gkGoalsConceded / (p.matchesPlayed * 2) }))
+      .sort((a, b) => b.gkRate - a.gkRate)[0] || null;
     if (!topScorer && !topAssist && !topAutogoal && !worstGk) return null;
     return { topScorer, topAssist, topAutogoal, worstGk, matchCount: monthly.length };
   }, [finishedMatches]);
@@ -134,12 +144,12 @@ export default function DashboardPage() {
 
   // Imminent match: within -5min of the scheduled time, OR up to 2h past (admin may open the app late).
   // Banner only shown to admins because they're the only ones who can start a match.
-  const imminentMatch = isAdmin ? scheduledMatches.find(m => {
+  const imminentMatch = useMemo(() => isAdmin ? scheduledMatches.find(m => {
     const d = safeDate(m.date);
     if (!d) return false;
     const diff = d.getTime() - now;
     return diff <= 5 * 60 * 1000 && diff >= -2 * 60 * 60 * 1000;
-  }) : null;
+  }) : null, [isAdmin, scheduledMatches, now]);
   const imminentDate = imminentMatch ? safeDate(imminentMatch.date) : null;
   const imminentDiffMs = imminentDate ? imminentDate.getTime() - now : 0;
   const imminentIsLate = imminentDiffMs <= 0;
