@@ -396,6 +396,54 @@ DATI GIOCATORE: ${player.name}
   return callGemini(prompt, { temperature: 0.97, maxTokens: 120 });
 }
 
+// ─── Voice goal parsing (fallback AI) ────────────────────────────────────────
+// Chiamata solo quando il parser rule-based non riesce a identificare lo scorer.
+// Riceve la trascrizione vocale italiana + i roster delle due squadre.
+// Ritorna { isAutogoal, scorer, assist, gk, team } come parseVoiceGoal.
+export async function parseVoiceGoalWithAI(transcript, redTeam, blueTeam) {
+  const fmtTeam = (team) => team.map(p => `  - ${p.id}: ${p.name}`).join('\n');
+  const prompt = `Sei un assistente che estrae info da una trascrizione vocale italiana di un gol in una partita di calcetto.
+
+SQUADRE IN CAMPO:
+Rossa:
+${fmtTeam(redTeam)}
+Blu:
+${fmtTeam(blueTeam)}
+
+TRASCRIZIONE: "${transcript}"
+
+Identifica:
+- isAutogoal: true se è un autogol (es. "autogol", "autorete", "se l'è fatto in casa")
+- scorerId: ID del marcatore (esattamente uno degli ID elencati, oppure null se non identificabile)
+- assistId: ID di chi ha fatto assist (o null)
+- gkId: ID del portiere che ha subito il gol (o null)
+- team: "red" o "blue" della squadra del marcatore (per gli autogol è la squadra di chi ha sbagliato, non l'avversaria)
+
+Sii flessibile: gestisci frasi come "doppietta di Marco", "Luca ha appoggiato a Marco che ha segnato", "tiro di Marco, autorete del portiere".
+Se ci sono più nomi, scegli quello più coerente con la frase.
+Se non sei sicuro di un campo, ritorna null per quel campo (non inventare).
+
+Rispondi ESCLUSIVAMENTE con JSON valido (niente testo prima o dopo):
+{"isAutogoal":false,"scorerId":"...","assistId":null,"gkId":null,"team":"red"}`;
+
+  const raw = await callGemini(prompt, { temperature: 0.15, maxTokens: 200, tier: 'fast' });
+  const jsonMatch = raw.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error('Risposta AI non valida');
+  const parsed = JSON.parse(jsonMatch[0]);
+  // Resolve IDs → player objects, scartando ID inventati da Gemini
+  const playerById = Object.fromEntries(
+    [...redTeam, ...blueTeam].map(p => [p.id, p]),
+  );
+  const scorer = parsed.scorerId ? (playerById[parsed.scorerId] || null) : null;
+  const assist = parsed.assistId ? (playerById[parsed.assistId] || null) : null;
+  const gk     = parsed.gkId     ? (playerById[parsed.gkId]     || null) : null;
+  // Team: trust Gemini if scorer absent (raro), altrimenti deduci dallo scorer
+  const team = scorer
+    ? (redTeam.some(p => p.id === scorer.id) ? 'red' : 'blue')
+    : (parsed.team === 'red' || parsed.team === 'blue' ? parsed.team : null);
+  return { isAutogoal: !!parsed.isAutogoal, scorer, assist, gk, team };
+}
+
 // ─── Analisi trend giocatore ──────────────────────────────────────────────────
 // recentData: array di max 4 oggetti { result: 'W'|'L'|'D', goals, assists, autogoals }
 // weatherStats: array opzionale di { label, matches, wins, draws, losses, goals, assists }

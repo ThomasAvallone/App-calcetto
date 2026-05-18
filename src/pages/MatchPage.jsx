@@ -10,6 +10,7 @@ import { recalculatePlayerStats, updateMatch } from '../firebase/firestore';
 import { fetchWeatherForDate } from '../services/weatherService';
 import { waitUndo } from '../utils/waitUndo';
 import { parseVoiceGoal } from '../utils/voiceParser';
+import { parseVoiceGoalWithAI } from '../services/geminiService';
 import toast from 'react-hot-toast';
 
 const MATCH_DURATION = 60 * 60; // durata regolamentare (per progress bar)
@@ -169,6 +170,49 @@ export default function MatchPage() {
     voiceTranscriptTimerRef.current = setTimeout(() => setVoiceTranscript(''), 6000);
   };
 
+  // Esegue il parsed (rule-based o AI): flash + recordGoal/Autogoal o apre il modal GK.
+  const applyParsedGoal = async (parsed) => {
+    if (!parsed.isAutogoal) {
+      setGoalFlash(parsed.team);
+      setTimeout(() => setGoalFlash(null), 600);
+    } else {
+      setScoreShake(parsed.team);
+      setTimeout(() => setScoreShake(null), 450);
+    }
+    if (parsed.gk) {
+      const gkFields = { gkConcededId: parsed.gk.id, gkConcededName: parsed.gk.name };
+      try {
+        if (parsed.isAutogoal) {
+          await recordAutogoal({ team: parsed.team, scorerId: parsed.scorer.id, scorerName: parsed.scorer.name, ...gkFields });
+          toast.success(`🤦 Autogol di ${parsed.scorer.name} (🧤 ${parsed.gk.name})`);
+          navigator.vibrate?.([80]);
+        } else {
+          await recordGoal({
+            team: parsed.team, scorerId: parsed.scorer.id, scorerName: parsed.scorer.name, ...gkFields,
+            assistId: parsed.assist?.id || null, assistName: parsed.assist?.name || null,
+          });
+          const assistMsg = parsed.assist ? ` (assist: ${parsed.assist.name})` : '';
+          toast.success(`⚽ Gol di ${parsed.scorer.name}${assistMsg}`);
+          navigator.vibrate?.([100, 50, 100]);
+        }
+      } catch (err) {
+        toast.error('Errore registrazione: ' + (err?.message || 'riprova'));
+      }
+    } else {
+      // Manca portiere → apri solo il modal GK con scorer/assist precompilati
+      setPendingGoalData({
+        team: parsed.team,
+        scorerId: parsed.scorer.id,
+        scorerName: parsed.scorer.name,
+        ...(parsed.isAutogoal ? { _autogoal: true } : {
+          assistId: parsed.assist?.id || null,
+          assistName: parsed.assist?.name || null,
+        }),
+      });
+      setPendingGkConceded(true);
+    }
+  };
+
   const handleVoiceInput = () => {
     if (!hasSpeech || voiceListening) return;
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -183,51 +227,25 @@ export default function MatchPage() {
       const transcript = e.results[0][0].transcript;
       setVoiceTranscript(transcript);
       scheduleTranscriptClear();
+      // 1) Tentativo rule-based (istantaneo, offline-capable)
       const parsed = parseVoiceGoal(transcript, redTeam, blueTeam);
-      if (!parsed.scorer || !parsed.team) {
-        toast(`🎙️ Non ho capito il marcatore — riprova o usa i bottoni.\n"${transcript}"`, { duration: 4000 });
+      if (parsed.scorer && parsed.team) {
+        await applyParsedGoal(parsed);
         return;
       }
-      // Visual feedback immediato (overlay flash) anche per voice
-      if (!parsed.isAutogoal) {
-        setGoalFlash(parsed.team);
-        setTimeout(() => setGoalFlash(null), 600);
-      } else {
-        setScoreShake(parsed.team);
-        setTimeout(() => setScoreShake(null), 450);
-      }
-      if (parsed.gk) {
-        // Tutti i dati presenti → registra direttamente
-        const gkFields = { gkConcededId: parsed.gk.id, gkConcededName: parsed.gk.name };
-        try {
-          if (parsed.isAutogoal) {
-            await recordAutogoal({ team: parsed.team, scorerId: parsed.scorer.id, scorerName: parsed.scorer.name, ...gkFields });
-            toast.success(`🤦 Autogol di ${parsed.scorer.name} (🧤 ${parsed.gk.name})`);
-            navigator.vibrate?.([80]);
-          } else {
-            await recordGoal({
-              team: parsed.team, scorerId: parsed.scorer.id, scorerName: parsed.scorer.name, ...gkFields,
-              assistId: parsed.assist?.id || null, assistName: parsed.assist?.name || null,
-            });
-            const assistMsg = parsed.assist ? ` (assist: ${parsed.assist.name})` : '';
-            toast.success(`⚽ Gol di ${parsed.scorer.name}${assistMsg}`);
-            navigator.vibrate?.([100, 50, 100]);
-          }
-        } catch (err) {
-          toast.error('Errore registrazione: ' + (err?.message || 'riprova'));
+      // 2) Fallback Gemini per frasi creative / errori di trascrizione
+      const toastId = toast.loading('🤔 Chiedo a Gemini…');
+      try {
+        const aiParsed = await parseVoiceGoalWithAI(transcript, redTeam, blueTeam);
+        toast.dismiss(toastId);
+        if (!aiParsed.scorer || !aiParsed.team) {
+          toast(`🎙️ Non ho capito il marcatore — riprova o usa i bottoni.\n"${transcript}"`, { duration: 4000 });
+          return;
         }
-      } else {
-        // Manca portiere → apri solo il modal GK con scorer/assist precompilati
-        setPendingGoalData({
-          team: parsed.team,
-          scorerId: parsed.scorer.id,
-          scorerName: parsed.scorer.name,
-          ...(parsed.isAutogoal ? { _autogoal: true } : {
-            assistId: parsed.assist?.id || null,
-            assistName: parsed.assist?.name || null,
-          }),
-        });
-        setPendingGkConceded(true);
+        await applyParsedGoal(aiParsed);
+      } catch (err) {
+        toast.dismiss(toastId);
+        toast.error(`🎙️ Gemini non riesce a interpretare: "${transcript}"`, { duration: 4000 });
       }
     };
     rec.onerror = (e) => {
