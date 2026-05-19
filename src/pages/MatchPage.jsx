@@ -84,14 +84,21 @@ export default function MatchPage() {
   // Cleanup report modal timeout on unmount
   useEffect(() => () => { if (reportTimeoutRef.current) clearTimeout(reportTimeoutRef.current); }, []);
 
-  // Cleanup voice recognition + transcript-clear timer on unmount
-  useEffect(() => () => {
-    isMountedRef.current = false;
-    if (recognitionRef.current) {
-      try { recognitionRef.current.abort(); } catch { /* ignore */ }
-      recognitionRef.current = null;
-    }
-    if (voiceTranscriptTimerRef.current) clearTimeout(voiceTranscriptTimerRef.current);
+  // Cleanup voice recognition + transcript-clear timer on unmount.
+  // NOTA: re-set isMountedRef=true in setup è necessario in React StrictMode (dev),
+  // dove gli effect runnano due volte: dopo la prima cleanup (che mette il ref a
+  // false), il setup successivo deve ripristinarlo, altrimenti i callback async
+  // pensano che il componente sia smontato e fanno early-return silenzioso.
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (recognitionRef.current) {
+        try { recognitionRef.current.abort(); } catch { /* ignore */ }
+        recognitionRef.current = null;
+      }
+      if (voiceTranscriptTimerRef.current) clearTimeout(voiceTranscriptTimerRef.current);
+    };
   }, []);
 
   useEffect(() => {
@@ -289,11 +296,20 @@ export default function MatchPage() {
 
   const handleGoalTap = (team) => {
     if (!isAdmin || isFinished) return;
+    // Evita doppia registrazione se il flusso voce sta già scrivendo lo stesso gol.
+    if (voiceListening || voiceProcessing) {
+      toast('Attendere che il riconoscimento vocale termini', { icon: '⏳' });
+      return;
+    }
     setGoalTeam(team); setAutogoalMode(false); setSelectedScorer(null); setGoalScorerModal(true);
   };
 
   const handleAutogoalTap = (team) => {
     if (!isAdmin || isFinished) return;
+    if (voiceListening || voiceProcessing) {
+      toast('Attendere che il riconoscimento vocale termini', { icon: '⏳' });
+      return;
+    }
     setGoalTeam(team); setAutogoalMode(true); setSelectedScorer(null); setGoalScorerModal(true);
   };
 
@@ -772,14 +788,16 @@ export default function MatchPage() {
         <div className="card mb-4">
           <h3 className="mb-3" style={{ fontSize: '0.9rem', color: '#A0AEC0' }}>⚽ REGISTRA EVENTO</h3>
           <div className="grid-2 mb-2">
-            <button className="btn btn-lg" style={{ background: 'rgba(252,129,129,0.15)', border: '2px solid #FC8181', color: '#FC8181', borderRadius: '12px' }}
+            <button className="btn btn-lg" style={{ background: 'rgba(252,129,129,0.15)', border: '2px solid #FC8181', color: '#FC8181', borderRadius: '12px', opacity: (voiceListening || voiceProcessing) ? 0.5 : 1 }}
+              disabled={voiceListening || voiceProcessing}
               onClick={() => handleGoalTap('red')}>⚽ Gol Rossi</button>
-            <button className="btn btn-lg" style={{ background: 'rgba(99,179,237,0.15)', border: '2px solid #63B3ED', color: '#63B3ED', borderRadius: '12px' }}
+            <button className="btn btn-lg" style={{ background: 'rgba(99,179,237,0.15)', border: '2px solid #63B3ED', color: '#63B3ED', borderRadius: '12px', opacity: (voiceListening || voiceProcessing) ? 0.5 : 1 }}
+              disabled={voiceListening || voiceProcessing}
               onClick={() => handleGoalTap('blue')}>⚽ Gol Blu</button>
           </div>
           <div className="grid-2">
-            <button className="btn btn-ghost text-sm" onClick={() => handleAutogoalTap('red')} style={{ fontSize: '0.8rem' }}>🤦 Autogol Rossi</button>
-            <button className="btn btn-ghost text-sm" onClick={() => handleAutogoalTap('blue')} style={{ fontSize: '0.8rem' }}>🤦 Autogol Blu</button>
+            <button className="btn btn-ghost text-sm" disabled={voiceListening || voiceProcessing} onClick={() => handleAutogoalTap('red')} style={{ fontSize: '0.8rem', opacity: (voiceListening || voiceProcessing) ? 0.5 : 1 }}>🤦 Autogol Rossi</button>
+            <button className="btn btn-ghost text-sm" disabled={voiceListening || voiceProcessing} onClick={() => handleAutogoalTap('blue')} style={{ fontSize: '0.8rem', opacity: (voiceListening || voiceProcessing) ? 0.5 : 1 }}>🤦 Autogol Blu</button>
           </div>
           {hasSpeech && (
             <button

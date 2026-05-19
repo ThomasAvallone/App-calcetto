@@ -153,6 +153,10 @@ export async function recalculatePlayerStats(playerIds, { cachedMatches, cachedP
   }
 
   for (const pid of playerIds) {
+    // Skip giocatori non più esistenti (eliminati dopo essere comparsi in
+    // una partita): batch.update su un doc mancante farebbe abortire l'INTERO
+    // batch, perdendo gli update di tutti gli altri player.
+    if (!playerMap.has(pid)) continue;
     // All finished matches for this player, sorted newest first (from pre-built map)
     const playerMatches = playerMatchMap.get(pid) || [];
 

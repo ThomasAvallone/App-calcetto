@@ -93,7 +93,7 @@ const useMatchStore = create(
         if (timerState.isRunning) return;
         const newState = { ...timerState, isRunning: true, startTimestamp: Date.now() };
         set({ timerState: newState });
-        get()._syncTimer(newState).catch(() => {});
+        get()._syncTimer(newState).catch(e => console.warn('[timer-sync]', e?.code || e?.message || e));
       },
 
       pauseTimer() {
@@ -102,12 +102,16 @@ const useMatchStore = create(
         const elapsed = Date.now() - timerState.startTimestamp;
         const newState = { ...timerState, isRunning: false, startTimestamp: null, elapsedMs: timerState.elapsedMs + elapsed };
         set({ timerState: newState });
-        get()._syncTimer(newState).catch(() => {});
+        get()._syncTimer(newState).catch(e => console.warn('[timer-sync]', e?.code || e?.message || e));
       },
 
       getElapsedMs() {
         const { timerState } = get();
         if (!timerState.isRunning) return timerState.elapsedMs;
+        // Guard: stato corrotto (isRunning=true ma startTimestamp=null) farebbe
+        // tornare NaN, che a sua volta produrrebbe `minute: NaN` negli eventi
+        // → Firestore rifiuta NaN nei campi number.
+        if (!timerState.startTimestamp) return timerState.elapsedMs;
         return timerState.elapsedMs + (Date.now() - timerState.startTimestamp);
       },
 

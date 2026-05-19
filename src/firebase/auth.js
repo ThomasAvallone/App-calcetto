@@ -85,8 +85,11 @@ export async function findUserByEmail(email) {
 }
 
 // Imposta o resetta il link a un player. Passare null per scollegare.
-// Usa setDoc(merge) invece di updateDoc per tollerare il caso (raro) di
-// documento utente non ancora esistente: una update lancerebbe not-found.
+// Usa setDoc(merge) invece di updateDoc: se per qualche ragione il doc utente
+// fosse stato cancellato dopo essere stato letto, updateDoc lancerebbe
+// 'not-found' che è meno descrittivo di 'permission-denied' (che è quello
+// che setDoc(merge) lancia quando le rules respingono la create).
+// Caller deve prepararsi a catturare l'errore in entrambi i casi.
 export async function setUserLinkedPlayer(uid, playerId) {
   if (!uid) return;
   await setDoc(doc(db, 'users', uid), {
