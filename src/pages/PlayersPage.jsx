@@ -6,6 +6,7 @@ import { getAllUsers, findUserByEmail, setUserLinkedPlayer } from '../firebase/a
 import { useMatchesSubscription } from '../hooks/useMatchesSubscription';
 import { usePIConfig } from '../hooks/usePIConfig';
 import { HISTORICAL_SEASONS, suggestHistoricalNames, computeCumulativeStats, getUnlinkedNames } from '../data/historicalData';
+import { SEASON_PLAYER_MAP, getSeasonId } from '../utils/playerStats';
 import toast from 'react-hot-toast';
 import { getMs } from '../utils/dateUtils';
 import { RESULT_COLORS, CLR_WIN, CLR_DRAW, CLR_LOSS, CLR_MUTED, MEDAL_COLORS } from '../constants/colors';
@@ -22,26 +23,6 @@ import GoalMinuteChart from '../components/players/GoalMinuteChart';
 
 const ROLES = ['Portiere', 'Difensore', 'Centrocampista', 'Attaccante'];
 
-// Map seasonId → { PLAYERNAME_UPPER → { presenze, assist } }
-const SEASON_PLAYER_MAP = {};
-for (const season of HISTORICAL_SEASONS) {
-  SEASON_PLAYER_MAP[season.id] = {};
-  for (const sp of season.players) {
-    SEASON_PLAYER_MAP[season.id][sp.name.toUpperCase()] = {
-      presenze: sp.presenze || 0,
-      assist: sp.assist || 0,
-    };
-  }
-}
-
-function getSeasonId(dateVal) {
-  const d = dateVal?.toMillis ? new Date(dateVal.toMillis()) : new Date(dateVal);
-  const year = d.getFullYear();
-  const month = d.getMonth() + 1;
-  return month >= 8
-    ? `${year}-${String(year + 1).slice(2)}`
-    : `${year - 1}-${String(year).slice(2)}`;
-}
 
 function FormDots({ results, size = 9 }) {
   const colors = RESULT_COLORS;
