@@ -105,7 +105,7 @@ export default function DashboardPage() {
   const myStats = useMemo(() => {
     if (!myPlayer) return null;
     const pid = myPlayer.id;
-    // Last 5 W/D/L da tutte le partite finite (più rilevante della sola stagione)
+    // Last 5 W/D/L dalle partite app più recenti
     const playerMatches = finishedMatches
       .filter(m => [...(m.redTeam || []), ...(m.blueTeam || [])].some(p => p.id === pid))
       .sort((a, b) => getMs(b.date) - getMs(a.date));
@@ -115,24 +115,8 @@ export default function DashboardPage() {
       const their = inRed ? (m.blueScore ?? 0) : (m.redScore ?? 0);
       return my > their ? 'W' : my < their ? 'L' : 'D';
     });
-    // Stats stagione (include historical: stessa logica della scheda giocatore)
-    let sGoals = 0, sAssists = 0, sAutogoals = 0, sWins = 0, sDraws = 0, sLosses = 0, sMatches = 0;
-    for (const m of playerMatches) {
-      if (getMs(m.date) < seasonStartMs) continue;
-      sMatches++;
-      const inRed = (m.redTeam || []).some(p => p.id === pid);
-      const my = inRed ? (m.redScore ?? 0) : (m.blueScore ?? 0);
-      const their = inRed ? (m.blueScore ?? 0) : (m.redScore ?? 0);
-      if (my > their) sWins++; else if (my < their) sLosses++; else sDraws++;
-      for (const ev of (m.events || [])) {
-        if (ev.type === 'goal') {
-          if (ev.scorerId === pid) sGoals++;
-          if (ev.assistId === pid) sAssists++;
-        }
-        if (ev.type === 'autogoal' && ev.scorerId === pid) sAutogoals++;
-      }
-    }
-    // Stats all-time da myPlayer.stats (aggregato persistito, include storico)
+    // Stats all-time da myPlayer.stats (aggregato persistito, app + storico)
+    // Coerente con quello che vede la scheda giocatore nel toggle "All-time".
     const as = myPlayer.stats || {};
     const total = {
       matches: as.matches || 0,
@@ -146,13 +130,12 @@ export default function DashboardPage() {
     const winRate = total.matches > 0 ? Math.round((total.wins / total.matches) * 100) : 0;
     const goalsPerMatch = total.matches > 0 ? (total.goals / total.matches).toFixed(2) : '0.00';
     return {
-      season: { matches: sMatches, goals: sGoals, assists: sAssists, autogoals: sAutogoals, wins: sWins, draws: sDraws, losses: sLosses },
       total,
       winRate,
       goalsPerMatch,
       last5: [...last5Newest].reverse(),
     };
-  }, [myPlayer, finishedMatches, seasonStartMs]);
+  }, [myPlayer, finishedMatches]);
 
   const ranking = getRanking().slice(0, 5);
 
@@ -441,25 +424,22 @@ export default function DashboardPage() {
                 ))}
               </div>
 
-              {/* Riga 3: stagione corrente + autogol se presenti */}
+              {/* Riga 3: record V/P/S all-time (coerente con il totale partite della griglia) */}
               <div style={{
                 fontSize: '0.72rem',
                 color: 'var(--text-secondary)',
                 marginBottom: myStats.last5.length > 0 ? '0.55rem' : 0,
                 display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.4rem',
               }}>
-                <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', letterSpacing: '0.06em', fontWeight: 700 }}>STAGIONE</span>
+                <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', letterSpacing: '0.06em', fontWeight: 700 }}>RECORD</span>
                 <span>
-                  {myStats.season.matches}P · <span style={{ color: '#4FD1C5' }}>{myStats.season.goals}⚽</span>
-                  {' '}<span style={{ color: '#63B3ED' }}>{myStats.season.assists}🎯</span>
-                  {' · '}
-                  <span style={{ color: CLR_WIN }}>{myStats.season.wins}V</span>
-                  {' '}<span style={{ color: '#F6E05E' }}>{myStats.season.draws}P</span>
-                  {' '}<span style={{ color: CLR_LOSS }}>{myStats.season.losses}S</span>
+                  <span style={{ color: CLR_WIN, fontWeight: 700 }}>{myStats.total.wins}V</span>
+                  {' '}<span style={{ color: '#F6E05E', fontWeight: 700 }}>{myStats.total.draws}P</span>
+                  {' '}<span style={{ color: CLR_LOSS, fontWeight: 700 }}>{myStats.total.losses}S</span>
                 </span>
                 {myStats.total.autogoals > 0 && (
                   <span style={{ marginLeft: 'auto', color: '#FC8181', fontSize: '0.68rem' }}>
-                    {myStats.total.autogoals}🤦 totali
+                    {myStats.total.autogoals}🤦 autogol
                   </span>
                 )}
               </div>
