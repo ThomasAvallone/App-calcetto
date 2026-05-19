@@ -33,6 +33,9 @@ service cloud.firestore {
       // (migrazione one-time per l'owner dell'app) e solo cambiando il campo role.
       // Un admin normale può modificare solo i viewer (non altri admin né superadmin)
       // e non può promuovere nessuno a superadmin.
+      // Eccezione: qualsiasi admin può aggiornare linkedPlayerId/linkedPlayerUpdatedAt
+      // su qualsiasi utente (collegamento scheda giocatore → account Google).
+      // Non è un'escalation di privilegi: non tocca role, email o altri campi sensibili.
       allow update: if isSuperAdmin() ||
                        (isAuth() && request.auth.uid == userId &&
                         resource.data.role == 'admin' &&
@@ -41,7 +44,10 @@ service cloud.firestore {
                        (isAdmin() &&
                         resource.data.role != 'superadmin' &&
                         resource.data.role != 'admin' &&
-                        request.resource.data.role != 'superadmin');
+                        request.resource.data.role != 'superadmin') ||
+                       (isAdmin() &&
+                        request.resource.data.diff(resource.data).affectedKeys()
+                          .hasOnly(['linkedPlayerId', 'linkedPlayerUpdatedAt']));
 
       allow delete: if isSuperAdmin() ||
                        (isAdmin() && resource.data.role == 'viewer');
