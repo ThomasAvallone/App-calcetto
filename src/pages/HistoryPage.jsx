@@ -1,5 +1,8 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+
+const HISTORY_SS_KEY = 'history-page-state';
+const readSS = () => { try { return JSON.parse(sessionStorage.getItem(HISTORY_SS_KEY)) || {}; } catch { return {}; } };
 import { subscribeToMatches } from '../firebase/firestore';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -112,21 +115,51 @@ export default function HistoryPage() {
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
-  const [viewMode, setViewMode] = useState('list');
+  const scrollRestoredRef = useRef(false);
 
-  // Filter state
-  const [showFilters, setShowFilters] = useState(false);
-  const [seasonFilter, setSeasonFilter] = useState('all');
-  const [winnerFilter, setWinnerFilter] = useState('all');
-  const [playerFilter, setPlayerFilter] = useState('');
-  const [minGoals, setMinGoals] = useState('');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  // All UI state initialised from sessionStorage so navigating back preserves context
+  const [viewMode, setViewMode] = useState(() => readSS().viewMode || 'list');
+  const [showFilters, setShowFilters] = useState(() => !!readSS().showFilters);
+  const [seasonFilter, setSeasonFilter] = useState(() => readSS().seasonFilter || 'all');
+  const [winnerFilter, setWinnerFilter] = useState(() => readSS().winnerFilter || 'all');
+  const [playerFilter, setPlayerFilter] = useState(() => readSS().playerFilter || '');
+  const [minGoals, setMinGoals] = useState(() => readSS().minGoals || '');
+  const [dateFrom, setDateFrom] = useState(() => readSS().dateFrom || '');
+  const [dateTo, setDateTo] = useState(() => readSS().dateTo || '');
+
+  // Calendar state lifted here so it survives navigation (persisted alongside filters)
+  const _now = new Date();
+  const [calYear, setCalYear] = useState(() => readSS().calYear || _now.getFullYear());
+  const [calMonth, setCalMonth] = useState(() => readSS().calMonth ?? _now.getMonth());
+  const [calDay, setCalDay] = useState(() => readSS().calDay || null);
+
+  // Persist all UI state to sessionStorage whenever anything changes
+  useEffect(() => {
+    sessionStorage.setItem(HISTORY_SS_KEY, JSON.stringify({
+      viewMode, showFilters, seasonFilter, winnerFilter, playerFilter, minGoals, dateFrom, dateTo,
+      calYear, calMonth, calDay,
+    }));
+  }, [viewMode, showFilters, seasonFilter, winnerFilter, playerFilter, minGoals, dateFrom, dateTo, calYear, calMonth, calDay]);
 
   useEffect(() => {
     const unsub = subscribeToMatches(ms => { setMatches(ms); setLoading(false); });
     return unsub;
   }, []);
+
+  // Restore scroll position once after data loads (saved by goToMatch below)
+  useEffect(() => {
+    if (!loading && !scrollRestoredRef.current) {
+      scrollRestoredRef.current = true;
+      const savedY = readSS().scrollY;
+      if (savedY) requestAnimationFrame(() => window.scrollTo(0, savedY));
+    }
+  }, [loading]);
+
+  // Navigate saving current scroll so we can restore on back-navigation
+  const goToMatch = (path) => {
+    sessionStorage.setItem(HISTORY_SS_KEY, JSON.stringify({ ...readSS(), scrollY: window.scrollY }));
+    navigate(path);
+  };
 
   const scheduled = matches.filter(m => m.status === 'scheduled');
   const active = matches.filter(m => m.status !== 'finished' && m.status !== 'scheduled');
@@ -240,7 +273,7 @@ export default function HistoryPage() {
       )}
 
       {viewMode === 'calendar' ? (
-        <div className="stagger-2"><CalendarView matches={matches} onNavigate={navigate} /></div>
+        <div className="stagger-2"><CalendarView matches={matches} onNavigate={goToMatch} year={calYear} month={calMonth} selectedDay={calDay} onYearChange={setCalYear} onMonthChange={setCalMonth} onDayChange={setCalDay} /></div>
       ) : (
       <div className="stagger-2">
 
@@ -398,7 +431,7 @@ export default function HistoryPage() {
           )}
 
           {filteredFinished.length > 0 ? (
-            filteredFinished.map(m => <MatchCard key={m.id} match={m} onClick={() => navigate(`/history/${m.id}`)} />)
+            filteredFinished.map(m => <MatchCard key={m.id} match={m} onClick={() => goToMatch(`/history/${m.id}`)} />)
           ) : (
             <div style={{ textAlign: 'center', padding: '2rem 1rem', color: '#718096' }}>
               <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🔍</div>
@@ -421,12 +454,7 @@ export default function HistoryPage() {
 
 const MONTH_NAMES = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
 
-function CalendarView({ matches, onNavigate }) {
-  const now = new Date();
-  const [year, setYear] = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth());
-  const [selectedDay, setSelectedDay] = useState(null);
-
+function CalendarView({ matches, onNavigate, year, month, selectedDay, onYearChange, onMonthChange, onDayChange }) {
   const matchesByDay = useMemo(() => {
     const map = {};
     for (const m of matches) {
@@ -454,8 +482,8 @@ function CalendarView({ matches, onNavigate }) {
   const today = new Date();
   const isToday = d => d && today.getFullYear() === year && today.getMonth() === month && today.getDate() === d;
 
-  const prevMonth = () => { setSelectedDay(null); if (month === 0) { setYear(y => y - 1); setMonth(11); } else setMonth(m => m - 1); };
-  const nextMonth = () => { setSelectedDay(null); if (month === 11) { setYear(y => y + 1); setMonth(0); } else setMonth(m => m + 1); };
+  const prevMonth = () => { onDayChange(null); if (month === 0) { onYearChange(year - 1); onMonthChange(11); } else onMonthChange(month - 1); };
+  const nextMonth = () => { onDayChange(null); if (month === 11) { onYearChange(year + 1); onMonthChange(0); } else onMonthChange(month + 1); };
 
   const selectedMatches = selectedDay ? (matchesByDay[selectedDay] || []) : [];
 
@@ -488,7 +516,7 @@ function CalendarView({ matches, onNavigate }) {
             return (
               <div
                 key={di}
-                onClick={() => day && hasMatch && setSelectedDay(isSelected ? null : day)}
+                onClick={() => day && hasMatch && onDayChange(isSelected ? null : day)}
                 style={{
                   minHeight: '42px', borderRadius: '6px', padding: '0.25rem 0',
                   background: isSelected ? 'rgba(79,209,197,0.18)' : hasMatch ? 'rgba(79,209,197,0.06)' : 'transparent',
