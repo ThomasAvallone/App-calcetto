@@ -105,7 +105,7 @@ export default function DashboardPage() {
   const myStats = useMemo(() => {
     if (!myPlayer) return null;
     const pid = myPlayer.id;
-    // Last 5 W/D/L dalle partite app più recenti
+    // Tutte le partite finite a cui ha partecipato, dalla più recente
     const playerMatches = finishedMatches
       .filter(m => [...(m.redTeam || []), ...(m.blueTeam || [])].some(p => p.id === pid))
       .sort((a, b) => getMs(b.date) - getMs(a.date));
@@ -115,8 +115,27 @@ export default function DashboardPage() {
       const their = inRed ? (m.blueScore ?? 0) : (m.redScore ?? 0);
       return my > their ? 'W' : my < their ? 'L' : 'D';
     });
+    // Stats stagione corrente (stessa logica di playerSeasonStats in PlayersPage:
+    // ogni partita con date >= seasonStartMs in cui il player è in un team).
+    let sMatches = 0, sGoals = 0, sAssists = 0, sAutogoals = 0, sWins = 0, sDraws = 0, sLosses = 0;
+    for (const m of playerMatches) {
+      if (getMs(m.date) < seasonStartMs) continue;
+      sMatches++;
+      const inRed = (m.redTeam || []).some(p => p.id === pid);
+      const my = inRed ? (m.redScore ?? 0) : (m.blueScore ?? 0);
+      const their = inRed ? (m.blueScore ?? 0) : (m.redScore ?? 0);
+      if (my > their) sWins++; else if (my < their) sLosses++; else sDraws++;
+      for (const ev of (m.events || [])) {
+        if (ev.type === 'goal') {
+          if (ev.scorerId === pid) sGoals++;
+          if (ev.assistId === pid) sAssists++;
+        }
+        if (ev.type === 'autogoal' && ev.scorerId === pid) sAutogoals++;
+      }
+    }
+    const season = { matches: sMatches, goals: sGoals, assists: sAssists, autogoals: sAutogoals, wins: sWins, draws: sDraws, losses: sLosses };
+    const seasonWinRate = season.matches > 0 ? Math.round((season.wins / season.matches) * 100) : 0;
     // Stats all-time da myPlayer.stats (aggregato persistito, app + storico)
-    // Coerente con quello che vede la scheda giocatore nel toggle "All-time".
     const as = myPlayer.stats || {};
     const total = {
       matches: as.matches || 0,
@@ -127,15 +146,17 @@ export default function DashboardPage() {
       draws: as.draws || 0,
       losses: as.losses || 0,
     };
-    const winRate = total.matches > 0 ? Math.round((total.wins / total.matches) * 100) : 0;
-    const goalsPerMatch = total.matches > 0 ? (total.goals / total.matches).toFixed(2) : '0.00';
+    const totalWinRate = total.matches > 0 ? Math.round((total.wins / total.matches) * 100) : 0;
+    const goalsPerMatch = season.matches > 0 ? (season.goals / season.matches).toFixed(2) : '0.00';
     return {
+      season,
+      seasonWinRate,
       total,
-      winRate,
+      totalWinRate,
       goalsPerMatch,
       last5: [...last5Newest].reverse(),
     };
-  }, [myPlayer, finishedMatches]);
+  }, [myPlayer, finishedMatches, seasonStartMs]);
 
   const ranking = getRanking().slice(0, 5);
 
@@ -322,7 +343,7 @@ export default function DashboardPage() {
               Il tuo profilo non è ancora collegato a una scheda giocatore.
               Chiedi all'admin di collegare il tuo account Google nella tua scheda.
             </p>
-          ) : myStats.total.matches === 0 ? (
+          ) : myStats.total.matches === 0 && myStats.season.matches === 0 ? (
             <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', margin: 0 }}>
               <strong style={{ color: 'var(--text-primary)' }}>{myPlayer.name}</strong> · ancora nessuna partita giocata
             </p>
@@ -394,54 +415,95 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {/* Riga 2: griglia 4 mini-stat all-time */}
+              {/* Riga 2: griglia 4 mini-stat STAGIONE (prominente) */}
+              <div style={{
+                display: 'flex', alignItems: 'baseline', gap: '0.5rem',
+                marginBottom: '0.4rem',
+              }}>
+                <span style={{ fontSize: '0.62rem', color: 'var(--teal)', letterSpacing: '0.08em', fontWeight: 800 }}>
+                  📅 STAGIONE
+                </span>
+                <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)' }}>
+                  {(() => {
+                    const startY = new Date(seasonStartMs).getFullYear();
+                    return `set ${String(startY).slice(-2)} → ago ${String(startY + 1).slice(-2)}`;
+                  })()}
+                </span>
+              </div>
               <div style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(4, 1fr)',
                 gap: '0.4rem',
-                marginBottom: '0.65rem',
+                marginBottom: '0.6rem',
               }}>
                 {[
-                  { val: myStats.total.matches,    lbl: 'PARTITE',  color: 'var(--text-primary)' },
-                  { val: myStats.total.goals,      lbl: 'GOL',      color: '#4FD1C5' },
-                  { val: myStats.total.assists,    lbl: 'ASSIST',   color: '#63B3ED' },
-                  { val: `${myStats.winRate}%`,    lbl: 'WIN RATE', color: myStats.winRate >= 60 ? CLR_WIN : myStats.winRate >= 40 ? '#F6E05E' : CLR_LOSS },
+                  { val: myStats.season.matches,         lbl: 'PARTITE',  color: 'var(--text-primary)' },
+                  { val: myStats.season.goals,           lbl: 'GOL',      color: '#4FD1C5' },
+                  { val: myStats.season.assists,         lbl: 'ASSIST',   color: '#63B3ED' },
+                  { val: `${myStats.seasonWinRate}%`,    lbl: 'WIN RATE', color: myStats.seasonWinRate >= 60 ? CLR_WIN : myStats.seasonWinRate >= 40 ? '#F6E05E' : CLR_LOSS },
                 ].map((s, i) => (
                   <div key={i} style={{
-                    background: 'rgba(26,32,44,0.45)',
+                    background: 'rgba(79,209,197,0.08)',
                     borderRadius: '8px',
-                    padding: '0.45rem 0.3rem',
+                    padding: '0.5rem 0.3rem',
                     textAlign: 'center',
-                    border: '1px solid rgba(74,85,104,0.25)',
+                    border: '1px solid rgba(79,209,197,0.2)',
                   }}>
-                    <div style={{ fontSize: '1.05rem', fontWeight: 800, color: s.color, lineHeight: 1.1, letterSpacing: '-0.3px' }}>
+                    <div style={{ fontSize: '1.15rem', fontWeight: 800, color: s.color, lineHeight: 1.1, letterSpacing: '-0.3px' }}>
                       {s.val}
                     </div>
-                    <div style={{ fontSize: '0.58rem', color: 'var(--text-muted)', letterSpacing: '0.05em', marginTop: '0.15rem' }}>
+                    <div style={{ fontSize: '0.58rem', color: 'var(--text-muted)', letterSpacing: '0.05em', marginTop: '0.2rem' }}>
                       {s.lbl}
                     </div>
                   </div>
                 ))}
               </div>
 
-              {/* Riga 3: record V/P/S all-time (coerente con il totale partite della griglia) */}
+              {/* Riga 3: record V/P/S stagione */}
               <div style={{
                 fontSize: '0.72rem',
                 color: 'var(--text-secondary)',
-                marginBottom: myStats.last5.length > 0 ? '0.55rem' : 0,
+                marginBottom: '0.55rem',
                 display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.4rem',
               }}>
-                <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', letterSpacing: '0.06em', fontWeight: 700 }}>RECORD</span>
                 <span>
-                  <span style={{ color: CLR_WIN, fontWeight: 700 }}>{myStats.total.wins}V</span>
-                  {' '}<span style={{ color: '#F6E05E', fontWeight: 700 }}>{myStats.total.draws}P</span>
-                  {' '}<span style={{ color: CLR_LOSS, fontWeight: 700 }}>{myStats.total.losses}S</span>
+                  <span style={{ color: CLR_WIN, fontWeight: 700 }}>{myStats.season.wins}V</span>
+                  {' '}<span style={{ color: '#F6E05E', fontWeight: 700 }}>{myStats.season.draws}P</span>
+                  {' '}<span style={{ color: CLR_LOSS, fontWeight: 700 }}>{myStats.season.losses}S</span>
+                  {' '}<span style={{ color: 'var(--text-muted)', fontSize: '0.68rem' }}>in stagione</span>
                 </span>
-                {myStats.total.autogoals > 0 && (
+                {myStats.season.autogoals > 0 && (
                   <span style={{ marginLeft: 'auto', color: '#FC8181', fontSize: '0.68rem' }}>
-                    {myStats.total.autogoals}🤦 autogol
+                    {myStats.season.autogoals}🤦
                   </span>
                 )}
+              </div>
+
+              {/* Riga 4: all-time secondario - banda compatta */}
+              <div style={{
+                fontSize: '0.7rem',
+                color: 'var(--text-muted)',
+                background: 'rgba(26,32,44,0.4)',
+                borderRadius: '6px',
+                padding: '0.4rem 0.6rem',
+                marginBottom: myStats.last5.length > 0 ? '0.55rem' : 0,
+                display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.55rem',
+              }}>
+                <span style={{ fontSize: '0.58rem', color: 'var(--text-muted)', letterSpacing: '0.06em', fontWeight: 700, opacity: 0.85 }}>
+                  📊 ALL-TIME
+                </span>
+                <span>
+                  <strong style={{ color: 'var(--text-secondary)' }}>{myStats.total.matches}</strong>P ·
+                  {' '}<span style={{ color: '#4FD1C5' }}>{myStats.total.goals}⚽</span>
+                  {' '}<span style={{ color: '#63B3ED' }}>{myStats.total.assists}🎯</span>
+                  {' · '}
+                  <span style={{ color: CLR_WIN }}>{myStats.total.wins}V</span>
+                  {' '}<span style={{ color: '#F6E05E' }}>{myStats.total.draws}P</span>
+                  {' '}<span style={{ color: CLR_LOSS }}>{myStats.total.losses}S</span>
+                </span>
+                <span style={{ marginLeft: 'auto', fontWeight: 700, color: myStats.totalWinRate >= 60 ? CLR_WIN : myStats.totalWinRate >= 40 ? '#F6E05E' : CLR_LOSS }}>
+                  {myStats.totalWinRate}%
+                </span>
               </div>
 
               {/* Riga 4: forma + rating */}
