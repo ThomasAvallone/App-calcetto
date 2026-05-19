@@ -148,19 +148,6 @@ export default function PlayersPage() {
     }
   }, [players, selectedPlayer]);
 
-  // Backfill linkedEmail nel form quando allUsers finisce di caricare DOPO openForm.
-  // Senza questo, l'admin potrebbe aprire la modifica con allUsers vuoto, vedere
-  // linkedEmail='' e salvare scollegando per sbaglio un utente effettivamente collegato.
-  // Guard: solo se linkedEmail è ancora vuoto (rispetta una scollega manuale via ✕).
-  useEffect(() => {
-    if (!showForm || !editId || !isAdmin || !allUsersLoaded) return;
-    if (form.linkedEmail) return; // Admin ha già impostato/clearato manualmente
-    const linkedUser = allUsers.find(u => u.linkedPlayerId === editId);
-    if (linkedUser?.email) {
-      setForm(prev => ({ ...prev, linkedEmail: linkedUser.email }));
-    }
-  }, [showForm, editId, isAdmin, allUsersLoaded]);
-
   // Historical linking state
   const [linkedNames, setLinkedNames] = useState([]);
   const [showAllHistorical, setShowAllHistorical] = useState(false);
@@ -175,6 +162,21 @@ export default function PlayersPage() {
     getAllUsers().then(us => { setAllUsers(us); setAllUsersLoaded(true); }).catch(() => {});
   };
   useEffect(() => { refreshAllUsers(); }, [isAdmin]);
+
+  // Backfill linkedEmail nel form quando allUsers finisce di caricare DOPO openForm.
+  // Senza questo, l'admin potrebbe aprire la modifica con allUsers vuoto, vedere
+  // linkedEmail='' e salvare scollegando per sbaglio un utente effettivamente collegato.
+  // Guard: solo se linkedEmail è ancora vuoto (rispetta una scollega manuale via ✕).
+  // NOTA: deve stare DOPO la dichiarazione di allUsers/allUsersLoaded — altrimenti
+  // TDZ sulle deps ("Cannot access 'R' before initialization" in build minificata).
+  useEffect(() => {
+    if (!showForm || !editId || !isAdmin || !allUsersLoaded) return;
+    if (form.linkedEmail) return; // Admin ha già impostato/clearato manualmente
+    const linkedUser = allUsers.find(u => u.linkedPlayerId === editId);
+    if (linkedUser?.email) {
+      setForm(prev => ({ ...prev, linkedEmail: linkedUser.email }));
+    }
+  }, [showForm, editId, isAdmin, allUsersLoaded]);
 
   const allMatches = useMatchesSubscription();
 
