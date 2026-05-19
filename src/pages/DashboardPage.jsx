@@ -105,7 +105,6 @@ export default function DashboardPage() {
   const myStats = useMemo(() => {
     if (!myPlayer) return null;
     const pid = myPlayer.id;
-    let goals = 0, assists = 0, autogoals = 0, wins = 0, draws = 0, losses = 0, matches = 0;
     // Last 5 W/D/L da tutte le partite finite (più rilevante della sola stagione)
     const playerMatches = finishedMatches
       .filter(m => [...(m.redTeam || []), ...(m.blueTeam || [])].some(p => p.id === pid))
@@ -116,23 +115,43 @@ export default function DashboardPage() {
       const their = inRed ? (m.blueScore ?? 0) : (m.redScore ?? 0);
       return my > their ? 'W' : my < their ? 'L' : 'D';
     });
-    // Stats stagione
+    // Stats stagione (include historical: stessa logica della scheda giocatore)
+    let sGoals = 0, sAssists = 0, sAutogoals = 0, sWins = 0, sDraws = 0, sLosses = 0, sMatches = 0;
     for (const m of playerMatches) {
-      if (m.isHistorical || getMs(m.date) < seasonStartMs) continue;
-      matches++;
+      if (getMs(m.date) < seasonStartMs) continue;
+      sMatches++;
       const inRed = (m.redTeam || []).some(p => p.id === pid);
       const my = inRed ? (m.redScore ?? 0) : (m.blueScore ?? 0);
       const their = inRed ? (m.blueScore ?? 0) : (m.redScore ?? 0);
-      if (my > their) wins++; else if (my < their) losses++; else draws++;
+      if (my > their) sWins++; else if (my < their) sLosses++; else sDraws++;
       for (const ev of (m.events || [])) {
         if (ev.type === 'goal') {
-          if (ev.scorerId === pid) goals++;
-          if (ev.assistId === pid) assists++;
+          if (ev.scorerId === pid) sGoals++;
+          if (ev.assistId === pid) sAssists++;
         }
-        if (ev.type === 'autogoal' && ev.scorerId === pid) autogoals++;
+        if (ev.type === 'autogoal' && ev.scorerId === pid) sAutogoals++;
       }
     }
-    return { matches, goals, assists, autogoals, wins, draws, losses, last5: [...last5Newest].reverse() };
+    // Stats all-time da myPlayer.stats (aggregato persistito, include storico)
+    const as = myPlayer.stats || {};
+    const total = {
+      matches: as.matches || 0,
+      goals: as.goals || 0,
+      assists: as.assists || 0,
+      autogoals: as.autogoals || 0,
+      wins: as.wins || 0,
+      draws: as.draws || 0,
+      losses: as.losses || 0,
+    };
+    const winRate = total.matches > 0 ? Math.round((total.wins / total.matches) * 100) : 0;
+    const goalsPerMatch = total.matches > 0 ? (total.goals / total.matches).toFixed(2) : '0.00';
+    return {
+      season: { matches: sMatches, goals: sGoals, assists: sAssists, autogoals: sAutogoals, wins: sWins, draws: sDraws, losses: sLosses },
+      total,
+      winRate,
+      goalsPerMatch,
+      last5: [...last5Newest].reverse(),
+    };
   }, [myPlayer, finishedMatches, seasonStartMs]);
 
   const ranking = getRanking().slice(0, 5);
@@ -320,26 +339,27 @@ export default function DashboardPage() {
               Il tuo profilo non è ancora collegato a una scheda giocatore.
               Chiedi all'admin di collegare il tuo account Google nella tua scheda.
             </p>
-          ) : myStats.matches === 0 ? (
+          ) : myStats.total.matches === 0 ? (
             <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', margin: 0 }}>
-              <strong style={{ color: 'var(--text-primary)' }}>{myPlayer.name}</strong> · ancora nessuna partita giocata in questa stagione
+              <strong style={{ color: 'var(--text-primary)' }}>{myPlayer.name}</strong> · ancora nessuna partita giocata
             </p>
           ) : (
             <>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', marginBottom: '0.6rem' }}>
+              {/* Riga 1: avatar + nome/ruolo + stat principali in griglia */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', marginBottom: '0.7rem' }}>
                 {(() => {
                   const photo = myPlayer.photoURL || '';
                   const isImage = photo && !/(youtube\.com|youtu\.be)/.test(photo) && !/\.(mp4|webm|mov|ogg)(\?|$)/i.test(photo);
                   const avatarColor = AVATAR_COLORS[(myPlayer.name || '?').charCodeAt(0) % AVATAR_COLORS.length];
                   const pi = (myPlayer.powerIndex || 50).toFixed(1);
                   return (
-                    <div style={{ position: 'relative', width: 60, height: 60, flexShrink: 0 }}>
+                    <div style={{ position: 'relative', width: 64, height: 64, flexShrink: 0 }}>
                       {isImage ? (
                         <img
                           src={photo}
                           alt={myPlayer.name}
                           style={{
-                            width: 60, height: 60, borderRadius: '50%',
+                            width: 64, height: 64, borderRadius: '50%',
                             objectFit: 'cover', objectPosition: 'top center',
                             border: '2px solid rgba(79,209,197,0.6)',
                             boxShadow: '0 0 14px rgba(79,209,197,0.25)',
@@ -350,11 +370,11 @@ export default function DashboardPage() {
                         />
                       ) : (
                         <div style={{
-                          width: 60, height: 60, borderRadius: '50%',
+                          width: 64, height: 64, borderRadius: '50%',
                           background: avatarColor + '22',
                           border: `2px solid ${avatarColor}`,
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontWeight: 800, fontSize: '1.55rem',
+                          fontWeight: 800, fontSize: '1.7rem',
                           color: avatarColor,
                           boxShadow: '0 0 14px rgba(79,209,197,0.15)',
                         }}>
@@ -365,7 +385,7 @@ export default function DashboardPage() {
                         position: 'absolute', bottom: -4, right: -6,
                         background: 'linear-gradient(135deg, #2D3748, #1A202C)',
                         color: 'var(--teal)',
-                        fontSize: '0.68rem', fontWeight: 800,
+                        fontSize: '0.7rem', fontWeight: 800,
                         padding: '2px 6px',
                         borderRadius: '8px',
                         border: '1px solid rgba(79,209,197,0.5)',
@@ -378,26 +398,76 @@ export default function DashboardPage() {
                     </div>
                   );
                 })()}
-                <div style={{ flex: 1, fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.45, minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.15rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.95rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: '0.15rem' }}>
                     {myPlayer.name}
                   </div>
-                  <div>
-                    {myStats.matches}P · <span style={{ color: '#4FD1C5' }}>{myStats.goals}⚽</span>
-                    {' '}<span style={{ color: '#63B3ED' }}>{myStats.assists}🎯</span>
-                    {myStats.autogoals > 0 && <> · <span style={{ color: '#FC8181' }}>{myStats.autogoals}🤦</span></>}
-                  </div>
-                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>
-                    <span style={{ color: CLR_WIN }}>{myStats.wins}V</span>
-                    {' '}<span style={{ color: '#F6E05E' }}>{myStats.draws}P</span>
-                    {' '}<span style={{ color: CLR_LOSS }}>{myStats.losses}S</span>
-                    {' '}in stagione
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', letterSpacing: '0.02em' }}>
+                    {(() => {
+                      const icons = { 'Portiere': '🧤', 'Difensore': '🛡️', 'Centrocampista': '⚙️', 'Attaccante': '⚡' };
+                      return `${icons[myPlayer.primaryRole] || '⚽'} ${myPlayer.primaryRole || 'Giocatore'}`;
+                    })()}
                   </div>
                 </div>
               </div>
+
+              {/* Riga 2: griglia 4 mini-stat all-time */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(4, 1fr)',
+                gap: '0.4rem',
+                marginBottom: '0.65rem',
+              }}>
+                {[
+                  { val: myStats.total.matches,    lbl: 'PARTITE',  color: 'var(--text-primary)' },
+                  { val: myStats.total.goals,      lbl: 'GOL',      color: '#4FD1C5' },
+                  { val: myStats.total.assists,    lbl: 'ASSIST',   color: '#63B3ED' },
+                  { val: `${myStats.winRate}%`,    lbl: 'WIN RATE', color: myStats.winRate >= 60 ? CLR_WIN : myStats.winRate >= 40 ? '#F6E05E' : CLR_LOSS },
+                ].map((s, i) => (
+                  <div key={i} style={{
+                    background: 'rgba(26,32,44,0.45)',
+                    borderRadius: '8px',
+                    padding: '0.45rem 0.3rem',
+                    textAlign: 'center',
+                    border: '1px solid rgba(74,85,104,0.25)',
+                  }}>
+                    <div style={{ fontSize: '1.05rem', fontWeight: 800, color: s.color, lineHeight: 1.1, letterSpacing: '-0.3px' }}>
+                      {s.val}
+                    </div>
+                    <div style={{ fontSize: '0.58rem', color: 'var(--text-muted)', letterSpacing: '0.05em', marginTop: '0.15rem' }}>
+                      {s.lbl}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Riga 3: stagione corrente + autogol se presenti */}
+              <div style={{
+                fontSize: '0.72rem',
+                color: 'var(--text-secondary)',
+                marginBottom: myStats.last5.length > 0 ? '0.55rem' : 0,
+                display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.4rem',
+              }}>
+                <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', letterSpacing: '0.06em', fontWeight: 700 }}>STAGIONE</span>
+                <span>
+                  {myStats.season.matches}P · <span style={{ color: '#4FD1C5' }}>{myStats.season.goals}⚽</span>
+                  {' '}<span style={{ color: '#63B3ED' }}>{myStats.season.assists}🎯</span>
+                  {' · '}
+                  <span style={{ color: CLR_WIN }}>{myStats.season.wins}V</span>
+                  {' '}<span style={{ color: '#F6E05E' }}>{myStats.season.draws}P</span>
+                  {' '}<span style={{ color: CLR_LOSS }}>{myStats.season.losses}S</span>
+                </span>
+                {myStats.total.autogoals > 0 && (
+                  <span style={{ marginLeft: 'auto', color: '#FC8181', fontSize: '0.68rem' }}>
+                    {myStats.total.autogoals}🤦 totali
+                  </span>
+                )}
+              </div>
+
+              {/* Riga 4: forma + rating */}
               {myStats.last5.length > 0 && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', letterSpacing: '0.04em' }}>FORMA</span>
+                  <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', letterSpacing: '0.06em', fontWeight: 700 }}>FORMA</span>
                   <div style={{ display: 'flex', gap: '4px' }}>
                     {myStats.last5.map((r, i) => (
                       <div key={i} title={r === 'W' ? 'Vittoria' : r === 'D' ? 'Pareggio' : 'Sconfitta'} style={{
@@ -407,14 +477,16 @@ export default function DashboardPage() {
                       }} />
                     ))}
                   </div>
+                  <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>
+                    {myStats.goalsPerMatch} gol/partita
+                  </span>
                   {isAdmin && myPlayer.recentForm && (
                     <span style={{
-                      marginLeft: 'auto',
                       fontSize: '0.72rem',
                       fontWeight: 700,
                       color: myPlayer.recentForm.avg >= 7 ? CLR_WIN : myPlayer.recentForm.avg >= 5 ? '#F6E05E' : CLR_LOSS,
                     }}>
-                      ⭐ {myPlayer.recentForm.avg.toFixed(1)}/10
+                      ⭐ {myPlayer.recentForm.avg.toFixed(1)}
                     </span>
                   )}
                 </div>
