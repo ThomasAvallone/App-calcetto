@@ -12,6 +12,22 @@ import WhatIfModal from '../components/WhatIfModal';
 import { safeDate, getMs } from '../utils/dateUtils';
 import { CLR_WIN, CLR_LOSS, CLR_MUTED, RESULT_COLORS, AVATAR_COLORS } from '../constants/colors';
 import { fetchWeatherForDate } from '../services/weatherService';
+import { HISTORICAL_SEASONS } from '../data/historicalData';
+
+// Mirror of PlayersPage SEASON_PLAYER_MAP — maps season id → player name → stats
+const SEASON_PLAYER_MAP_DASH = {};
+for (const season of HISTORICAL_SEASONS) {
+  SEASON_PLAYER_MAP_DASH[season.id] = {};
+  for (const sp of season.players) {
+    SEASON_PLAYER_MAP_DASH[season.id][sp.name.toUpperCase()] = { presenze: sp.presenze, assist: sp.assist || 0 };
+  }
+}
+function getSeasonIdDash(dateVal) {
+  const d = dateVal?.toMillis ? new Date(dateVal.toMillis()) : new Date(dateVal);
+  const year = d.getFullYear();
+  const month = d.getMonth() + 1;
+  return month >= 8 ? `${year}-${String(year + 1).slice(2)}` : `${year - 1}-${String(year).slice(2)}`;
+}
 
 function getCountdown(dateStr) {
   if (!dateStr) return null;
@@ -118,6 +134,7 @@ export default function DashboardPage() {
     // Stats stagione corrente (stessa logica di playerSeasonStats in PlayersPage:
     // ogni partita con date >= seasonStartMs in cui il player è in un team).
     let sMatches = 0, sGoals = 0, sAssists = 0, sAutogoals = 0, sWins = 0, sDraws = 0, sLosses = 0;
+    const histBySeason = {};
     for (const m of playerMatches) {
       if (getMs(m.date) < seasonStartMs) continue;
       sMatches++;
@@ -132,6 +149,22 @@ export default function DashboardPage() {
         }
         if (ev.type === 'autogoal' && ev.scorerId === pid) sAutogoals++;
       }
+      if (m.isHistorical) {
+        const sid = getSeasonIdDash(m.date);
+        histBySeason[sid] = (histBySeason[sid] || 0) + 1;
+      }
+    }
+    // Prorate assists for historical matches in the current season (same logic as PlayersPage)
+    const histNames = (myPlayer.historicalNames || []).map(n => n.toUpperCase());
+    for (const [sid, countInPeriod] of Object.entries(histBySeason)) {
+      const seasonData = SEASON_PLAYER_MAP_DASH[sid];
+      if (!seasonData) continue;
+      let pData = null;
+      for (const name of histNames) {
+        if (seasonData[name]) { pData = seasonData[name]; break; }
+      }
+      if (!pData || !pData.presenze || !pData.assist) continue;
+      sAssists += Math.round(pData.assist * (countInPeriod / pData.presenze));
     }
     const season = { matches: sMatches, goals: sGoals, assists: sAssists, autogoals: sAutogoals, wins: sWins, draws: sDraws, losses: sLosses };
     const seasonWinRate = season.matches > 0 ? Math.round((season.wins / season.matches) * 100) : 0;
@@ -139,7 +172,7 @@ export default function DashboardPage() {
     // NON si usa myPlayer.stats perché include assist storici prorati da
     // historicalData.js (es. Thomas ha 239 assist storici stimati che
     // gonfierebbero il totale). Gli eventi storici importati hanno scorerId
-    // (gol) ma NON assistId → la somma è pulita e coerente con la stagione.
+    // (gol) ma NON assistId → conteggio pulito.
     let tMatches = 0, tGoals = 0, tAssists = 0, tAutogoals = 0, tWins = 0, tDraws = 0, tLosses = 0;
     for (const m of playerMatches) {
       tMatches++;
