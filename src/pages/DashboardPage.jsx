@@ -135,17 +135,27 @@ export default function DashboardPage() {
     }
     const season = { matches: sMatches, goals: sGoals, assists: sAssists, autogoals: sAutogoals, wins: sWins, draws: sDraws, losses: sLosses };
     const seasonWinRate = season.matches > 0 ? Math.round((season.wins / season.matches) * 100) : 0;
-    // Stats all-time da myPlayer.stats (aggregato persistito, app + storico)
-    const as = myPlayer.stats || {};
-    const total = {
-      matches: as.matches || 0,
-      goals: as.goals || 0,
-      assists: as.assists || 0,
-      autogoals: as.autogoals || 0,
-      wins: as.wins || 0,
-      draws: as.draws || 0,
-      losses: as.losses || 0,
-    };
+    // Stats all-time da eventi diretti su TUTTE le partite del player.
+    // NON si usa myPlayer.stats perché include assist storici prorati da
+    // historicalData.js (es. Thomas ha 239 assist storici stimati che
+    // gonfierebbero il totale). Gli eventi storici importati hanno scorerId
+    // (gol) ma NON assistId → la somma è pulita e coerente con la stagione.
+    let tMatches = 0, tGoals = 0, tAssists = 0, tAutogoals = 0, tWins = 0, tDraws = 0, tLosses = 0;
+    for (const m of playerMatches) {
+      tMatches++;
+      const inRedT = (m.redTeam || []).some(p => p.id === pid);
+      const myT = inRedT ? (m.redScore ?? 0) : (m.blueScore ?? 0);
+      const theirT = inRedT ? (m.blueScore ?? 0) : (m.redScore ?? 0);
+      if (myT > theirT) tWins++; else if (myT < theirT) tLosses++; else tDraws++;
+      for (const ev of (m.events || [])) {
+        if (ev.type === 'goal') {
+          if (ev.scorerId === pid) tGoals++;
+          if (ev.assistId === pid) tAssists++;
+        }
+        if (ev.type === 'autogoal' && ev.scorerId === pid) tAutogoals++;
+      }
+    }
+    const total = { matches: tMatches, goals: tGoals, assists: tAssists, autogoals: tAutogoals, wins: tWins, draws: tDraws, losses: tLosses };
     const totalWinRate = total.matches > 0 ? Math.round((total.wins / total.matches) * 100) : 0;
     const goalsPerMatch = season.matches > 0 ? (season.goals / season.matches).toFixed(2) : '0.00';
     return {
