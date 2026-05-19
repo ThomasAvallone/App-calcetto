@@ -197,7 +197,19 @@ export default function MatchDetailPage() {
 
   useEffect(() => {
     setLoading(true);
-    getMatch(id).then(m => { setMatch(m); setLoading(false); }).catch(() => setLoading(false));
+    getMatch(id).then(m => {
+      if (m?.events?.some(e => !e.id)) {
+        // Migrazione one-shot: eventi importati prima del fix mancano di id univoco,
+        // causando match multipli nell'editor. Assegniamo UUID in memoria e
+        // riscriviamo su Firestore (best-effort, fail silenzioso per i non-admin).
+        const fixed = { ...m, events: m.events.map(e => e.id ? e : { id: crypto.randomUUID(), ...e }) };
+        updateMatch(id, { events: fixed.events }).catch(() => {});
+        setMatch(fixed);
+      } else {
+        setMatch(m);
+      }
+      setLoading(false);
+    }).catch(() => setLoading(false));
     getMatches().then(ms => { allMatchesRef.current = ms; });
   }, [id]);
 
