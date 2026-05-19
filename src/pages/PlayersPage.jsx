@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import usePlayersStore from '../store/playersStore';
 import useAuthStore, { selectIsAdmin } from '../store/authStore';
 import { computeCombinedPowerIndex, recalculatePlayerStats, updatePlayer } from '../firebase/firestore';
-import { getAllUsers, findUserByEmail, setUserLinkedPlayer } from '../firebase/auth';
+import { getAllUsers, findUserByEmail, setUserLinkedPlayer, findUsersByLinkedPlayer } from '../firebase/auth';
 import { useMatchesSubscription } from '../hooks/useMatchesSubscription';
 import { usePIConfig } from '../hooks/usePIConfig';
 import { HISTORICAL_SEASONS, suggestHistoricalNames, computeCumulativeStats, getUnlinkedNames } from '../data/historicalData';
@@ -353,20 +353,32 @@ export default function PlayersPage() {
       }
     }
 
-    // Unlink del vecchio utente se esisteva (e non è lo stesso del nuovo)
+    // Unlink del vecchio utente se esisteva (e non è lo stesso del nuovo).
+    // L'unlink è best-effort: se fallisce (permessi, doc già rimosso) non
+    // blocchiamo il link nuovo, ma logghiamo a console per debugging.
     if (oldLower) {
       const oldUser = await findUserByEmail(oldLower);
       if (oldUser && oldUser.linkedPlayerId === playerId && (!newUser || newUser.uid !== oldUser.uid)) {
-        await setUserLinkedPlayer(oldUser.uid, null);
+        try {
+          await setUserLinkedPlayer(oldUser.uid, null);
+        } catch (err) {
+          console.warn('Impossibile scollegare il vecchio utente:', err);
+        }
       }
     }
 
-    // Link del nuovo utente
+    // Link del nuovo utente. Questo invece è critico: se fallisce, l'utente
+    // non vedrà la sua scheda → toast esplicito e propagate l'errore.
     if (newUser) {
       if (newUser.linkedPlayerId && newUser.linkedPlayerId !== playerId) {
         toast(`⚠️ Email era già collegata a un altro giocatore — link sostituito`, { duration: 4000 });
       }
-      await setUserLinkedPlayer(newUser.uid, playerId);
+      try {
+        await setUserLinkedPlayer(newUser.uid, playerId);
+      } catch (err) {
+        toast.error(`Impossibile collegare ${newLower}: ${err.code === 'permission-denied' ? 'permessi insufficienti' : err.message}`);
+        throw err;
+      }
     }
     return true;
   };
@@ -443,13 +455,16 @@ export default function PlayersPage() {
 
   const handleDelete = async (p) => {
     if (!window.confirm(`Eliminare ${p.name}? Questa azione è irreversibile.`)) return;
-    // Cleanup link utente prima di eliminare il player, altrimenti users/{uid}.linkedPlayerId
-    // resta orfano puntando a un player inesistente (l'utente vedrà "Profilo non collegato")
-    if (isAdmin) {
-      const linkedUser = allUsers.find(u => u.linkedPlayerId === p.id);
-      if (linkedUser) await setUserLinkedPlayer(linkedUser.uid, null).catch(() => {});
-    }
     await removePlayer(p.id);
+    // Cleanup link utenti orfani DOPO il delete riuscito.
+    // Query Firestore in tempo reale (non la cache allUsers, che può essere stale
+    // se nel frattempo un altro admin ha collegato un nuovo utente al player).
+    if (isAdmin) {
+      try {
+        const linked = await findUsersByLinkedPlayer(p.id);
+        await Promise.all(linked.map(u => setUserLinkedPlayer(u.uid, null).catch(() => {})));
+      } catch { /* cleanup best-effort: il player è già eliminato */ }
+    }
     toast.success(`${p.name} eliminato`);
     setSelectedPlayer(null);
     refreshAllUsers();

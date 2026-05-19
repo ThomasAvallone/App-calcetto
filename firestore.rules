@@ -46,6 +46,8 @@ service cloud.firestore {
                         resource.data.role != 'admin' &&
                         request.resource.data.role != 'superadmin') ||
                        (isAdmin() &&
+                        resource.data.role != 'superadmin' &&
+                        request.resource.data.diff(resource.data).affectedKeys().size() > 0 &&
                         request.resource.data.diff(resource.data).affectedKeys()
                           .hasOnly(['linkedPlayerId', 'linkedPlayerUpdatedAt']));
 

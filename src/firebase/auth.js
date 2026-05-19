@@ -85,10 +85,21 @@ export async function findUserByEmail(email) {
 }
 
 // Imposta o resetta il link a un player. Passare null per scollegare.
+// Usa setDoc(merge) invece di updateDoc per tollerare il caso (raro) di
+// documento utente non ancora esistente: una update lancerebbe not-found.
 export async function setUserLinkedPlayer(uid, playerId) {
   if (!uid) return;
-  await updateDoc(doc(db, 'users', uid), {
+  await setDoc(doc(db, 'users', uid), {
     linkedPlayerId: playerId || null,
     linkedPlayerUpdatedAt: serverTimestamp(),
-  });
+  }, { merge: true });
+}
+
+// Restituisce tutti gli utenti collegati a un dato playerId.
+// Usata in fase di delete del player per ripulire eventuali link orfani.
+// Query indicizzata: niente scan dell'intera collection.
+export async function findUsersByLinkedPlayer(playerId) {
+  if (!playerId) return [];
+  const snap = await getDocs(query(collection(db, 'users'), where('linkedPlayerId', '==', playerId)));
+  return snap.docs.map(d => ({ uid: d.id, ...d.data() }));
 }
