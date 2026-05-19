@@ -10,7 +10,7 @@ import { it } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 import WhatIfModal from '../components/WhatIfModal';
 import { safeDate, getMs } from '../utils/dateUtils';
-import { CLR_WIN, CLR_LOSS, CLR_MUTED, RESULT_COLORS } from '../constants/colors';
+import { CLR_WIN, CLR_LOSS, CLR_MUTED, RESULT_COLORS, AVATAR_COLORS } from '../constants/colors';
 import { fetchWeatherForDate } from '../services/weatherService';
 
 function getCountdown(dateStr) {
@@ -327,19 +327,59 @@ export default function DashboardPage() {
           ) : (
             <>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', marginBottom: '0.6rem' }}>
-                <div style={{
-                  fontSize: '1.4rem',
-                  fontWeight: 800,
-                  color: 'var(--teal)',
-                  lineHeight: 1,
-                  letterSpacing: '-0.5px',
-                  textShadow: '0 0 12px rgba(79,209,197,0.4)',
-                  minWidth: '52px',
-                }}>
-                  {(myPlayer.powerIndex || 50).toFixed(1)}
-                </div>
-                <div style={{ flex: 1, fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>
-                  <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.15rem' }}>
+                {(() => {
+                  const photo = myPlayer.photoURL || '';
+                  const isImage = photo && !/(youtube\.com|youtu\.be)/.test(photo) && !/\.(mp4|webm|mov|ogg)(\?|$)/i.test(photo);
+                  const avatarColor = AVATAR_COLORS[(myPlayer.name || '?').charCodeAt(0) % AVATAR_COLORS.length];
+                  const pi = (myPlayer.powerIndex || 50).toFixed(1);
+                  return (
+                    <div style={{ position: 'relative', width: 60, height: 60, flexShrink: 0 }}>
+                      {isImage ? (
+                        <img
+                          src={photo}
+                          alt={myPlayer.name}
+                          style={{
+                            width: 60, height: 60, borderRadius: '50%',
+                            objectFit: 'cover', objectPosition: 'top center',
+                            border: '2px solid rgba(79,209,197,0.6)',
+                            boxShadow: '0 0 14px rgba(79,209,197,0.25)',
+                            background: '#1A202C',
+                            display: 'block',
+                          }}
+                          onError={e => { e.currentTarget.style.display = 'none'; }}
+                        />
+                      ) : (
+                        <div style={{
+                          width: 60, height: 60, borderRadius: '50%',
+                          background: avatarColor + '22',
+                          border: `2px solid ${avatarColor}`,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontWeight: 800, fontSize: '1.55rem',
+                          color: avatarColor,
+                          boxShadow: '0 0 14px rgba(79,209,197,0.15)',
+                        }}>
+                          {(myPlayer.name || '?')[0].toUpperCase()}
+                        </div>
+                      )}
+                      <div style={{
+                        position: 'absolute', bottom: -4, right: -6,
+                        background: 'linear-gradient(135deg, #2D3748, #1A202C)',
+                        color: 'var(--teal)',
+                        fontSize: '0.68rem', fontWeight: 800,
+                        padding: '2px 6px',
+                        borderRadius: '8px',
+                        border: '1px solid rgba(79,209,197,0.5)',
+                        boxShadow: '0 2px 6px rgba(0,0,0,0.4)',
+                        letterSpacing: '-0.3px',
+                        lineHeight: 1.1,
+                      }}>
+                        {pi}
+                      </div>
+                    </div>
+                  );
+                })()}
+                <div style={{ flex: 1, fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.45, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.15rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {myPlayer.name}
                   </div>
                   <div>
