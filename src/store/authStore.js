@@ -1,11 +1,12 @@
 import { create } from 'zustand';
-import { subscribeToAuth, getUserRole, loginWithGoogle, logout } from '../firebase/auth';
+import { subscribeToAuth, getUserDoc, loginWithGoogle, logout } from '../firebase/auth';
 
 const SUPER_ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL || '';
 
 const useAuthStore = create((set, get) => ({
   user: null,
   role: null,
+  linkedPlayerId: null,
   loading: true,
   error: null,
 
@@ -16,10 +17,17 @@ const useAuthStore = create((set, get) => ({
     subscribeToAuth(async (firebaseUser) => {
       let newState;
       if (firebaseUser) {
-        const role = await getUserRole(firebaseUser.uid);
-        newState = { user: firebaseUser, role, loading: false, error: null };
+        // Una sola read del doc utente per ricavare role + linkedPlayerId
+        const userDoc = await getUserDoc(firebaseUser.uid).catch(() => null);
+        newState = {
+          user: firebaseUser,
+          role: userDoc?.role || null,
+          linkedPlayerId: userDoc?.linkedPlayerId || null,
+          loading: false,
+          error: null,
+        };
       } else {
-        newState = { user: null, role: null, loading: false };
+        newState = { user: null, role: null, linkedPlayerId: null, loading: false };
       }
       const elapsed = Date.now() - startTime;
       const remaining = GIF_DURATION_MS - elapsed;
@@ -43,7 +51,7 @@ const useAuthStore = create((set, get) => ({
 
   async logout() {
     await logout();
-    set({ user: null, role: null });
+    set({ user: null, role: null, linkedPlayerId: null });
   },
 }));
 

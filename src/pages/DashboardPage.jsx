@@ -10,7 +10,7 @@ import { it } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 import WhatIfModal from '../components/WhatIfModal';
 import { safeDate, getMs } from '../utils/dateUtils';
-import { CLR_WIN, CLR_LOSS, CLR_MUTED } from '../constants/colors';
+import { CLR_WIN, CLR_LOSS, CLR_MUTED, RESULT_COLORS } from '../constants/colors';
 import { fetchWeatherForDate } from '../services/weatherService';
 
 function getCountdown(dateStr) {
@@ -28,6 +28,7 @@ function getCountdown(dateStr) {
 
 export default function DashboardPage() {
   const { user, logout } = useAuthStore();
+  const linkedPlayerId = useAuthStore(s => s.linkedPlayerId);
   const { players, getRanking } = usePlayersStore();
   const { activeMatchId, loadMatch } = useMatchStore();
   const navigate = useNavigate();
@@ -89,6 +90,50 @@ export default function DashboardPage() {
     });
     return s;
   }, [finishedMatches, seasonStartMs]);
+
+  // ── "I tuoi numeri": stats stagione + ranking globale per il player collegato all'utente
+  const myPlayer = useMemo(
+    () => linkedPlayerId ? players.find(p => p.id === linkedPlayerId) || null : null,
+    [linkedPlayerId, players],
+  );
+  const myRank = useMemo(() => {
+    if (!myPlayer) return null;
+    const sorted = [...players].sort((a, b) => (b.powerIndex || 50) - (a.powerIndex || 50));
+    const idx = sorted.findIndex(p => p.id === myPlayer.id);
+    return idx >= 0 ? idx + 1 : null;
+  }, [players, myPlayer]);
+  const myStats = useMemo(() => {
+    if (!myPlayer) return null;
+    const pid = myPlayer.id;
+    let goals = 0, assists = 0, autogoals = 0, wins = 0, draws = 0, losses = 0, matches = 0;
+    // Last 5 W/D/L da tutte le partite finite (più rilevante della sola stagione)
+    const playerMatches = finishedMatches
+      .filter(m => [...(m.redTeam || []), ...(m.blueTeam || [])].some(p => p.id === pid))
+      .sort((a, b) => getMs(b.date) - getMs(a.date));
+    const last5Newest = playerMatches.slice(0, 5).map(m => {
+      const inRed = (m.redTeam || []).some(p => p.id === pid);
+      const my = inRed ? (m.redScore ?? 0) : (m.blueScore ?? 0);
+      const their = inRed ? (m.blueScore ?? 0) : (m.redScore ?? 0);
+      return my > their ? 'W' : my < their ? 'L' : 'D';
+    });
+    // Stats stagione
+    for (const m of playerMatches) {
+      if (m.isHistorical || getMs(m.date) < seasonStartMs) continue;
+      matches++;
+      const inRed = (m.redTeam || []).some(p => p.id === pid);
+      const my = inRed ? (m.redScore ?? 0) : (m.blueScore ?? 0);
+      const their = inRed ? (m.blueScore ?? 0) : (m.redScore ?? 0);
+      if (my > their) wins++; else if (my < their) losses++; else draws++;
+      for (const ev of (m.events || [])) {
+        if (ev.type === 'goal') {
+          if (ev.scorerId === pid) goals++;
+          if (ev.assistId === pid) assists++;
+        }
+        if (ev.type === 'autogoal' && ev.scorerId === pid) autogoals++;
+      }
+    }
+    return { matches, goals, assists, autogoals, wins, draws, losses, last5: [...last5Newest].reverse() };
+  }, [myPlayer, finishedMatches, seasonStartMs]);
 
   const ranking = getRanking().slice(0, 5);
 
@@ -249,6 +294,93 @@ export default function DashboardPage() {
           >
             {starting ? '⏳ Avvio in corso...' : '▶️ AVVIA PARTITA'}
           </button>
+        </div>
+      )}
+
+      {/* ── "I tuoi numeri": card personale per l'utente collegato a un player ── */}
+      {user && (
+        <div className="card mb-4 stagger-2" style={{
+          background: myPlayer
+            ? 'linear-gradient(135deg, rgba(79,209,197,0.08) 0%, rgba(99,179,237,0.04) 100%)'
+            : 'rgba(74,85,104,0.08)',
+          border: `1px solid ${myPlayer ? 'rgba(79,209,197,0.25)' : 'rgba(74,85,104,0.3)'}`,
+        }}>
+          <div className="flex items-center justify-between mb-2">
+            <h3 style={{ fontSize: '0.92rem', margin: 0, color: myPlayer ? 'var(--teal)' : 'var(--text-muted)' }}>
+              👤 I tuoi numeri
+            </h3>
+            {myPlayer && myRank && (
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                #{myRank} nel ranking
+              </span>
+            )}
+          </div>
+          {!myPlayer ? (
+            <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
+              Il tuo profilo non è ancora collegato a una scheda giocatore.
+              Chiedi all'admin di collegare il tuo account Google nella tua scheda.
+            </p>
+          ) : myStats.matches === 0 ? (
+            <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', margin: 0 }}>
+              <strong style={{ color: 'var(--text-primary)' }}>{myPlayer.name}</strong> · ancora nessuna partita giocata in questa stagione
+            </p>
+          ) : (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', marginBottom: '0.6rem' }}>
+                <div style={{
+                  fontSize: '1.4rem',
+                  fontWeight: 800,
+                  color: 'var(--teal)',
+                  lineHeight: 1,
+                  letterSpacing: '-0.5px',
+                  textShadow: '0 0 12px rgba(79,209,197,0.4)',
+                  minWidth: '52px',
+                }}>
+                  {(myPlayer.powerIndex || 50).toFixed(1)}
+                </div>
+                <div style={{ flex: 1, fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>
+                  <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.15rem' }}>
+                    {myPlayer.name}
+                  </div>
+                  <div>
+                    {myStats.matches}P · <span style={{ color: '#4FD1C5' }}>{myStats.goals}⚽</span>
+                    {' '}<span style={{ color: '#63B3ED' }}>{myStats.assists}🎯</span>
+                    {myStats.autogoals > 0 && <> · <span style={{ color: '#FC8181' }}>{myStats.autogoals}🤦</span></>}
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>
+                    <span style={{ color: CLR_WIN }}>{myStats.wins}V</span>
+                    {' '}<span style={{ color: '#F6E05E' }}>{myStats.draws}P</span>
+                    {' '}<span style={{ color: CLR_LOSS }}>{myStats.losses}S</span>
+                    {' '}in stagione
+                  </div>
+                </div>
+              </div>
+              {myStats.last5.length > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', letterSpacing: '0.04em' }}>FORMA</span>
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    {myStats.last5.map((r, i) => (
+                      <div key={i} title={r === 'W' ? 'Vittoria' : r === 'D' ? 'Pareggio' : 'Sconfitta'} style={{
+                        width: 9, height: 9, borderRadius: '50%',
+                        background: RESULT_COLORS[r],
+                        opacity: 0.4 + (i / Math.max(myStats.last5.length - 1, 1)) * 0.6,
+                      }} />
+                    ))}
+                  </div>
+                  {isAdmin && myPlayer.recentForm && (
+                    <span style={{
+                      marginLeft: 'auto',
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                      color: myPlayer.recentForm.avg >= 7 ? CLR_WIN : myPlayer.recentForm.avg >= 5 ? '#F6E05E' : CLR_LOSS,
+                    }}>
+                      ⭐ {myPlayer.recentForm.avg.toFixed(1)}/10
+                    </span>
+                  )}
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
 

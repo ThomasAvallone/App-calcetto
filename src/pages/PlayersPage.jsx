@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import usePlayersStore from '../store/playersStore';
 import useAuthStore, { selectIsAdmin } from '../store/authStore';
 import { computeCombinedPowerIndex, recalculatePlayerStats, updatePlayer } from '../firebase/firestore';
+import { getAllUsers, findUserByEmail, setUserLinkedPlayer } from '../firebase/auth';
 import { useMatchesSubscription } from '../hooks/useMatchesSubscription';
 import { usePIConfig } from '../hooks/usePIConfig';
 import { HISTORICAL_SEASONS, suggestHistoricalNames, computeCumulativeStats, getUnlinkedNames } from '../data/historicalData';
@@ -59,7 +60,7 @@ function FormDots({ results, size = 9 }) {
   );
 }
 
-const defaultForm = { name: '', primaryRole: 'Centrocampista', secondaryRole: '', photoURL: '' };
+const defaultForm = { name: '', primaryRole: 'Centrocampista', secondaryRole: '', photoURL: '', linkedEmail: '' };
 
 /** Riconosce uno swipe da sinistra a destra e chiama onSwipe (back gesture mobile) */
 function SwipeBack({ onSwipe, children }) {
@@ -147,10 +148,33 @@ export default function PlayersPage() {
     }
   }, [players, selectedPlayer]);
 
+  // Backfill linkedEmail nel form quando allUsers finisce di caricare DOPO openForm.
+  // Senza questo, l'admin potrebbe aprire la modifica con allUsers vuoto, vedere
+  // linkedEmail='' e salvare scollegando per sbaglio un utente effettivamente collegato.
+  // Guard: solo se linkedEmail è ancora vuoto (rispetta una scollega manuale via ✕).
+  useEffect(() => {
+    if (!showForm || !editId || !isAdmin || !allUsersLoaded) return;
+    if (form.linkedEmail) return; // Admin ha già impostato/clearato manualmente
+    const linkedUser = allUsers.find(u => u.linkedPlayerId === editId);
+    if (linkedUser?.email) {
+      setForm(prev => ({ ...prev, linkedEmail: linkedUser.email }));
+    }
+  }, [showForm, editId, isAdmin, allUsersLoaded]);
+
   // Historical linking state
   const [linkedNames, setLinkedNames] = useState([]);
   const [showAllHistorical, setShowAllHistorical] = useState(false);
   const [historicalSearch, setHistoricalSearch] = useState('');
+
+  // Lista utenti registrati per il dropdown di collegamento email→player (admin-only).
+  // Le rule limitano la lettura agli admin, quindi i viewer non lo ricevono comunque.
+  const [allUsers, setAllUsers] = useState([]);
+  const [allUsersLoaded, setAllUsersLoaded] = useState(false);
+  const refreshAllUsers = () => {
+    if (!isAdmin) return;
+    getAllUsers().then(us => { setAllUsers(us); setAllUsersLoaded(true); }).catch(() => {});
+  };
+  useEffect(() => { refreshAllUsers(); }, [isAdmin]);
 
   const allMatches = useMatchesSubscription();
 
@@ -299,7 +323,15 @@ export default function PlayersPage() {
 
   const openForm = (p = null) => {
     if (p) {
-      setForm({ name: p.name, primaryRole: p.primaryRole || 'Centrocampista', secondaryRole: p.secondaryRole || '', photoURL: p.photoURL || '' });
+      // Recupera l'email collegata dalla cache utenti (admin only)
+      const linkedUser = allUsers.find(u => u.linkedPlayerId === p.id);
+      setForm({
+        name: p.name,
+        primaryRole: p.primaryRole || 'Centrocampista',
+        secondaryRole: p.secondaryRole || '',
+        photoURL: p.photoURL || '',
+        linkedEmail: linkedUser?.email || '',
+      });
       setEditId(p.id);
       setLinkedNames(p.historicalNames || []);
     } else {
@@ -320,6 +352,42 @@ export default function PlayersPage() {
     setShowAllHistorical(false);
   };
 
+  // Sincronizza il link email→player. Valida prima dell'unlink per non perdere
+  // il vecchio link se la nuova email non esiste come utente registrato.
+  // Ritorna true se il link è stato cambiato (per refresh della cache).
+  const syncEmailLink = async (playerId, newEmail, oldEmail) => {
+    const newLower = (newEmail || '').trim().toLowerCase();
+    const oldLower = (oldEmail || '').trim().toLowerCase();
+    if (newLower === oldLower) return false;
+
+    // Validazione: se c'è una nuova email, deve essere un utente registrato
+    let newUser = null;
+    if (newLower) {
+      newUser = await findUserByEmail(newLower);
+      if (!newUser) {
+        toast.error(`Email "${newLower}" non registrata — l'utente deve fare prima il login Google`);
+        return false; // Non scolleghiamo il vecchio link
+      }
+    }
+
+    // Unlink del vecchio utente se esisteva (e non è lo stesso del nuovo)
+    if (oldLower) {
+      const oldUser = await findUserByEmail(oldLower);
+      if (oldUser && oldUser.linkedPlayerId === playerId && (!newUser || newUser.uid !== oldUser.uid)) {
+        await setUserLinkedPlayer(oldUser.uid, null);
+      }
+    }
+
+    // Link del nuovo utente
+    if (newUser) {
+      if (newUser.linkedPlayerId && newUser.linkedPlayerId !== playerId) {
+        toast(`⚠️ Email era già collegata a un altro giocatore — link sostituito`, { duration: 4000 });
+      }
+      await setUserLinkedPlayer(newUser.uid, playerId);
+    }
+    return true;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.name.trim()) { toast.error('Inserisci il nome'); return; }
@@ -337,6 +405,9 @@ export default function PlayersPage() {
         historicalStats,
       };
 
+      let savedPlayerId = editId;
+      let linkChanged = false;
+
       if (editId) {
         // Recompute power index combining app stats + new historicalStats
         const currentPlayer = players.find(p => p.id === editId);
@@ -344,17 +415,27 @@ export default function PlayersPage() {
         await editPlayer(editId, { ...playerData, powerIndex: pi });
         // Recalculate p.stats so all-time leaderboard picks up the new historicalStats
         await recalculatePlayerStats([editId]);
+        // Email link sync (solo admin: viewer non vede neanche il campo)
+        if (isAdmin) {
+          const oldLinkedUser = allUsers.find(u => u.linkedPlayerId === editId);
+          linkChanged = await syncEmailLink(editId, form.linkedEmail, oldLinkedUser?.email || '');
+        }
         toast.success('Giocatore aggiornato');
       } else {
         const newRef = await addPlayer(playerData);
+        savedPlayerId = newRef?.id;
         // If aliases were linked, sync p.stats immediately
-        if (linkedNames.length > 0 && newRef?.id) {
-          await recalculatePlayerStats([newRef.id]);
+        if (linkedNames.length > 0 && savedPlayerId) {
+          await recalculatePlayerStats([savedPlayerId]);
+        }
+        if (isAdmin && savedPlayerId && form.linkedEmail) {
+          linkChanged = await syncEmailLink(savedPlayerId, form.linkedEmail, '');
         }
         toast.success(linkedNames.length > 0
           ? `Giocatore aggiunto con storico (${linkedNames.length} alias)!`
           : 'Giocatore aggiunto!');
       }
+      if (linkChanged) refreshAllUsers();
       closeForm();
     } catch (e) {
       toast.error(e.message);
@@ -379,9 +460,16 @@ export default function PlayersPage() {
 
   const handleDelete = async (p) => {
     if (!window.confirm(`Eliminare ${p.name}? Questa azione è irreversibile.`)) return;
+    // Cleanup link utente prima di eliminare il player, altrimenti users/{uid}.linkedPlayerId
+    // resta orfano puntando a un player inesistente (l'utente vedrà "Profilo non collegato")
+    if (isAdmin) {
+      const linkedUser = allUsers.find(u => u.linkedPlayerId === p.id);
+      if (linkedUser) await setUserLinkedPlayer(linkedUser.uid, null).catch(() => {});
+    }
     await removePlayer(p.id);
     toast.success(`${p.name} eliminato`);
     setSelectedPlayer(null);
+    refreshAllUsers();
   };
 
   if (selectedPlayer) {
@@ -775,6 +863,78 @@ export default function PlayersPage() {
                 value={form.photoURL}
                 onChange={e => setForm(f => ({ ...f, photoURL: e.target.value }))}
               />
+
+              {/* ── Google account link (admin-only) ──────────────────────────── */}
+              {isAdmin && (
+                <div style={{
+                  padding: '0.7rem 0.75rem',
+                  borderRadius: '8px',
+                  background: 'rgba(159,122,234,0.05)',
+                  border: '1px solid rgba(159,122,234,0.2)',
+                }}>
+                  <div style={{ fontSize: '0.72rem', color: '#B794F4', fontWeight: 700, letterSpacing: '0.05em', marginBottom: '0.4rem' }}>
+                    🔗 COLLEGAMENTO ACCOUNT GOOGLE
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'stretch' }}>
+                    <input
+                      className="input"
+                      list={editId ? `users-list-${editId}` : 'users-list-new'}
+                      type="email"
+                      autoComplete="off"
+                      placeholder="Email Google (digita o tocca per scegliere)"
+                      value={form.linkedEmail}
+                      onChange={e => setForm(f => ({ ...f, linkedEmail: e.target.value }))}
+                      style={{ flex: 1 }}
+                    />
+                    {form.linkedEmail && (
+                      <button
+                        type="button"
+                        onClick={() => setForm(f => ({ ...f, linkedEmail: '' }))}
+                        aria-label="Scollega email"
+                        title="Scollega"
+                        style={{
+                          padding: '0 0.75rem',
+                          background: 'rgba(252,129,129,0.1)',
+                          border: '1px solid rgba(252,129,129,0.3)',
+                          color: '#FC8181',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                          fontSize: '0.9rem',
+                          fontWeight: 600,
+                        }}
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                  <datalist id={editId ? `users-list-${editId}` : 'users-list-new'}>
+                    {allUsers
+                      .filter(u => u.email)
+                      .sort((a, b) => {
+                        // Ordina: collegato a questo player → liberi → collegati ad altri
+                        const aRank = a.linkedPlayerId === editId ? 0 : !a.linkedPlayerId ? 1 : 2;
+                        const bRank = b.linkedPlayerId === editId ? 0 : !b.linkedPlayerId ? 1 : 2;
+                        return aRank - bRank || (a.email || '').localeCompare(b.email || '');
+                      })
+                      .map(u => {
+                        const linkedToOther = u.linkedPlayerId && u.linkedPlayerId !== editId;
+                        const otherName = linkedToOther
+                          ? (players.find(p => p.id === u.linkedPlayerId)?.name || '?')
+                          : null;
+                        const label = u.linkedPlayerId === editId
+                          ? `${u.displayName || ''} ✓ già collegato`
+                          : linkedToOther
+                            ? `${u.displayName || ''} — in uso: ${otherName}`
+                            : `${u.displayName || ''}`;
+                        return <option key={u.uid} value={u.email}>{label.trim()}</option>;
+                      })}
+                  </datalist>
+                  <p style={{ fontSize: '0.66rem', color: '#718096', marginTop: '0.35rem', lineHeight: 1.4 }}>
+                    Solo utenti che hanno già fatto login compaiono in lista.
+                    Visibile solo agli admin — i viewer non vedono questo campo né l'email collegata.
+                  </p>
+                </div>
+              )}
 
               {/* ── Historical linking section ── */}
               <HistoricalLinkSection

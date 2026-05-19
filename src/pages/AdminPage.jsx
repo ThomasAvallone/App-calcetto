@@ -13,6 +13,15 @@ import toast from 'react-hot-toast';
 
 const CHANGELOG = [
   {
+    version: '3.11.0',
+    date: 'Maggio 2026',
+    entries: [
+      { type: 'new', text: '"I tuoi numeri" sulla dashboard: card personale collegata all\'account Google — mostra partite stagione, gol, assist, autogol, V/P/S, forma recente (5 puntini W/D/L), Power Index attuale e posizione nel ranking globale. Per gli admin include anche il voto medio dalle votazioni. Se il profilo non è ancora collegato, mostra messaggio per chiedere all\'admin.' },
+      { type: 'new', text: 'Collegamento account Google → scheda giocatore: nella form di modifica giocatore (solo admin) nuova sezione "🔗 Collegamento Account Google". Dropdown con tutti gli utenti che hanno già fatto login (con indicazione "già collegato ad altro giocatore"), più inserimento manuale per email. Il link è memorizzato su users/{uid}.linkedPlayerId — l\'email non compare mai nei documenti players (invisibile ai viewer anche con dev tools). Admin può scollegare con ✕. Al salvataggio: valida l\'email prima di scollegare il vecchio link (previene perdite su typo), avverte se la mail era già usata da un altro giocatore.' },
+      { type: 'fix', text: 'Eliminazione giocatore: rimosso link orfano — quando un player viene eliminato, il campo linkedPlayerId sull\'utente collegato viene resettato a null automaticamente.' },
+    ],
+  },
+  {
     version: '3.10.0',
     date: 'Maggio 2026',
     entries: [
