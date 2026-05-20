@@ -440,10 +440,16 @@ export default function PlayersPage() {
   };
 
   const handleRecalcAll = async () => {
-    const ids = players.filter(p => (p.historicalNames || []).length > 0).map(p => p.id);
-    if (ids.length === 0) { toast('Nessun giocatore con storico collegato'); return; }
+    const playersWithHistory = players.filter(p => (p.historicalNames || []).length > 0);
+    if (playersWithHistory.length === 0) { toast('Nessun giocatore con storico collegato'); return; }
     setRecalcLoading(true);
     try {
+      // Re-derive historicalStats from historicalData.js so any corrections to that file
+      // are propagated to Firestore before recalculating player stats.
+      await Promise.all(
+        playersWithHistory.map(p => updatePlayer(p.id, { historicalStats: computeCumulativeStats(p.historicalNames) }))
+      );
+      const ids = playersWithHistory.map(p => p.id);
       await recalculatePlayerStats(ids);
       toast.success(`Stats aggiornate per ${ids.length} giocator${ids.length === 1 ? 'e' : 'i'}`);
     } catch (e) {
