@@ -207,7 +207,9 @@ export default function PlayersPage() {
         for (const ev of m.events || []) {
           if (ev.type === 'goal') {
             if (ev.scorerId === p.id) s.goals++;
-            if (ev.assistId === p.id) s.assists++;
+            // Gli assist storici vengono prorati sotto da historicalData.js: contarli
+            // anche qui dagli eventi (se editati a mano) li conterebbe due volte.
+            if (!m.isHistorical && ev.assistId === p.id) s.assists++;
           }
           if (ev.type === 'autogoal' && ev.scorerId === p.id) s.autogoals++;
           if (ev.gkConcededId === p.id) { s.gkGoalsConceded++; gkConcededThisMatch++; }
@@ -230,7 +232,9 @@ export default function PlayersPage() {
           if (seasonData[name]) { pData = seasonData[name]; break; }
         }
         if (!pData || !pData.presenze || !pData.assist) continue;
-        s.assists += Math.round(pData.assist * (countInPeriod / pData.presenze));
+        // Cap del rapporto a 1: se Firestore ha più partite storiche delle presenze
+        // dichiarate (import duplicato, partite aggiunte), evita di superare il totale.
+        s.assists += Math.round(pData.assist * Math.min(1, countInPeriod / pData.presenze));
       }
       stats[p.id] = s;
     }

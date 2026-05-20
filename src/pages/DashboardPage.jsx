@@ -130,7 +130,9 @@ export default function DashboardPage() {
       for (const ev of (m.events || [])) {
         if (ev.type === 'goal') {
           if (ev.scorerId === pid) sGoals++;
-          if (ev.assistId === pid) sAssists++;
+          // Gli assist storici vengono prorati sotto da historicalData.js: contarli
+          // anche qui dagli eventi (se editati a mano) li conterebbe due volte.
+          if (!m.isHistorical && ev.assistId === pid) sAssists++;
         }
         if (ev.type === 'autogoal' && ev.scorerId === pid) sAutogoals++;
       }
@@ -149,7 +151,9 @@ export default function DashboardPage() {
         if (seasonData[name]) { pData = seasonData[name]; break; }
       }
       if (!pData || !pData.presenze || !pData.assist) continue;
-      sAssists += Math.round(pData.assist * (countInPeriod / pData.presenze));
+      // Cap del rapporto a 1: se Firestore ha più partite storiche delle presenze
+      // dichiarate (import duplicato, partite aggiunte), evita di superare il totale.
+      sAssists += Math.round(pData.assist * Math.min(1, countInPeriod / pData.presenze));
     }
     const season = { matches: sMatches, goals: sGoals, assists: sAssists, autogoals: sAutogoals, wins: sWins, draws: sDraws, losses: sLosses };
     const seasonWinRate = season.matches > 0 ? Math.round((season.wins / season.matches) * 100) : 0;
