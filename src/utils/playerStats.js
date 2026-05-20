@@ -15,11 +15,13 @@ for (const season of HISTORICAL_SEASONS) {
 }
 
 // Restituisce l'id stagione "YYYY-YY" per una data (es. 2025-10-01 → "2025-26").
+// La stagione inizia a settembre: agosto appartiene alla stagione precedente
+// (coerente con seasonStartMs = 1 settembre in PlayersPage/DashboardPage).
 export function getSeasonId(dateVal) {
   const d = dateVal?.toMillis ? new Date(dateVal.toMillis()) : new Date(dateVal);
   const year = d.getFullYear();
   const month = d.getMonth() + 1;
-  return month >= 8 ? `${year}-${String(year + 1).slice(2)}` : `${year - 1}-${String(year).slice(2)}`;
+  return month >= 9 ? `${year}-${String(year + 1).slice(2)}` : `${year - 1}-${String(year).slice(2)}`;
 }
 
 export const DEFAULT_PI_CONFIG = {
