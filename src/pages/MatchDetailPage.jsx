@@ -189,6 +189,8 @@ export default function MatchDetailPage() {
   const [editForm, setEditForm] = useState({});
   const [editingYoutube, setEditingYoutube] = useState(false);
   const [youtubeInput, setYoutubeInput] = useState('');
+  const [editingDate, setEditingDate] = useState(false);
+  const [dateInput, setDateInput] = useState('');
   const [showShareModal, setShowShareModal] = useState(false);
   const [showReplay, setShowReplay] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
@@ -373,6 +375,34 @@ export default function MatchDetailPage() {
       const allIds = [...(match.redTeam || []), ...(match.blueTeam || [])].map(p => p.id);
       await recalcStats(allIds, { ...match, events: newEvents });
       toast.success('Evento aggiornato');
+    } catch (e) {
+      toast.error(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleStartEditDate = () => {
+    const dd = safeDate(match.date);
+    if (dd && !isNaN(dd)) {
+      const pad = n => String(n).padStart(2, '0');
+      setDateInput(`${dd.getFullYear()}-${pad(dd.getMonth() + 1)}-${pad(dd.getDate())}T${pad(dd.getHours())}:${pad(dd.getMinutes())}`);
+    } else {
+      setDateInput('');
+    }
+    setEditingDate(true);
+  };
+
+  const handleSaveDate = async () => {
+    if (!dateInput) return toast.error('Inserisci una data');
+    const newDate = new Date(dateInput);
+    if (isNaN(newDate.getTime())) return toast.error('Data non valida');
+    setSaving(true);
+    try {
+      await updateMatch(id, { date: newDate });
+      setMatch(m => ({ ...m, date: newDate }));
+      setEditingDate(false);
+      toast.success('Data aggiornata');
     } catch (e) {
       toast.error(e.message);
     } finally {
@@ -576,7 +606,29 @@ export default function MatchDetailPage() {
         </button>
         <div>
           <h2>Dettaglio Partita</h2>
-          <p className="text-sm text-muted">{d ? format(d, 'dd MMMM yyyy · HH:mm', { locale: it }) : '–'}</p>
+          {isAdmin && editingDate ? (
+            <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', marginTop: '0.25rem' }}>
+              <input
+                type="datetime-local"
+                className="input"
+                style={{ fontSize: '0.8rem', padding: '0.3rem 0.4rem' }}
+                value={dateInput}
+                onChange={e => setDateInput(e.target.value)}
+              />
+              <button className="btn btn-teal" style={{ padding: '0.3rem 0.6rem', minHeight: 'auto', fontSize: '0.8rem' }}
+                onClick={handleSaveDate} disabled={saving}>✓</button>
+              <button className="btn btn-ghost" style={{ padding: '0.3rem 0.5rem', minHeight: 'auto', fontSize: '0.8rem' }}
+                onClick={() => setEditingDate(false)}>✕</button>
+            </div>
+          ) : (
+            <p className="text-sm text-muted" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              {d ? format(d, 'dd MMMM yyyy · HH:mm', { locale: it }) : '–'}
+              {isAdmin && (
+                <button onClick={handleStartEditDate}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#A0AEC0', padding: '2px 4px', fontSize: '0.8rem' }}>✏️</button>
+              )}
+            </p>
+          )}
         </div>
         {saving && <span className="text-xs text-muted animate-pulse" style={{ marginLeft: 'auto' }}>Salvataggio...</span>}
       </div>
