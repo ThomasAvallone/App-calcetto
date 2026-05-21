@@ -408,13 +408,9 @@ export async function importHistoricalMatches(historicalMatches, players, onProg
 
   function lookupPlayer(rawName) {
     const key = rawName.toUpperCase().trim();
-    // Exact match
-    if (nameMap.has(key)) return nameMap.get(key);
-    // Partial match: check if any map key starts with or includes this name
-    for (const [k, v] of nameMap) {
-      if (k.startsWith(key) || key.startsWith(k)) return v;
-    }
-    return null; // unknown player
+    const found = nameMap.get(key) ?? null;
+    if (!found) console.warn(`[importHistoricalMatches] nome non risolto: "${rawName}" — aggiungi un historicalName al giocatore corrispondente`);
+    return found;
   }
 
   const total = historicalMatches.length;
