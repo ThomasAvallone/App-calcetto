@@ -55,7 +55,9 @@ export function generateMatchPreview({ redTeam, blueTeam, weather, date }) {
   const objectives = [];
   for (const p of [...redTeam, ...blueTeam]) {
     const g = p.stats?.goals || 0;
-    const a = (p.stats?.assists || 0) + (p.historicalStats?.assists || 0);
+    // p.stats.assists include già gli assist storici (sommati in recalculatePlayerStats):
+    // non ri-aggiungere p.historicalStats per evitare il doppio conteggio.
+    const a = p.stats?.assists || 0;
     const m = p.stats?.matches || 0;
     const nextG = GOAL_MS.find(x => x > g);
     if (nextG && nextG - g <= 3) objectives.push(`⚽ ${p.name} a ${nextG - g} gol dai ${nextG} totali`);

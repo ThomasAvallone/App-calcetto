@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import usePlayersStore from '../store/playersStore';
 import useAuthStore, { selectIsAdmin } from '../store/authStore';
-import { computeCombinedPowerIndex, recalculatePlayerStats, updatePlayer } from '../firebase/firestore';
+import { recalculatePlayerStats, updatePlayer } from '../firebase/firestore';
 import { getAllUsers, findUserByEmail, setUserLinkedPlayer, findUsersByLinkedPlayer } from '../firebase/auth';
 import { useMatchesSubscription } from '../hooks/useMatchesSubscription';
 import { usePIConfig } from '../hooks/usePIConfig';
@@ -408,11 +408,9 @@ export default function PlayersPage() {
       let linkChanged = false;
 
       if (editId) {
-        // Recompute power index combining app stats + new historicalStats
-        const currentPlayer = players.find(p => p.id === editId);
-        const pi = computeCombinedPowerIndex(currentPlayer?.stats, historicalStats, piConfig);
-        await editPlayer(editId, { ...playerData, powerIndex: pi });
-        // Recalculate p.stats so all-time leaderboard picks up the new historicalStats
+        await editPlayer(editId, playerData);
+        // recalculatePlayerStats ricalcola stats + powerIndex coerentemente
+        // (storico derivato da historicalNames): unica fonte per il PI.
         await recalculatePlayerStats([editId]);
         // Email link sync (solo admin: viewer non vede neanche il campo)
         if (isAdmin) {
