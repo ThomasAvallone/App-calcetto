@@ -13,6 +13,7 @@ import {
   computeStreak,
   computeRecentForm,
 } from '../utils/playerStats';
+import { computeCumulativeStats } from '../data/historicalData';
 
 // Re-export per retrocompatibilità con i moduli che importano da firebase/firestore
 export { DEFAULT_PI_CONFIG, computePowerIndex, computeCombinedPowerIndex, computeStreak, computeRecentForm };
@@ -134,9 +135,8 @@ export async function recalculatePlayerStats(playerIds, { cachedMatches, cachedP
   // Strip server metadata fields (updatedAt) before merging into formula config
   const { updatedAt: _u, ...piConfigData } = piConfigSnap.exists() ? piConfigSnap.data() : {};
   const cfg = { ...DEFAULT_PI_CONFIG, ...piConfigData };
-  // Map playerId → player doc (for historicalStats and existing powerHistory)
+  // Map playerId → player doc (for historicalNames, powerHistory, etc.)
   const playerMap = new Map(allPlayers.map(p => [p.id, p]));
-  const playerHistoricalMap = new Map(allPlayers.map(p => [p.id, p.historicalStats]));
   const batch = writeBatch(db);
   const now = Date.now();
 
@@ -166,10 +166,12 @@ export async function recalculatePlayerStats(playerIds, { cachedMatches, cachedP
     const appMatches = playerMatches.filter(m => !m.isHistorical);
     const stats = calcStatsForPlayer(appMatches, pid);
 
-    // Add full historicalStats (goals, assists, autogoals, record, matches).
-    // historicalStats is the authoritative source computed from the original Excel
-    // season data (historicalData.js via computeCumulativeStats).
-    const historicalStats = playerHistoricalMap.get(pid);
+    // Compute fresh historical stats directly from historicalData.js so they never
+    // go stale (no dependency on the cached p.historicalStats Firestore field).
+    const player = playerMap.get(pid);
+    const historicalStats = player.historicalNames?.length
+      ? computeCumulativeStats(player.historicalNames)
+      : null;
     if (historicalStats) {
       stats.goals += historicalStats.goals || 0;
       stats.assists += historicalStats.assists || 0;
@@ -228,6 +230,7 @@ export async function recalculatePlayerStats(playerIds, { cachedMatches, cachedP
 
     batch.update(doc(db, 'players', pid), {
       stats,
+      historicalStats: historicalStats ?? null,
       powerIndex: finalPI,
       powerHistory,
       recentForm: recentForm ?? null,
