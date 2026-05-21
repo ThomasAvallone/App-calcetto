@@ -32,7 +32,14 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        // Exclude admin-only heavy chunks from precache — loaded on demand via runtimeCaching
+        globIgnores: ['**/vendor-xlsx-*.js', '**/historicalMatches-*.js'],
         runtimeCaching: [
+          {
+            urlPattern: /\/assets\/(vendor-xlsx|historicalMatches)-[^/]+\.js$/,
+            handler: 'CacheFirst',
+            options: { cacheName: 'admin-chunks', expiration: { maxEntries: 4, maxAgeSeconds: 60 * 60 * 24 * 30 } }
+          },
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
             handler: 'CacheFirst',
