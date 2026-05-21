@@ -389,6 +389,7 @@ export default function AdminPage() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showChangelog, setShowChangelog] = useState(false);
   const [showPIEditor, setShowPIEditor] = useState(false);
+  const [healthIssues, setHealthIssues] = useState(null);
   const [piCfg, setPICfg] = useState(DEFAULT_PI_CONFIG);
   const [piSaving, setPISaving] = useState(false);
 
@@ -495,6 +496,54 @@ export default function AdminPage() {
     } finally {
       setRecalculating(false);
     }
+  };
+
+  const handleHealthCheck = () => {
+    const issues = [];
+    const toDateStr = d => {
+      try { return (d?.toDate ? d.toDate() : new Date(d)).toISOString().slice(0, 10); } catch { return '?'; }
+    };
+    const finished = matches.filter(m => m.status === 'finished');
+
+    // Check 1: score/events mismatch (non-historical only, where events are authoritative)
+    for (const m of finished.filter(m => !m.isHistorical)) {
+      if (!m.events?.length && (m.redScore || m.blueScore)) {
+        issues.push({ sev: 'warn', label: 'Partita senza eventi', detail: `${toDateStr(m.date)} — score ${m.redScore}-${m.blueScore} ma nessun evento registrato`, matchId: m.id });
+        continue;
+      }
+      const ev = m.events || [];
+      const redFromEv  = ev.filter(e => (e.type === 'goal' && e.team === 'red')  || (e.type === 'autogoal' && e.team === 'blue')).length;
+      const blueFromEv = ev.filter(e => (e.type === 'goal' && e.team === 'blue') || (e.type === 'autogoal' && e.team === 'red')).length;
+      if (redFromEv !== (m.redScore ?? 0) || blueFromEv !== (m.blueScore ?? 0)) {
+        issues.push({ sev: 'error', label: 'Score ≠ eventi', detail: `${toDateStr(m.date)} — tabellino ${m.redScore}-${m.blueScore}, eventi ${redFromEv}-${blueFromEv}`, matchId: m.id });
+      }
+    }
+
+    // Check 2: unlinked players (player slot has name but no id)
+    for (const m of finished) {
+      const all = [...(m.redTeam || []), ...(m.blueTeam || [])];
+      for (const p of all.filter(p => !p.id)) {
+        issues.push({ sev: 'warn', label: 'Giocatore non linkato', detail: `"${p.name}" in partita del ${toDateStr(m.date)}`, matchId: m.id });
+      }
+    }
+
+    // Check 3: duplicate matches (same day + same teams)
+    const seen = new Map();
+    for (const m of finished) {
+      const ds = toDateStr(m.date);
+      const key = [
+        ds,
+        (m.redTeam || []).map(p => p.id || p.name).sort().join(','),
+        (m.blueTeam || []).map(p => p.id || p.name).sort().join(','),
+      ].join('|');
+      if (seen.has(key)) {
+        issues.push({ sev: 'error', label: 'Partita duplicata', detail: `Stesse squadre il ${ds} (IDs: ${seen.get(key)} e ${m.id})`, matchId: m.id });
+      } else {
+        seen.set(key, m.id);
+      }
+    }
+
+    setHealthIssues(issues);
   };
 
   const handleImportHistoricalMatchesData = async () => {
@@ -781,8 +830,45 @@ export default function AdminPage() {
         </button>
       </div>
 
+      {/* Data Health */}
+      <div className="card mb-4 stagger-6" style={{ border: '1px solid rgba(104,211,145,0.2)', background: 'rgba(104,211,145,0.02)' }}>
+        <h3 className="mb-1" style={{ fontSize: '0.95rem', color: '#68D391' }}>🩺 Salute dei Dati</h3>
+        <p className="text-sm text-muted mb-3">
+          Controlla score vs eventi, giocatori non linkati e partite duplicate.
+        </p>
+        <button className="btn btn-ghost btn-full" onClick={handleHealthCheck}>
+          🔍 Esegui Controlli
+        </button>
+        {healthIssues !== null && (
+          <div style={{ marginTop: '1rem' }}>
+            {healthIssues.length === 0 ? (
+              <div style={{ color: '#68D391', fontSize: '0.85rem', textAlign: 'center', padding: '0.5rem 0' }}>
+                ✅ Tutto OK — nessun problema trovato su {matches.filter(m => m.status === 'finished').length} partite
+              </div>
+            ) : (
+              healthIssues.map((iss, i) => (
+                <div key={i} style={{
+                  display: 'flex', gap: '0.5rem', padding: '0.4rem 0',
+                  borderBottom: '1px solid #2D3748', alignItems: 'flex-start',
+                }}>
+                  <span style={{ fontSize: '0.75rem', flexShrink: 0 }}>
+                    {iss.sev === 'error' ? '🔴' : '⚠️'}
+                  </span>
+                  <div>
+                    <span style={{ fontSize: '0.78rem', fontWeight: 700, color: iss.sev === 'error' ? '#FC8181' : '#F6AD55' }}>
+                      {iss.label}
+                    </span>
+                    <div style={{ fontSize: '0.72rem', color: '#718096', marginTop: '0.1rem' }}>{iss.detail}</div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Badge Catalog */}
-      <div className="card mb-4 stagger-6" style={{ border: '1px solid rgba(183,148,244,0.25)', background: 'rgba(183,148,244,0.03)' }}>
+      <div className="card mb-4 stagger-7" style={{ border: '1px solid rgba(183,148,244,0.25)', background: 'rgba(183,148,244,0.03)' }}>
         <h3 className="mb-1" style={{ fontSize: '0.95rem' }}>🏅 Catalogo Badge</h3>
         <p className="text-xs text-muted mb-3" style={{ lineHeight: 1.5 }}>
           Tutti i badge disponibili con descrizione, fonte dati e condizioni di sblocco.
