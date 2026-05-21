@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import usePlayersStore from '../store/playersStore';
 import { useMatchesSubscription } from '../hooks/useMatchesSubscription';
-import { HISTORICAL_SEASONS } from '../data/historicalData';
-import { SEASON_PLAYER_MAP, getSeasonId } from '../utils/playerStats';
+import { computeStatsFromMatches } from '../utils/playerStats';
 import { getMs } from '../utils/dateUtils';
 import { RESULT_COLORS, CLR_WIN, CLR_DRAW, CLR_LOSS, AVATAR_COLORS } from '../constants/colors';
 import { generateRivalryNarrative } from '../services/geminiService';
@@ -135,57 +134,6 @@ function getSeasonStartMs() {
 }
 
 
-function computeStatsFromMatches(players, matches) {
-  return players.map(p => {
-    const s = { goals: 0, assists: 0, autogoals: 0, wins: 0, draws: 0, losses: 0, matches: 0, gkMatches: 0, gkGoalsConceded: 0, cleanSheets: 0 };
-    // historicalMatches per season → count of games played (for assist prorating)
-    const histBySeason = {};
-
-    for (const m of matches) {
-      const inRed = (m.redTeam || []).some(pl => pl.id === p.id);
-      const inBlue = (m.blueTeam || []).some(pl => pl.id === p.id);
-      if (!inRed && !inBlue) continue;
-      s.matches++;
-      const my = inRed ? (m.redScore ?? 0) : (m.blueScore ?? 0);
-      const their = inRed ? (m.blueScore ?? 0) : (m.redScore ?? 0);
-      if (my > their) s.wins++;
-      else if (my < their) s.losses++;
-      else s.draws++;
-      if (!m.isHistorical) s.gkMatches += 2; // 2 turni in porta per partita (rotazione)
-      let gkConcededThisMatch = 0;
-      for (const ev of (m.events || [])) {
-        if (ev.type === 'goal') {
-          if (ev.scorerId === p.id) s.goals++;
-          if (!m.isHistorical && ev.assistId === p.id) s.assists++;
-        }
-        if (ev.gkConcededId === p.id) { s.gkGoalsConceded++; gkConcededThisMatch++; }
-        if (ev.type === 'autogoal' && ev.scorerId === p.id) s.autogoals++;
-      }
-      // Clean sheet individuale: portiere non ha subito gol personalmente
-      if (!m.isHistorical && gkConcededThisMatch === 0) s.cleanSheets++;
-      // Track historical matches by season for assist prorating
-      if (m.isHistorical) {
-        const sid = getSeasonId(m.date);
-        histBySeason[sid] = (histBySeason[sid] || 0) + 1;
-      }
-    }
-
-    // Prorate historical assists: season_assists × (games_in_period / season_total_games)
-    const histNames = (p.historicalNames || []).map(n => n.toUpperCase());
-    for (const [sid, countInPeriod] of Object.entries(histBySeason)) {
-      const seasonData = SEASON_PLAYER_MAP[sid];
-      if (!seasonData) continue;
-      let pData = null;
-      for (const name of histNames) {
-        if (seasonData[name]) { pData = seasonData[name]; break; }
-      }
-      if (!pData || !pData.presenze || !pData.assist) continue;
-      s.assists += Math.round(pData.assist * Math.min(1, countInPeriod / pData.presenze));
-    }
-
-    return { ...p, totalGoals: s.goals, totalAssists: s.assists, totalAutogoals: s.autogoals, totalMatches: s.matches, totalWins: s.wins, totalDraws: s.draws, gkMatches: s.gkMatches, gkGoalsConceded: s.gkGoalsConceded, cleanSheets: s.cleanSheets };
-  });
-}
 
 function H2HChronology({ h2hStats }) {
   const [showChronology, setShowChronology] = React.useState(false);

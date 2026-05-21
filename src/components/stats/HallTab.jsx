@@ -32,7 +32,7 @@ export default function HallTab({ finishedMatches, players, hallText, setHallTex
       for (const ev of (m.events || [])) {
         if (ev.type === 'goal') {
           if (ev.scorerId && ps[ev.scorerId]) ps[ev.scorerId].goals++;
-          if (ev.assistId && ps[ev.assistId]) ps[ev.assistId].assists++;
+          if (!m.isHistorical && ev.assistId && ps[ev.assistId]) ps[ev.assistId].assists++;
         }
         if (ev.type === 'autogoal' && ev.scorerId && ps[ev.scorerId]) ps[ev.scorerId].autogoals++;
         if (ev.gkConcededId && ps[ev.gkConcededId]) ps[ev.gkConcededId].gkGoals++;

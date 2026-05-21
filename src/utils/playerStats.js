@@ -97,6 +97,55 @@ export function computeCombinedPowerIndex(stats, historicalStats, cfg = DEFAULT_
   return computePowerIndex(combined, cfg);
 }
 
+// Calcola stats complete (gol, assist con proration storica, V/N/P, GK, cleanSheet) per
+// un array di giocatori su un set di partite pre-filtrate. Unica fonte di verità condivisa
+// da StatsPage, e utilizzabile da altri componenti che necessitano di stat aggregate.
+// Restituisce l'array di giocatori arricchito con campi totalGoals, totalAssists, ecc.
+export function computeStatsFromMatches(players, matches) {
+  return players.map(p => {
+    const s = { goals: 0, assists: 0, autogoals: 0, wins: 0, draws: 0, losses: 0, matches: 0, gkMatches: 0, gkGoalsConceded: 0, cleanSheets: 0 };
+    const histBySeason = {};
+    for (const m of matches) {
+      const inRed = (m.redTeam || []).some(pl => pl.id === p.id);
+      const inBlue = (m.blueTeam || []).some(pl => pl.id === p.id);
+      if (!inRed && !inBlue) continue;
+      s.matches++;
+      const my = inRed ? (m.redScore ?? 0) : (m.blueScore ?? 0);
+      const their = inRed ? (m.blueScore ?? 0) : (m.redScore ?? 0);
+      if (my > their) s.wins++;
+      else if (my < their) s.losses++;
+      else s.draws++;
+      if (!m.isHistorical) s.gkMatches += 2;
+      let gkConcededThisMatch = 0;
+      for (const ev of (m.events || [])) {
+        if (ev.type === 'goal') {
+          if (ev.scorerId === p.id) s.goals++;
+          if (!m.isHistorical && ev.assistId === p.id) s.assists++;
+        }
+        if (ev.gkConcededId === p.id) { s.gkGoalsConceded++; gkConcededThisMatch++; }
+        if (ev.type === 'autogoal' && ev.scorerId === p.id) s.autogoals++;
+      }
+      if (!m.isHistorical && gkConcededThisMatch === 0) s.cleanSheets++;
+      if (m.isHistorical) {
+        const sid = getSeasonId(m.date);
+        histBySeason[sid] = (histBySeason[sid] || 0) + 1;
+      }
+    }
+    const histNames = (p.historicalNames || []).map(n => n.toUpperCase());
+    for (const [sid, countInPeriod] of Object.entries(histBySeason)) {
+      const seasonData = SEASON_PLAYER_MAP[sid];
+      if (!seasonData) continue;
+      let pData = null;
+      for (const name of histNames) {
+        if (seasonData[name]) { pData = seasonData[name]; break; }
+      }
+      if (!pData || !pData.presenze || !pData.assist) continue;
+      s.assists += Math.round(pData.assist * Math.min(1, countInPeriod / pData.presenze));
+    }
+    return { ...p, totalGoals: s.goals, totalAssists: s.assists, totalAutogoals: s.autogoals, totalMatches: s.matches, totalWins: s.wins, totalDraws: s.draws, gkMatches: s.gkMatches, gkGoalsConceded: s.gkGoalsConceded, cleanSheets: s.cleanSheets };
+  });
+}
+
 function filterPlayerMatches(allMatches, playerId, prefiltered) {
   if (prefiltered) return allMatches.filter(m => !m.isHistorical);
   return allMatches
