@@ -390,6 +390,7 @@ export default function AdminPage() {
   const [showChangelog, setShowChangelog] = useState(false);
   const [showPIEditor, setShowPIEditor] = useState(false);
   const [healthIssues, setHealthIssues] = useState(null);
+  const [expandedHealthGroups, setExpandedHealthGroups] = useState({});
   const [piCfg, setPICfg] = useState(DEFAULT_PI_CONFIG);
   const [piSaving, setPISaving] = useState(false);
 
@@ -519,31 +520,41 @@ export default function AdminPage() {
       }
     }
 
-    // Check 2: unlinked players (player slot has name but no id)
+    // Check 2: unlinked players (player slot has name but no id) — aggregato per nome
+    const unlinkedByName = new Map(); // name → Set di date partite
     for (const m of finished) {
       const all = [...(m.redTeam || []), ...(m.blueTeam || [])];
       for (const p of all.filter(p => !p.id)) {
-        issues.push({ sev: 'warn', label: 'Giocatore non linkato', detail: `"${p.name}" in partita del ${toDateStr(m.date)}`, matchId: m.id });
+        const nm = p.name || '(senza nome)';
+        if (!unlinkedByName.has(nm)) unlinkedByName.set(nm, new Set());
+        unlinkedByName.get(nm).add(toDateStr(m.date));
       }
     }
+    for (const [nm, dates] of unlinkedByName) {
+      issues.push({ sev: 'warn', label: 'Giocatore non linkato', detail: `"${nm}" — ${dates.size} partit${dates.size === 1 ? 'a' : 'e'}` });
+    }
 
-    // Check 3: duplicate matches (same day + same teams)
+    // Check 3: duplicate matches (same day + same teams + same score).
+    // Lo score nella chiave evita falsi positivi: in una serata si giocano
+    // più partite con le stesse squadre ma esiti diversi.
     const seen = new Map();
     for (const m of finished) {
       const ds = toDateStr(m.date);
       const key = [
         ds,
+        m.redScore ?? 0, m.blueScore ?? 0,
         (m.redTeam || []).map(p => p.id || p.name).sort().join(','),
         (m.blueTeam || []).map(p => p.id || p.name).sort().join(','),
       ].join('|');
       if (seen.has(key)) {
-        issues.push({ sev: 'error', label: 'Partita duplicata', detail: `Stesse squadre il ${ds} (IDs: ${seen.get(key)} e ${m.id})`, matchId: m.id });
+        issues.push({ sev: 'warn', label: 'Possibile duplicato', detail: `Stesse squadre e score (${m.redScore}-${m.blueScore}) il ${ds}`, matchId: m.id });
       } else {
         seen.set(key, m.id);
       }
     }
 
     setHealthIssues(issues);
+    setExpandedHealthGroups({});
   };
 
   const handleImportHistoricalMatchesData = async () => {
@@ -846,22 +857,41 @@ export default function AdminPage() {
                 ✅ Tutto OK — nessun problema trovato su {matches.filter(m => m.status === 'finished').length} partite
               </div>
             ) : (
-              healthIssues.map((iss, i) => (
-                <div key={i} style={{
-                  display: 'flex', gap: '0.5rem', padding: '0.4rem 0',
-                  borderBottom: '1px solid #2D3748', alignItems: 'flex-start',
-                }}>
-                  <span style={{ fontSize: '0.75rem', flexShrink: 0 }}>
-                    {iss.sev === 'error' ? '🔴' : '⚠️'}
-                  </span>
-                  <div>
-                    <span style={{ fontSize: '0.78rem', fontWeight: 700, color: iss.sev === 'error' ? '#FC8181' : '#F6AD55' }}>
-                      {iss.label}
-                    </span>
-                    <div style={{ fontSize: '0.72rem', color: '#718096', marginTop: '0.1rem' }}>{iss.detail}</div>
+              Object.entries(
+                healthIssues.reduce((acc, iss) => {
+                  (acc[iss.label] ??= []).push(iss);
+                  return acc;
+                }, {})
+              ).map(([label, group]) => {
+                const isOpen = !!expandedHealthGroups[label];
+                const sev = group.some(g => g.sev === 'error') ? 'error' : 'warn';
+                return (
+                  <div key={label} style={{ borderBottom: '1px solid #2D3748' }}>
+                    <button
+                      onClick={() => setExpandedHealthGroups(g => ({ ...g, [label]: !g[label] }))}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%',
+                        background: 'none', border: 'none', cursor: 'pointer', padding: '0.5rem 0', textAlign: 'left',
+                      }}>
+                      <span style={{ fontSize: '0.75rem', flexShrink: 0 }}>{sev === 'error' ? '🔴' : '⚠️'}</span>
+                      <span style={{ fontSize: '0.78rem', fontWeight: 700, color: sev === 'error' ? '#FC8181' : '#F6AD55', flex: 1 }}>
+                        {label}
+                      </span>
+                      <span style={{ fontSize: '0.72rem', color: '#718096', fontWeight: 600 }}>{group.length}</span>
+                      <span style={{ fontSize: '0.7rem', color: '#718096', flexShrink: 0 }}>{isOpen ? '▲' : '▼'}</span>
+                    </button>
+                    {isOpen && (
+                      <div style={{ paddingBottom: '0.5rem' }}>
+                        {group.map((iss, i) => (
+                          <div key={i} style={{ fontSize: '0.72rem', color: '#718096', padding: '0.2rem 0 0.2rem 1.6rem' }}>
+                            {iss.detail}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         )}
