@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { generateHallOfFame } from '../../services/geminiService';
 import { getAICache, setAICache } from '../../firebase/firestore';
+import { computeStatsFromMatches } from '../../utils/playerStats';
 import toast from 'react-hot-toast';
 
 export default function HallTab({ finishedMatches, players, hallText, setHallText, hallLoading, setHallLoading, lastMatchId }) {
@@ -16,29 +17,14 @@ export default function HallTab({ finishedMatches, players, hallText, setHallTex
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const buildHallStats = () => {
-    const ps = {};
-    for (const p of players) ps[p.id] = { name: p.name, goals: 0, assists: 0, autogoals: 0, gkGoals: 0, matches: 0, wins: 0, losses: 0 };
-    for (const m of finishedMatches) {
-      for (const side of ['redTeam', 'blueTeam']) {
-        for (const pl of (m[side] || [])) {
-          if (!ps[pl.id]) continue;
-          ps[pl.id].matches++;
-          const my = side === 'redTeam' ? (m.redScore ?? 0) : (m.blueScore ?? 0);
-          const their = side === 'redTeam' ? (m.blueScore ?? 0) : (m.redScore ?? 0);
-          if (my > their) ps[pl.id].wins++;
-          else if (my < their) ps[pl.id].losses++;
-        }
-      }
-      for (const ev of (m.events || [])) {
-        if (ev.type === 'goal') {
-          if (ev.scorerId && ps[ev.scorerId]) ps[ev.scorerId].goals++;
-          if (!m.isHistorical && ev.assistId && ps[ev.assistId]) ps[ev.assistId].assists++;
-        }
-        if (ev.type === 'autogoal' && ev.scorerId && ps[ev.scorerId]) ps[ev.scorerId].autogoals++;
-        if (ev.gkConcededId && ps[ev.gkConcededId]) ps[ev.gkConcededId].gkGoals++;
-      }
-    }
-    const list = Object.values(ps).filter(p => p.matches >= 5);
+    // Stat aggregate dalla funzione condivisa (include proration assist storici)
+    const list = computeStatsFromMatches(players, finishedMatches)
+      .map(cp => ({
+        name: cp.name, goals: cp.totalGoals, assists: cp.totalAssists,
+        autogoals: cp.totalAutogoals, gkGoals: cp.gkGoalsConceded,
+        matches: cp.totalMatches, wins: cp.totalWins,
+      }))
+      .filter(p => p.matches >= 5);
     if (list.length === 0) return null;
 
     const sortBy = (fn) => [...list].sort(fn)[0];

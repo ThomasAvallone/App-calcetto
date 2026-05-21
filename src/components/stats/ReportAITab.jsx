@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { generatePeriodReport } from '../../services/geminiService';
 import { getAICache, setAICache } from '../../firebase/firestore';
 import { getMs } from '../../utils/dateUtils';
+import { computeStatsFromMatches } from '../../utils/playerStats';
 import toast from 'react-hot-toast';
 
 export const REPORT_PERIODS = [
@@ -38,27 +39,14 @@ export default function ReportAITab({ finishedMatches, players, reportText, setR
     const matchCount = filtered.length;
     const totalGoals = filtered.reduce((s, m) => s + (m.redScore || 0) + (m.blueScore || 0), 0);
 
+    // Stat aggregate dalla funzione condivisa (include proration assist storici)
     const ps = {};
-    for (const p of players) ps[p.id] = { name: p.name, goals: 0, assists: 0, autogoals: 0, gkGoals: 0, matches: 0, wins: 0, losses: 0 };
-    for (const m of filtered) {
-      for (const side of ['redTeam', 'blueTeam']) {
-        for (const pl of (m[side] || [])) {
-          if (!ps[pl.id]) continue;
-          ps[pl.id].matches++;
-          const my = side === 'redTeam' ? (m.redScore ?? 0) : (m.blueScore ?? 0);
-          const their = side === 'redTeam' ? (m.blueScore ?? 0) : (m.redScore ?? 0);
-          if (my > their) ps[pl.id].wins++;
-          else if (my < their) ps[pl.id].losses++;
-        }
-      }
-      for (const ev of (m.events || [])) {
-        if (ev.type === 'goal') {
-          if (ev.scorerId && ps[ev.scorerId]) ps[ev.scorerId].goals++;
-          if (!m.isHistorical && ev.assistId && ps[ev.assistId]) ps[ev.assistId].assists++;
-        }
-        if (ev.type === 'autogoal' && ev.scorerId && ps[ev.scorerId]) ps[ev.scorerId].autogoals++;
-        if (ev.gkConcededId && ps[ev.gkConcededId]) ps[ev.gkConcededId].gkGoals++;
-      }
+    for (const cp of computeStatsFromMatches(players, filtered)) {
+      ps[cp.id] = {
+        name: cp.name, goals: cp.totalGoals, assists: cp.totalAssists,
+        autogoals: cp.totalAutogoals, gkGoals: cp.gkGoalsConceded,
+        matches: cp.totalMatches, wins: cp.totalWins,
+      };
     }
     const list = Object.values(ps).filter(p => p.matches > 0);
     const topScorer   = list.filter(p => p.goals > 0).sort((a, b) => b.goals - a.goals)[0] || null;
