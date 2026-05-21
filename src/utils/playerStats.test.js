@@ -1,10 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import {
   calcStatsForPlayer,
   computePowerIndex,
   computeCombinedPowerIndex,
   computeStreak,
   computeRecentForm,
+  computeStatsFromMatches,
+  SEASON_PLAYER_MAP,
 } from './playerStats';
 
 // Helper per costruire partite sintetiche
@@ -143,6 +145,151 @@ describe('computeStreak', () => {
     ];
     const streak = computeStreak(matches, 'A');
     expect(streak).toEqual({ type: 'win', count: 1 });
+  });
+});
+
+describe('computeStatsFromMatches', () => {
+  // Inject test-only entries into SEASON_PLAYER_MAP under a real season key.
+  // Names use ZTEST_ prefix to avoid collisions with production data.
+  beforeAll(() => {
+    SEASON_PLAYER_MAP['2025-26'] = SEASON_PLAYER_MAP['2025-26'] || {};
+    SEASON_PLAYER_MAP['2025-26']['ZTEST_MARIO'] = { presenze: 10, assist: 6 };
+    SEASON_PLAYER_MAP['2025-26']['ZTEST_LUIGI'] = { presenze: 5, assist: 3 };
+  });
+  afterAll(() => {
+    delete SEASON_PLAYER_MAP['2025-26']['ZTEST_MARIO'];
+    delete SEASON_PLAYER_MAP['2025-26']['ZTEST_LUIGI'];
+  });
+
+  // Players wired to the test season entries above (dates 2025-10-xx → season 2025-26)
+  const p1 = { id: 'p1', name: 'Mario Test', historicalNames: ['Ztest_Mario'] };
+  const p2 = { id: 'p2', name: 'Luigi Test', historicalNames: ['Ztest_Luigi'] };
+  const p3 = { id: 'p3', name: 'Extra',      historicalNames: [] };
+
+  const mkHist = (date, redIds, blueIds, rS, bS, events = []) =>
+    mk(date, redIds, blueIds, rS, bS, events, { isHistorical: true });
+
+  it('conta gol da partite live e storiche', () => {
+    const matches = [
+      mk('2025-10-01', ['p1'], ['p2'], 2, 0, [
+        { type: 'goal', scorerId: 'p1' },
+        { type: 'goal', scorerId: 'p1' },
+      ]),
+      mkHist('2025-11-01', ['p1'], ['p2'], 1, 0, [{ type: 'goal', scorerId: 'p1' }]),
+    ];
+    const [mario] = computeStatsFromMatches([p1], matches);
+    expect(mario.totalGoals).toBe(3);
+  });
+
+  it('conta assist solo da partite live (non da storiche)', () => {
+    // p3 non ha historicalNames → nessuna proration, così si isola il solo guard sugli eventi
+    const matches = [
+      mk('2025-10-01', ['p2'], ['p3'], 2, 0, [
+        { type: 'goal', scorerId: 'p2', assistId: 'p3' },
+        { type: 'goal', scorerId: 'p2', assistId: 'p3' },
+      ]),
+      // La stessa assistId in una partita storica NON deve essere contata
+      mkHist('2025-11-01', ['p2'], ['p3'], 1, 0, [{ type: 'goal', scorerId: 'p2', assistId: 'p3' }]),
+    ];
+    const [, , extra] = computeStatsFromMatches([p2, p1, p3], matches);
+    expect(extra.totalAssists).toBe(2);
+  });
+
+  it('prora gli assist storici in proporzione alle presenze nel periodo', () => {
+    // p1 ha 10 presenze, 6 assist totali in stagione.
+    // Gioca 5 su 10 partite storiche → round(6 × 5/10) = 3 assist
+    const matches = Array.from({ length: 5 }, (_, i) =>
+      mkHist(`2025-10-${String(i + 1).padStart(2, '0')}`, ['p1'], ['p2'], 1, 0)
+    );
+    const [mario] = computeStatsFromMatches([p1], matches);
+    expect(mario.totalAssists).toBe(3);
+  });
+
+  it('limita il ratio di proration a 1 anche se le partite superano le presenze dichiarate', () => {
+    // p2 ha 5 presenze dichiarate, 3 assist. Gioca 8 partite → ratio 8/5 > 1 → cappato a 1
+    const matches = Array.from({ length: 8 }, (_, i) =>
+      mkHist(`2025-10-${String(i + 1).padStart(2, '0')}`, ['p2'], ['p1'], 1, 0)
+    );
+    const [, luigi] = computeStatsFromMatches([p1, p2], matches);
+    expect(luigi.totalAssists).toBe(3); // round(3 × min(1, 8/5)) = 3
+  });
+
+  it('non accumula doppio conteggio assist: eventi storici ignorati + proration applicata', () => {
+    // p1 gioca 10 partite storiche (tutte con assistId: 'p1')
+    // Gli event assists devono essere bloccati; la proration deve dare round(6 × 10/10) = 6
+    const matches = Array.from({ length: 10 }, (_, i) =>
+      mkHist(`2025-10-${String(i + 1).padStart(2, '0')}`, ['p2'], ['p1'], 1, 0, [
+        { type: 'goal', scorerId: 'p2', assistId: 'p1' },
+      ])
+    );
+    const [mario] = computeStatsFromMatches([p1], matches);
+    expect(mario.totalAssists).toBe(6);
+  });
+
+  it('incrementa gkMatches solo per partite non storiche', () => {
+    const matches = [
+      mkHist('2025-10-01', ['p1'], ['p2'], 1, 0),
+      mk('2025-11-01', ['p1'], ['p2'], 1, 0),
+      mk('2025-12-01', ['p1'], ['p2'], 1, 0),
+    ];
+    const [mario] = computeStatsFromMatches([p1], matches);
+    expect(mario.gkMatches).toBe(4); // 2 per ogni partita live
+    expect(mario.totalMatches).toBe(3);
+  });
+
+  it('conta clean sheet solo per partite live dove il giocatore non subisce gol', () => {
+    const matches = [
+      mk('2025-10-01', ['p2'], ['p1'], 2, 0, [
+        { type: 'goal', scorerId: 'p2', gkConcededId: 'p1' },
+        { type: 'goal', scorerId: 'p2', gkConcededId: 'p1' },
+      ]),
+      mk('2025-11-01', ['p1'], ['p2'], 1, 0), // nessun gkConcededId → clean sheet per entrambi
+    ];
+    const [mario, luigi] = computeStatsFromMatches([p1, p2], matches);
+    expect(mario.cleanSheets).toBe(1);  // solo la seconda (nella prima subisce 2 gol)
+    expect(luigi.cleanSheets).toBe(2);  // in entrambe non ha gkConcededId
+  });
+
+  it('conta V/N/P per partite live e storiche', () => {
+    const matches = [
+      mk('2025-10-01', ['p1'], ['p2'], 3, 1),
+      mk('2025-11-01', ['p1'], ['p2'], 0, 2),
+      mk('2025-12-01', ['p1'], ['p2'], 1, 1),
+      mkHist('2025-10-05', ['p1'], ['p2'], 2, 0), // win storica
+    ];
+    const [mario] = computeStatsFromMatches([p1], matches);
+    expect(mario.totalMatches).toBe(4);
+    expect(mario.totalWins).toBe(2);
+    expect(mario.totalDraws).toBe(1);
+  });
+
+  it('ignora i giocatori non presenti nella partita', () => {
+    const matches = [mk('2025-10-01', ['p1'], ['p2'], 2, 0)];
+    const [, , extra] = computeStatsFromMatches([p1, p2, p3], matches);
+    expect(extra.totalMatches).toBe(0);
+    expect(extra.totalGoals).toBe(0);
+    expect(extra.totalAssists).toBe(0);
+  });
+
+  it('conta autogol sia da live che da storiche', () => {
+    const matches = [
+      mk('2025-10-01', ['p1'], ['p2'], 0, 1, [{ type: 'autogoal', scorerId: 'p1' }]),
+      mkHist('2025-11-01', ['p1'], ['p2'], 0, 1, [{ type: 'autogoal', scorerId: 'p1' }]),
+    ];
+    const [mario] = computeStatsFromMatches([p1], matches);
+    expect(mario.totalAutogoals).toBe(2);
+  });
+
+  it('restituisce risultati coerenti su input identici (idempotente)', () => {
+    const matches = [
+      mk('2025-10-01', ['p1'], ['p2'], 2, 1, [{ type: 'goal', scorerId: 'p1', assistId: 'p2' }]),
+      mkHist('2025-10-05', ['p1'], ['p2'], 1, 0),
+    ];
+    const run1 = computeStatsFromMatches([p1, p2], matches);
+    const run2 = computeStatsFromMatches([p1, p2], matches);
+    expect(run1[0].totalGoals).toBe(run2[0].totalGoals);
+    expect(run1[0].totalAssists).toBe(run2[0].totalAssists);
+    expect(run1[1].totalAssists).toBe(run2[1].totalAssists);
   });
 });
 
