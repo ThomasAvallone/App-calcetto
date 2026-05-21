@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import usePlayersStore from '../store/playersStore';
 import { useMatchesSubscription } from '../hooks/useMatchesSubscription';
 import { HISTORICAL_SEASONS } from '../data/historicalData';
+import { SEASON_PLAYER_MAP, getSeasonId } from '../utils/playerStats';
 import { getMs } from '../utils/dateUtils';
 import { RESULT_COLORS, CLR_WIN, CLR_DRAW, CLR_LOSS, AVATAR_COLORS } from '../constants/colors';
 import { generateRivalryNarrative } from '../services/geminiService';
@@ -133,27 +134,6 @@ function getSeasonStartMs() {
   return new Date(year, 8, 1).getTime();
 }
 
-// Map seasonId → { PLAYERNAME_UPPER → { presenze, assist } }
-const SEASON_PLAYER_MAP = {};
-for (const season of HISTORICAL_SEASONS) {
-  SEASON_PLAYER_MAP[season.id] = {};
-  for (const sp of season.players) {
-    SEASON_PLAYER_MAP[season.id][sp.name.toUpperCase()] = {
-      presenze: sp.presenze || 0,
-      assist: sp.assist || 0,
-    };
-  }
-}
-
-// Returns season id (e.g. '2024-25') for a Firestore date value
-function getSeasonId(dateVal) {
-  const d = dateVal?.toMillis ? new Date(dateVal.toMillis()) : new Date(dateVal);
-  const year = d.getFullYear();
-  const month = d.getMonth() + 1;
-  return month >= 8
-    ? `${year}-${String(year + 1).slice(2)}`
-    : `${year - 1}-${String(year).slice(2)}`;
-}
 
 function computeStatsFromMatches(players, matches) {
   return players.map(p => {
@@ -176,7 +156,7 @@ function computeStatsFromMatches(players, matches) {
       for (const ev of (m.events || [])) {
         if (ev.type === 'goal') {
           if (ev.scorerId === p.id) s.goals++;
-          if (ev.assistId === p.id) s.assists++;
+          if (!m.isHistorical && ev.assistId === p.id) s.assists++;
         }
         if (ev.gkConcededId === p.id) { s.gkGoalsConceded++; gkConcededThisMatch++; }
         if (ev.type === 'autogoal' && ev.scorerId === p.id) s.autogoals++;
@@ -200,7 +180,7 @@ function computeStatsFromMatches(players, matches) {
         if (seasonData[name]) { pData = seasonData[name]; break; }
       }
       if (!pData || !pData.presenze || !pData.assist) continue;
-      s.assists += Math.round(pData.assist * (countInPeriod / pData.presenze));
+      s.assists += Math.round(pData.assist * Math.min(1, countInPeriod / pData.presenze));
     }
 
     return { ...p, totalGoals: s.goals, totalAssists: s.assists, totalAutogoals: s.autogoals, totalMatches: s.matches, totalWins: s.wins, totalDraws: s.draws, gkMatches: s.gkMatches, gkGoalsConceded: s.gkGoalsConceded, cleanSheets: s.cleanSheets };
