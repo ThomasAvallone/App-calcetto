@@ -201,8 +201,9 @@ export default function PlayersPage() {
         if (my > their) s.wins++;
         else if (my < their) s.losses++;
         else s.draws++;
-        // Tutti ruotano in porta: ogni partita giocata = 1 apparizione da portiere
-        s.gkMatches++;
+        // Tutti ruotano in porta: 2 turni per partita (convenzione, vedi CLAUDE.md).
+        // Le storiche non hanno dati GK individuali → escluse.
+        if (!m.isHistorical) s.gkMatches += 2;
         let gkConcededThisMatch = 0;
         for (const ev of m.events || []) {
           if (ev.type === 'goal') {
