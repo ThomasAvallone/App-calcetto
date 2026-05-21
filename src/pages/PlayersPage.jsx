@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import usePlayersStore from '../store/playersStore';
 import useAuthStore, { selectIsAdmin } from '../store/authStore';
-import { recalculatePlayerStats, updatePlayer } from '../firebase/firestore';
+import { recalculatePlayerStats } from '../firebase/firestore';
 import { getAllUsers, findUserByEmail, setUserLinkedPlayer, findUsersByLinkedPlayer } from '../firebase/auth';
 import { useMatchesSubscription } from '../hooks/useMatchesSubscription';
 import { usePIConfig } from '../hooks/usePIConfig';
@@ -447,11 +447,8 @@ export default function PlayersPage() {
     if (playersWithHistory.length === 0) { toast('Nessun giocatore con storico collegato'); return; }
     setRecalcLoading(true);
     try {
-      // Re-derive historicalStats from historicalData.js so any corrections to that file
-      // are propagated to Firestore before recalculating player stats.
-      await Promise.all(
-        playersWithHistory.map(p => updatePlayer(p.id, { historicalStats: computeCumulativeStats(p.historicalNames) }))
-      );
+      // recalculatePlayerStats deriva historicalStats da historicalData.js a ogni
+      // ricalcolo: propaga automaticamente eventuali correzioni a quel file.
       const ids = playersWithHistory.map(p => p.id);
       await recalculatePlayerStats(ids);
       toast.success(`Stats aggiornate per ${ids.length} giocator${ids.length === 1 ? 'e' : 'i'}`);
