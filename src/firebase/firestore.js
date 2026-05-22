@@ -112,6 +112,26 @@ export async function deleteMatch(id) {
   await deleteDoc(doc(db, 'matches', id));
 }
 
+// ─── MATCH REACTIONS ─────────────────────────────────────────────────────────
+
+export function subscribeToMatchReactions(matchId, callback) {
+  return onSnapshot(
+    collection(db, 'matches', matchId, 'reactions'),
+    snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+  );
+}
+
+export async function upsertMatchReaction(matchId, userId, data) {
+  await setDoc(doc(db, 'matches', matchId, 'reactions', userId), {
+    ...data,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export async function deleteMatchReaction(matchId, userId) {
+  await deleteDoc(doc(db, 'matches', matchId, 'reactions', userId));
+}
+
 export function subscribeToMatch(id, callback) {
   return onSnapshot(doc(db, 'matches', id), snap => {
     callback(snap.exists() ? { id: snap.id, ...snap.data() } : null);

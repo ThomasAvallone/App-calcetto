@@ -9,6 +9,7 @@ import { getAICache, setAICache } from '../firebase/firestore';
 import toast from 'react-hot-toast';
 import ReportAITab from '../components/stats/ReportAITab';
 import HallTab from '../components/stats/HallTab';
+import TrendTab from '../components/stats/TrendTab';
 import { computeWeatherStats } from '../utils/weatherStats';
 
 const LEADERBOARD_TABS = [
@@ -23,6 +24,7 @@ const LEADERBOARD_TABS = [
   { key: 'h2h',     label: '⚔️ H2H' },
   { key: 'squadre', label: '🆚 Squadre' },
   { key: 'meteo',   label: '🌤️ Meteo' },
+  { key: 'trend',   label: '📈 Trend' },
   { key: 'report',  label: '📝 Report AI' },
   { key: 'hall',    label: '🏛️ Hall' },
 ];
@@ -882,6 +884,17 @@ export default function StatsPage() {
       )}
 
       {/* Report AI tab */}
+      {tab === 'trend' && (
+        <TrendTab
+          finishedMatches={
+            period === '30d' ? thirtyDayFilteredMatches
+            : period === 'season' ? seasonFilteredMatches
+            : finishedMatches
+          }
+          players={players}
+        />
+      )}
+
       {tab === 'report' && (
         <ReportAITab
           finishedMatches={finishedMatches}
