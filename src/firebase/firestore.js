@@ -109,6 +109,12 @@ export async function deleteGoalEvent(matchId, event) {
 }
 
 export async function deleteMatch(id) {
+  // Best-effort: rimuove la subcollection reactions prima del documento padre,
+  // altrimenti i doc resterebbero orfani su Firestore (no cascade delete).
+  try {
+    const reactionsSnap = await getDocs(collection(db, 'matches', id, 'reactions'));
+    await Promise.all(reactionsSnap.docs.map(d => deleteDoc(d.ref)));
+  } catch { /* subcollection vuota o non accessibile: ignora */ }
   await deleteDoc(doc(db, 'matches', id));
 }
 

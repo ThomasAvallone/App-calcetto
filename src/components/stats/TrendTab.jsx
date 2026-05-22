@@ -85,12 +85,12 @@ export default function TrendTab({ finishedMatches, players }) {
 
       for (const e of events) {
         if (e.type === 'goal' && e.scorerId) matchGoals[e.scorerId] = (matchGoals[e.scorerId] || 0) + 1;
-        if (e.assistId) matchAssists[e.assistId] = (matchAssists[e.assistId] || 0) + 1;
+        if (e.type === 'goal' && e.assistId) matchAssists[e.assistId] = (matchAssists[e.assistId] || 0) + 1;
       }
-      for (const team of [m.redTeam || [], m.blueTeam || []]) {
-        const isRed = team === (m.redTeam || []);
-        const my = isRed ? (m.redScore ?? 0) : (m.blueScore ?? 0);
-        const their = isRed ? (m.blueScore ?? 0) : (m.redScore ?? 0);
+      for (const [team, my, their] of [
+        [m.redTeam || [], m.redScore ?? 0, m.blueScore ?? 0],
+        [m.blueTeam || [], m.blueScore ?? 0, m.redScore ?? 0],
+      ]) {
         if (my > their) for (const p of team) matchWins[p.id] = (matchWins[p.id] || 0) + 1;
       }
 
@@ -149,7 +149,7 @@ export default function TrendTab({ finishedMatches, players }) {
             <h3 className="mb-1" style={{ fontSize: '0.88rem' }}>
               📈 {metricLabel} cumulativi — top {series.length} giocatori
             </h3>
-            <p className="text-xs text-muted mb-3">Una linea per giocatore, partita per partita</p>
+            <p className="text-xs text-muted mb-3">Solo partite registrate nell'app · gli storici non sono inclusi</p>
             <LineChart series={series} xLabels={xLabels} />
           </div>
 

@@ -66,10 +66,13 @@ service cloud.firestore {
       allow read: if isAuth();
       allow write: if isAdmin();
 
-      // Reactions subcollection: every auth user can read all; each user can only write their own doc
+      // Reactions subcollection: every auth user can read all; each user can only
+      // create/update their own doc. Delete: il proprietario o un admin (la pulizia
+      // delle reazioni avviene quando un admin elimina la partita).
       match /reactions/{userId} {
         allow read: if isAuth();
-        allow write: if isAuth() && request.auth.uid == userId;
+        allow create, update: if isAuth() && request.auth.uid == userId;
+        allow delete: if (isAuth() && request.auth.uid == userId) || isAdmin();
       }
     }
 
