@@ -172,6 +172,13 @@ function getYoutubeId(url) {
   return null;
 }
 
+const EVENT_TYPE_META = {
+  goal:     { label: '⚽ Goal',       color: '#4FD1C5', bg: 'rgba(79,209,197,0.2)' },
+  autogoal: { label: '🤦 Autogoal',   color: '#F6E05E', bg: 'rgba(246,224,94,0.15)' },
+  save:     { label: '🧤 Parata',     color: '#63B3ED', bg: 'rgba(99,179,237,0.15)' },
+  injury:   { label: '🚑 Infortunio', color: '#FC8181', bg: 'rgba(252,129,129,0.15)' },
+};
+
 const REACTION_EMOJIS = [
   { emoji: '👑', label: 'MVP' },
   { emoji: '🔥', label: 'In fuoco' },
@@ -334,6 +341,8 @@ export default function MatchDetailPage() {
   const d = safeDate(match.date);
   const events = match.events || [];
   const goals = events.filter(e => e.type === 'goal' || e.type === 'autogoal');
+  const extraEvents = events.filter(e => e.type === 'save' || e.type === 'injury');
+  const chronicle = [...goals, ...extraEvents].sort((a, b) => (a.minute ?? 999) - (b.minute ?? 999));
 
   // Fallback per partite storiche che hanno solo scorerId (senza scorerName)
   const playerById = Object.fromEntries(
@@ -386,28 +395,44 @@ export default function MatchDetailPage() {
   };
 
   const handleAddEvent = async () => {
-    if (!addForm.scorerId) return toast.error('Seleziona il marcatore');
-    if (!addForm.gkId) return toast.error('Seleziona il portiere che ha subito il gol');
+    const isSimple = addForm.type === 'save' || addForm.type === 'injury';
+    if (!addForm.scorerId) return toast.error(isSimple ? 'Seleziona il giocatore' : 'Seleziona il marcatore');
+    if (!isSimple && !addForm.gkId) return toast.error('Seleziona il portiere che ha subito il gol');
     if (addForm.minute === '') return toast.error('Inserisci il minuto');
     const teamPlayers = addForm.team === 'red' ? (match.redTeam || []) : (match.blueTeam || []);
     const oppPlayers = addForm.team === 'red' ? (match.blueTeam || []) : (match.redTeam || []);
-    const scorer = teamPlayers.find(p => p.id === addForm.scorerId);
-    const assist = addForm.assistId ? teamPlayers.find(p => p.id === addForm.assistId) : null;
-    const gkPool = addForm.type === 'autogoal' ? teamPlayers : oppPlayers;
-    const gk = addForm.gkId ? gkPool.find(p => p.id === addForm.gkId) : null;
-    const newEvent = {
-      id: crypto.randomUUID(),
-      type: addForm.type,
-      team: addForm.team,
-      scorerId: scorer.id,
-      scorerName: scorer.name,
-      minute: parseInt(addForm.minute, 10),
-      timestamp: Date.now(),
-      assistId: assist?.id || null,
-      assistName: assist?.name || null,
-      gkConcededId: gk?.id || null,
-      gkConcededName: gk?.name || null,
-    };
+
+    let newEvent;
+    if (isSimple) {
+      const player = teamPlayers.find(p => p.id === addForm.scorerId);
+      newEvent = {
+        id: crypto.randomUUID(),
+        type: addForm.type,
+        team: addForm.team,
+        playerId: player.id,
+        playerName: player.name,
+        minute: parseInt(addForm.minute, 10),
+        timestamp: Date.now(),
+      };
+    } else {
+      const scorer = teamPlayers.find(p => p.id === addForm.scorerId);
+      const assist = addForm.assistId ? teamPlayers.find(p => p.id === addForm.assistId) : null;
+      const gkPool = addForm.type === 'autogoal' ? teamPlayers : oppPlayers;
+      const gk = addForm.gkId ? gkPool.find(p => p.id === addForm.gkId) : null;
+      newEvent = {
+        id: crypto.randomUUID(),
+        type: addForm.type,
+        team: addForm.team,
+        scorerId: scorer.id,
+        scorerName: scorer.name,
+        minute: parseInt(addForm.minute, 10),
+        timestamp: Date.now(),
+        assistId: assist?.id || null,
+        assistName: assist?.name || null,
+        gkConcededId: gk?.id || null,
+        gkConcededName: gk?.name || null,
+      };
+    }
     const newEvents = [...events, newEvent];
     let redScore = 0, blueScore = 0;
     for (const ev of newEvents) {
@@ -424,7 +449,7 @@ export default function MatchDetailPage() {
       await updateMatch(id, { events: newEvents, redScore, blueScore, ...reportAdd });
       const allIds = [...(match.redTeam || []), ...(match.blueTeam || [])].map(p => p.id);
       await recalcStats(allIds, updated);
-      toast.success('Evento aggiunto e statistiche ricalcolate');
+      toast.success(isSimple ? 'Evento aggiunto alla cronaca' : 'Evento aggiunto e statistiche ricalcolate');
       setAddForm({ type: 'goal', team: 'red', scorerId: '', assistId: '', gkId: '', minute: '' });
     } catch (e) {
       toast.error(e.message);
@@ -965,10 +990,37 @@ export default function MatchDetailPage() {
 
       {/* Events */}
       <div className="card" style={{ marginBottom: '1rem' }}>
-        <h3 className="mb-3">📋 Cronaca ({goals.length} eventi)</h3>
-        {goals.length === 0 ? (
+        <h3 className="mb-3">📋 Cronaca ({chronicle.length} eventi)</h3>
+        {chronicle.length === 0 ? (
           <p className="text-muted text-sm text-center" style={{ padding: '1rem' }}>Nessun evento</p>
-        ) : [...goals].sort((a, b) => (a.minute ?? 999) - (b.minute ?? 999)).map(ev => {
+        ) : chronicle.map(ev => {
+          if (ev.type === 'save' || ev.type === 'injury') {
+            const isSave = ev.type === 'save';
+            return (
+              <div key={ev.id} style={{ borderBottom: '1px solid #2D3748' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.6rem 0' }}>
+                  <span style={{ fontSize: '0.8rem', color: '#718096', minWidth: '28px', flexShrink: 0 }}>
+                    {ev.minute != null ? `${ev.minute}'` : '—'}
+                  </span>
+                  <span style={{ fontSize: '1rem', flexShrink: 0 }}>{isSave ? '🧤' : '🚑'}</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 500, fontSize: '0.9rem' }}>
+                      {ev.playerName || playerById[ev.playerId] || '?'}
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: isSave ? '#63B3ED' : '#FC8181' }}>
+                      {isSave ? 'Parata' : 'Infortunio'}
+                    </div>
+                  </div>
+                  {isAdmin && (
+                    <button
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#FC8181', padding: '4px 6px', fontSize: '0.9rem', flexShrink: 0 }}
+                      onClick={() => handleDeleteEvent(ev.id)}
+                    >✕</button>
+                  )}
+                </div>
+              </div>
+            );
+          }
           const isEditing = isAdmin && editingEventId === ev.id;
           return (
             <div key={ev.id} style={{ borderBottom: '1px solid #2D3748' }}>
@@ -1076,18 +1128,25 @@ export default function MatchDetailPage() {
         <div className="card" style={{ border: '1px solid rgba(79,209,197,0.25)' }}>
           <h3 className="mb-3" style={{ fontSize: '0.95rem' }}>➕ Aggiungi Evento</h3>
 
-          {/* Type */}
-          <div className="flex gap-2 mb-3">
-            {['goal', 'autogoal'].map(t => (
-              <button key={t} onClick={() => setAddForm(f => ({ ...f, type: t }))}
-                className="btn" style={{ flex: 1,
-                  background: addForm.type === t ? (t === 'goal' ? 'rgba(79,209,197,0.2)' : 'rgba(246,224,94,0.15)') : 'transparent',
-                  border: `1px solid ${addForm.type === t ? (t === 'goal' ? '#4FD1C5' : '#F6E05E') : '#2D3748'}`,
-                  color: addForm.type === t ? (t === 'goal' ? '#4FD1C5' : '#F6E05E') : '#718096',
-                }}>
-                {t === 'goal' ? '⚽ Goal' : '🤦 Autogoal'}
-              </button>
-            ))}
+          {/* Type — parata/infortunio disponibili solo a partita conclusa */}
+          <div className="flex gap-2 mb-3" style={{ flexWrap: 'wrap' }}>
+            {(match.status === 'finished'
+              ? ['goal', 'autogoal', 'save', 'injury']
+              : ['goal', 'autogoal']
+            ).map(t => {
+              const meta = EVENT_TYPE_META[t];
+              const active = addForm.type === t;
+              return (
+                <button key={t} onClick={() => setAddForm(f => ({ ...f, type: t, assistId: '', gkId: '' }))}
+                  className="btn" style={{ flex: '1 0 40%',
+                    background: active ? meta.bg : 'transparent',
+                    border: `1px solid ${active ? meta.color : '#2D3748'}`,
+                    color: active ? meta.color : '#718096',
+                  }}>
+                  {meta.label}
+                </button>
+              );
+            })}
           </div>
 
           {/* Team */}
@@ -1104,39 +1163,57 @@ export default function MatchDetailPage() {
             ))}
           </div>
 
-          {/* Scorer */}
-          <label className="text-xs text-muted" style={{ display: 'block', marginBottom: '0.3rem' }}>Marcatore *</label>
-          <select className="input mb-3" value={addForm.scorerId}
-            onChange={e => setAddForm(f => ({ ...f, scorerId: e.target.value }))}>
-            <option value="">– Seleziona –</option>
-            {(addForm.team === 'red' ? (match.redTeam || []) : (match.blueTeam || [])).map(p => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
+          {addForm.type === 'save' || addForm.type === 'injury' ? (
+            <>
+              {/* Player – save/injury */}
+              <label className="text-xs text-muted" style={{ display: 'block', marginBottom: '0.3rem' }}>
+                {addForm.type === 'save' ? 'Giocatore (ha parato)' : 'Giocatore infortunato'} *
+              </label>
+              <select className="input mb-3" value={addForm.scorerId}
+                onChange={e => setAddForm(f => ({ ...f, scorerId: e.target.value }))}>
+                <option value="">– Seleziona –</option>
+                {(addForm.team === 'red' ? (match.redTeam || []) : (match.blueTeam || [])).map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </>
+          ) : (
+            <>
+              {/* Scorer */}
+              <label className="text-xs text-muted" style={{ display: 'block', marginBottom: '0.3rem' }}>Marcatore *</label>
+              <select className="input mb-3" value={addForm.scorerId}
+                onChange={e => setAddForm(f => ({ ...f, scorerId: e.target.value }))}>
+                <option value="">– Seleziona –</option>
+                {(addForm.team === 'red' ? (match.redTeam || []) : (match.blueTeam || [])).map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
 
-          {/* Assist */}
-          <label className="text-xs text-muted" style={{ display: 'block', marginBottom: '0.3rem' }}>Assist (opzionale)</label>
-          <select className="input mb-3" value={addForm.assistId}
-            onChange={e => setAddForm(f => ({ ...f, assistId: e.target.value }))}>
-            <option value="">– Nessuno –</option>
-            {(addForm.team === 'red' ? (match.redTeam || []) : (match.blueTeam || []))
-              .filter(p => p.id !== addForm.scorerId).map(p => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
+              {/* Assist */}
+              <label className="text-xs text-muted" style={{ display: 'block', marginBottom: '0.3rem' }}>Assist (opzionale)</label>
+              <select className="input mb-3" value={addForm.assistId}
+                onChange={e => setAddForm(f => ({ ...f, assistId: e.target.value }))}>
+                <option value="">– Nessuno –</option>
+                {(addForm.team === 'red' ? (match.redTeam || []) : (match.blueTeam || []))
+                  .filter(p => p.id !== addForm.scorerId).map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
 
-          {/* GK conceded */}
-          <label className="text-xs text-muted" style={{ display: 'block', marginBottom: '0.3rem' }}>Portiere subito *</label>
-          <select className="input mb-3" value={addForm.gkId}
-            onChange={e => setAddForm(f => ({ ...f, gkId: e.target.value }))}>
-            <option value="">– Seleziona portiere –</option>
-            {(addForm.type === 'autogoal'
-              ? (addForm.team === 'red' ? (match.redTeam || []) : (match.blueTeam || []))
-              : (addForm.team === 'red' ? (match.blueTeam || []) : (match.redTeam || []))
-            ).map(p => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
+              {/* GK conceded */}
+              <label className="text-xs text-muted" style={{ display: 'block', marginBottom: '0.3rem' }}>Portiere subito *</label>
+              <select className="input mb-3" value={addForm.gkId}
+                onChange={e => setAddForm(f => ({ ...f, gkId: e.target.value }))}>
+                <option value="">– Seleziona portiere –</option>
+                {(addForm.type === 'autogoal'
+                  ? (addForm.team === 'red' ? (match.redTeam || []) : (match.blueTeam || []))
+                  : (addForm.team === 'red' ? (match.blueTeam || []) : (match.redTeam || []))
+                ).map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </>
+          )}
 
           {/* Minute */}
           <label className="text-xs text-muted" style={{ display: 'block', marginBottom: '0.3rem' }}>Minuto *</label>

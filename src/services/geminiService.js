@@ -120,9 +120,22 @@ export async function generateMatchCommentary(match, players) {
   const resolve = ev => ev.scorerName || playerById[ev.scorerId] || '?';
   const resolveAssist = ev => ev.assistName || playerById[ev.assistId] || null;
 
+  const resolvePlayer = ev => ev.playerName || playerById[ev.playerId] || '?';
+
   const goals     = (match.events || []).filter(e => e.type === 'goal');
   const autogoals = (match.events || []).filter(e => e.type === 'autogoal');
+  const saves     = (match.events || []).filter(e => e.type === 'save');
+  const injuries  = (match.events || []).filter(e => e.type === 'injury');
   const timeline  = [...goals, ...autogoals].sort((a, b) => (a.minute ?? 999) - (b.minute ?? 999));
+
+  const extraStr = [...saves, ...injuries]
+    .sort((a, b) => (a.minute ?? 999) - (b.minute ?? 999))
+    .map(ev => {
+      const min = ev.minute != null ? `${ev.minute}'` : '?';
+      return ev.type === 'save'
+        ? `${min}: gran parata di ${resolvePlayer(ev)}`
+        : `${min}: infortunio di ${resolvePlayer(ev)}`;
+    }).join('\n');
 
   const redNames  = (match.redTeam  || []).map(p => p.name).join(', ');
   const blueNames = (match.blueTeam || []).map(p => p.name).join(', ');
@@ -177,6 +190,7 @@ Squadra Blu: ${blueNames}
 
 CRONACA GOL:
 ${eventsStr}
+${extraStr ? `\nALTRI EVENTI (parate decisive e infortuni — citali nel commento dove ha senso):\n${extraStr}` : ''}
 ${hookLines ? `\nSPUNTI NARRATIVI:\n${hookLines}` : ''}
 Scrivi il commento ora:`;
 
