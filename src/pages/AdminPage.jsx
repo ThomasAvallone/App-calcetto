@@ -13,6 +13,13 @@ import toast from 'react-hot-toast';
 
 const CHANGELOG = [
   {
+    version: '3.12.2',
+    date: 'Maggio 2026',
+    entries: [
+      { type: 'new', text: '3 nuovi badge legati agli infortuni: 🩹 Vetro di Murano (stagione, negativo) ≥2 infortuni nella stagione corrente; 🛡️ Highlander (all-time, positivo) 30+ partite app giocate senza un solo infortunio (basta una uscita per perderlo); 🚑 Re dell\'Infermeria (all-time, negativo, singleton) chi ha più infortuni in carriera, min 3 — in caso di pareggio premia tutti i co-leader. Le partite storiche sono escluse dal conteggio (non hanno injury events). Catalogo BadgesPage aggiornato per classificare Highlander e Re dell\'Infermeria nella categoria All-time.' },
+    ],
+  },
+  {
     version: '3.12.1',
     date: 'Maggio 2026',
     entries: [

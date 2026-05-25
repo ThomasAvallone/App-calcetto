@@ -105,6 +105,29 @@ export const BADGE_DEFS = [
     check: (_s, p) => (p.stats?.matches || 0) >= 150,
   },
   {
+    id: 'highlander',
+    icon: '🛡️',
+    label: 'Highlander',
+    desc: '30+ partite app giocate senza un solo infortunio — indistruttibile',
+    positive: true,
+    check: (_s, p, matches) => {
+      if (!p?.id || !matches?.length) return false;
+      const pid = p.id;
+      let played = 0, injuries = 0;
+      for (const m of matches) {
+        if (m.isHistorical || m.status !== 'finished') continue;
+        const inMatch = [...(m.redTeam || []), ...(m.blueTeam || [])].some(pl => pl.id === pid);
+        if (!inMatch) continue;
+        played++;
+        for (const ev of (m.events || [])) {
+          if (ev.type === 'injury' && ev.playerId === pid) { injuries++; break; }
+        }
+        if (injuries > 0) return false;
+      }
+      return played >= 30 && injuries === 0;
+    },
+  },
+  {
     id: 'altruista',
     icon: '🛵',
     label: 'Altruista',
@@ -468,6 +491,51 @@ export const BADGE_DEFS = [
       (s.matches || 0) >= 15 &&
       (s.goals || 0) <= 2 &&
       (s.assists || 0) <= 2,
+  },
+  {
+    id: 'vetro_murano',
+    icon: '🩹',
+    label: 'Vetro di Murano',
+    desc: '≥2 infortuni nella stagione corrente — di una fragilità rinascimentale',
+    positive: false,
+    check: (_s, p, matches) => {
+      if (!p?.id || !matches?.length) return false;
+      const now = new Date();
+      const year = now.getMonth() >= 8 ? now.getFullYear() : now.getFullYear() - 1;
+      const seasonStart = new Date(year, 8, 1).getTime();
+      let count = 0;
+      for (const m of matches) {
+        if (m.isHistorical || m.status !== 'finished') continue;
+        if (getMs(m.date) < seasonStart) continue;
+        for (const ev of (m.events || [])) {
+          if (ev.type === 'injury' && ev.playerId === p.id) count++;
+        }
+      }
+      return count >= 2;
+    },
+  },
+  {
+    id: 're_infermeria',
+    icon: '🚑',
+    label: 'Re dell\'Infermeria',
+    desc: 'Più infortuni all-time (min 3) — il bollettino medico ufficiale del torneo',
+    positive: false,
+    check: (_s, p, matches) => {
+      if (!p?.id || !matches?.length) return false;
+      const counts = {};
+      for (const m of matches) {
+        if (m.isHistorical || m.status !== 'finished') continue;
+        for (const ev of (m.events || [])) {
+          if (ev.type === 'injury' && ev.playerId) {
+            counts[ev.playerId] = (counts[ev.playerId] || 0) + 1;
+          }
+        }
+      }
+      const myCount = counts[p.id] || 0;
+      if (myCount < 3) return false;
+      const maxCount = Math.max(...Object.values(counts));
+      return myCount === maxCount;
+    },
   },
 
   // ── METEO ─────────────────────────────────────────────────────────────────────

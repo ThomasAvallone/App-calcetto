@@ -21,7 +21,7 @@ const SOURCE_LABELS = {
 // Classify each badge by the data source it depends on
 function badgeSource(b) {
   if (b.id === 'bestie') return 'admin';
-  if (['veterano', 'diamante', 'il_prescelto', 'fenomeno', 'on_fire', 'crisi'].includes(b.id)) return 'alltime';
+  if (['veterano', 'diamante', 'il_prescelto', 'fenomeno', 'on_fire', 'crisi', 'highlander', 're_infermeria'].includes(b.id)) return 'alltime';
   if ([
     'early_bird', 'lone_ranger', 'meteorite', 'rockstar',
     'che_io_tassista', 'chirurgo', 'bulldozer', 'last_minute',
