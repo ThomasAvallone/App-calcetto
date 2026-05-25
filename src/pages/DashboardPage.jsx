@@ -14,6 +14,24 @@ import { CLR_WIN, CLR_LOSS, CLR_MUTED, RESULT_COLORS, AVATAR_COLORS } from '../c
 import { fetchWeatherForDate } from '../services/weatherService';
 import { SEASON_PLAYER_MAP, getSeasonId } from '../utils/playerStats';
 
+// Spread on a non-button element to make it keyboard-accessible (Enter / Space) and
+// announced as a button by screen readers. Use only on visually card-like clickable areas
+// where we can't use a real <button> (e.g. nested interactive children, complex layouts).
+function clickableProps(handler, label) {
+  return {
+    onClick: handler,
+    role: 'button',
+    tabIndex: 0,
+    'aria-label': label,
+    onKeyDown: (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        handler();
+      }
+    },
+  };
+}
+
 function getCountdown(dateStr) {
   if (!dateStr) return null;
   const d = new Date(dateStr);
@@ -541,7 +559,11 @@ export default function DashboardPage() {
               {myStats.last5.length > 0 && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', letterSpacing: '0.06em', fontWeight: 700 }}>FORMA</span>
-                  <div style={{ display: 'flex', gap: '4px' }}>
+                  <div
+                    style={{ display: 'flex', gap: '4px' }}
+                    role="img"
+                    aria-label={`Forma ultime ${myStats.last5.length} partite: ${myStats.last5.map(r => r === 'W' ? 'V' : r === 'D' ? 'P' : 'S').join(' ')}`}
+                  >
                     {myStats.last5.map((r, i) => (
                       <div key={i} title={r === 'W' ? 'Vittoria' : r === 'D' ? 'Pareggio' : 'Sconfitta'} style={{
                         width: 9, height: 9, borderRadius: '50%',
@@ -614,7 +636,10 @@ export default function DashboardPage() {
               boxShadow: `0 0 20px rgba(${accentRgb},0.1)`,
               cursor: 'pointer',
             }}
-            onClick={() => navigate(`/match/${liveMatch.id}`)}
+            {...clickableProps(
+              () => navigate(`/match/${liveMatch.id}`),
+              isMyMatch ? 'Torna alla partita in corso' : 'Apri partita live',
+            )}
           >
             <div className="flex items-center gap-3">
               {/* CSS radar dot instead of emoji pulse */}
@@ -681,7 +706,10 @@ export default function DashboardPage() {
             border: '1px solid rgba(246,224,94,0.28)',
             cursor: 'pointer',
           }}
-          onClick={() => navigate(`/history/scheduled/${nearestScheduled.id}`)}
+          {...clickableProps(
+            () => navigate(`/history/scheduled/${nearestScheduled.id}`),
+            'Apri dettaglio prossima partita programmata',
+          )}
         >
           <div className="flex items-center gap-3">
             <div style={{ fontSize: '1.5rem' }}>📅</div>
@@ -820,7 +848,10 @@ export default function DashboardPage() {
                   <div
                     key={m.id}
                     className="interactive-row"
-                    onClick={() => handleStartScheduled(m.id)}
+                    {...clickableProps(
+                      () => handleStartScheduled(m.id),
+                      `Avvia partita programmata ${d ? format(d, "d MMM HH:mm", { locale: it }) : ''}`,
+                    )}
                     style={{
                       padding: '0.6rem 0.7rem',
                       cursor: 'pointer',
@@ -1081,7 +1112,10 @@ export default function DashboardPage() {
                 borderBottom: i < recentMatches.length - 1 ? '1px solid rgba(74,85,104,0.35)' : 'none',
                 borderLeft: `3px solid ${winnerAccent}`,
               }}
-              onClick={() => navigate(`/history/${m.id}`)}
+              {...clickableProps(
+                () => navigate(`/history/${m.id}`),
+                `Apri partita ${(m.redScore ?? 0)} a ${(m.blueScore ?? 0)} del ${d ? format(d, 'd MMM yyyy', { locale: it }) : ''}`,
+              )}
             >
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>
