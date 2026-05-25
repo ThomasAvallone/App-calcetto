@@ -75,7 +75,7 @@ export default function DashboardPage() {
     let cancelled = false;
     fetchWeatherForDate(d).then(w => { if (!cancelled && w) setNextMatchWeather(w); });
     return () => { cancelled = true; };
-  }, [nearestScheduled?.id]);
+  }, [nearestScheduled?.id, getMs(nearestScheduled?.date)]);
 
   const seasonStartMs = useMemo(() => {
     const n = new Date();
@@ -184,7 +184,7 @@ export default function DashboardPage() {
   const ranking = getRanking().slice(0, 5);
 
   const coppaDiLatta = useMemo(() => {
-    const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const cutoff = now - 30 * 24 * 60 * 60 * 1000;
     const monthly = finishedMatches.filter(m => getMs(m.date) >= cutoff);
     if (monthly.length === 0) return null;
 
@@ -216,7 +216,7 @@ export default function DashboardPage() {
       .sort((a, b) => b.gkRate - a.gkRate)[0] || null;
     if (!topScorer && !topAssist && !topAutogoal && !worstGk) return null;
     return { topScorer, topAssist, topAutogoal, worstGk, matchCount: monthly.length };
-  }, [finishedMatches]);
+  }, [finishedMatches, now]);
 
   const handleStartScheduled = async (matchId) => {
     setStarting(true);
