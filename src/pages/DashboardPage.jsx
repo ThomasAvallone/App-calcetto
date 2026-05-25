@@ -216,38 +216,50 @@ export default function DashboardPage() {
     [players, seasonMatchesPerPlayer]);
 
   const coppaDiLatta = useMemo(() => {
-    const cutoff = now - 30 * 24 * 60 * 60 * 1000;
-    const monthly = finishedMatches.filter(m => getMs(m.date) >= cutoff);
-    if (monthly.length === 0) return null;
-
-    const ps = {};
-    for (const m of monthly) {
-      for (const p of [...(m.redTeam || []), ...(m.blueTeam || [])]) {
-        if (!ps[p.id]) ps[p.id] = { name: p.name, goals: 0, assists: 0, autogoals: 0, gkGoalsConceded: 0, matchesPlayed: 0 };
-        ps[p.id].matchesPlayed++;
-      }
-      for (const ev of (m.events || [])) {
-        if (ev.type === 'goal') {
-          if (ev.scorerId && ps[ev.scorerId]) ps[ev.scorerId].goals++;
-          if (!m.isHistorical && ev.assistId && ps[ev.assistId]) ps[ev.assistId].assists++;
+    // computeWinners ritorna i 4 award (topScorer, topAssist, topAutogoal, worstGk)
+    // per le partite nell'intervallo [fromMs, toMs). Estratto in chiusura per
+    // riusare la stessa logica su finestra corrente e finestra precedente (trend).
+    const computeWinners = (fromMs, toMs) => {
+      const matches = finishedMatches.filter(m => {
+        const ms = getMs(m.date);
+        return ms >= fromMs && ms < toMs;
+      });
+      if (matches.length === 0) return { matchCount: 0, topScorer: null, topAssist: null, topAutogoal: null, worstGk: null };
+      const ps = {};
+      for (const m of matches) {
+        for (const p of [...(m.redTeam || []), ...(m.blueTeam || [])]) {
+          if (!ps[p.id]) ps[p.id] = { name: p.name, goals: 0, assists: 0, autogoals: 0, gkGoalsConceded: 0, matchesPlayed: 0 };
+          ps[p.id].matchesPlayed++;
         }
-        if (ev.type === 'autogoal' && ev.scorerId && ps[ev.scorerId]) ps[ev.scorerId].autogoals++;
-        if (ev.gkConcededId && ps[ev.gkConcededId]) ps[ev.gkConcededId].gkGoalsConceded++;
+        for (const ev of (m.events || [])) {
+          if (ev.type === 'goal') {
+            if (ev.scorerId && ps[ev.scorerId]) ps[ev.scorerId].goals++;
+            if (!m.isHistorical && ev.assistId && ps[ev.assistId]) ps[ev.assistId].assists++;
+          }
+          if (ev.type === 'autogoal' && ev.scorerId && ps[ev.scorerId]) ps[ev.scorerId].autogoals++;
+          if (ev.gkConcededId && ps[ev.gkConcededId]) ps[ev.gkConcededId].gkGoalsConceded++;
+        }
       }
-    }
-    const list = Object.values(ps);
-    // Soglie minime per evitare award banali (es. "Bomber con 1 gol")
-    const topScorer   = list.filter(p => p.goals   >= 3).sort((a, b) => b.goals   - a.goals  )[0] || null;
-    const topAssist   = list.filter(p => p.assists >= 3).sort((a, b) => b.assists - a.assists)[0] || null;
-    const topAutogoal = list.filter(p => p.autogoals > 0).sort((a, b) => b.autogoals - a.autogoals)[0] || null;
-    // Peggior portiere: ranking per rate (gol/turno) invece di count assoluto, così
-    // chi gioca tante partite non "vince" automaticamente. Convenzione: 2 turni per partita.
-    const worstGk = list
-      .filter(p => p.matchesPlayed >= 2 && p.gkGoalsConceded >= 2)
-      .map(p => ({ ...p, gkRate: p.gkGoalsConceded / (p.matchesPlayed * 2) }))
-      .sort((a, b) => b.gkRate - a.gkRate)[0] || null;
-    if (!topScorer && !topAssist && !topAutogoal && !worstGk) return null;
-    return { topScorer, topAssist, topAutogoal, worstGk, matchCount: monthly.length };
+      const list = Object.values(ps);
+      // Soglie minime per evitare award banali (es. "Bomber con 1 gol")
+      const topScorer   = list.filter(p => p.goals   >= 3).sort((a, b) => b.goals   - a.goals  )[0] || null;
+      const topAssist   = list.filter(p => p.assists >= 3).sort((a, b) => b.assists - a.assists)[0] || null;
+      const topAutogoal = list.filter(p => p.autogoals > 0).sort((a, b) => b.autogoals - a.autogoals)[0] || null;
+      // Peggior portiere: ranking per rate (gol/turno) invece di count assoluto, così
+      // chi gioca tante partite non "vince" automaticamente. Convenzione: 2 turni per partita.
+      const worstGk = list
+        .filter(p => p.matchesPlayed >= 2 && p.gkGoalsConceded >= 2)
+        .map(p => ({ ...p, gkRate: p.gkGoalsConceded / (p.matchesPlayed * 2) }))
+        .sort((a, b) => b.gkRate - a.gkRate)[0] || null;
+      return { topScorer, topAssist, topAutogoal, worstGk, matchCount: matches.length };
+    };
+
+    const monthMs = 30 * 24 * 60 * 60 * 1000;
+    const current = computeWinners(now - monthMs, now + 1);
+    if (current.matchCount === 0) return null;
+    if (!current.topScorer && !current.topAssist && !current.topAutogoal && !current.worstGk) return null;
+    const previous = computeWinners(now - 2 * monthMs, now - monthMs);
+    return { ...current, previous };
   }, [finishedMatches, now]);
 
   const handleStartScheduled = async (matchId) => {
@@ -1102,12 +1114,45 @@ export default function DashboardPage() {
               {coppaDiLatta.matchCount} partite
             </span>
           </div>
-          {[
-            coppaDiLatta.topScorer   && { icon: '⚽', label: 'Bomber del Mese',    name: coppaDiLatta.topScorer.name,   val: `${coppaDiLatta.topScorer.goals} gol`,               color: 'var(--teal)',      positive: true  },
-            coppaDiLatta.topAssist   && { icon: '🎯', label: 'Assistman del Mese', name: coppaDiLatta.topAssist.name,   val: `${coppaDiLatta.topAssist.assists} assist`,          color: 'var(--blue-team)', positive: true  },
-            coppaDiLatta.worstGk     && { icon: '🧤', label: 'Peggior Portiere',   name: coppaDiLatta.worstGk.name,     val: `${coppaDiLatta.worstGk.gkGoalsConceded} gol subiti`, color: 'var(--red)',       positive: false },
-            coppaDiLatta.topAutogoal && { icon: '🤦', label: 'Re degli Autogol',   name: coppaDiLatta.topAutogoal.name, val: `${coppaDiLatta.topAutogoal.autogoals} autogol`,     color: '#B794F4',          positive: false },
-          ].filter(Boolean).map((award, idx, arr) => (
+          {(() => {
+            // Build award rows with current + previous-month winner per category for trend
+            const prev = coppaDiLatta.previous;
+            const prevHint = (current, previous) => {
+              if (!previous) return null;
+              if (previous.name === current.name) return 'anche il mese scorso';
+              return `prima: ${previous.name}`;
+            };
+            return [
+              coppaDiLatta.topScorer && {
+                icon: '⚽', label: 'Bomber del Mese',
+                name: coppaDiLatta.topScorer.name,
+                val: `${coppaDiLatta.topScorer.goals} gol`,
+                color: 'var(--teal)', positive: true,
+                prevHint: prevHint(coppaDiLatta.topScorer, prev?.topScorer),
+              },
+              coppaDiLatta.topAssist && {
+                icon: '🎯', label: 'Assistman del Mese',
+                name: coppaDiLatta.topAssist.name,
+                val: `${coppaDiLatta.topAssist.assists} assist`,
+                color: 'var(--blue-team)', positive: true,
+                prevHint: prevHint(coppaDiLatta.topAssist, prev?.topAssist),
+              },
+              coppaDiLatta.worstGk && {
+                icon: '🧤', label: 'Peggior Portiere',
+                name: coppaDiLatta.worstGk.name,
+                val: `${coppaDiLatta.worstGk.gkGoalsConceded} gol subiti`,
+                color: 'var(--red)', positive: false,
+                prevHint: prevHint(coppaDiLatta.worstGk, prev?.worstGk),
+              },
+              coppaDiLatta.topAutogoal && {
+                icon: '🤦', label: 'Re degli Autogol',
+                name: coppaDiLatta.topAutogoal.name,
+                val: `${coppaDiLatta.topAutogoal.autogoals} autogol`,
+                color: '#B794F4', positive: false,
+                prevHint: prevHint(coppaDiLatta.topAutogoal, prev?.topAutogoal),
+              },
+            ].filter(Boolean);
+          })().map((award, idx, arr) => (
             <div
               key={award.label}
               /* Left border differentiates positive (achievement) vs negative (ironic) awards */
@@ -1132,6 +1177,19 @@ export default function DashboardPage() {
                 }}>
                   {award.name}
                 </div>
+                {award.prevHint && (
+                  <div style={{
+                    fontSize: '0.66rem',
+                    color: 'var(--text-muted)',
+                    marginTop: '0.1rem',
+                    fontStyle: 'italic',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}>
+                    {award.prevHint}
+                  </div>
+                )}
               </div>
               <div style={{ fontWeight: 700, color: award.color, fontSize: '0.88rem', whiteSpace: 'nowrap' }}>
                 {award.val}
