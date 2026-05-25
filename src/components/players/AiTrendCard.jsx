@@ -41,20 +41,40 @@ export default function AiTrendCard({ player, playerMatches }) {
         const my     = inRed ? match.redScore : match.blueScore;
         const their  = inRed ? match.blueScore : match.redScore;
         const result = my > their ? 'W' : my < their ? 'L' : 'D';
-        let goals = 0, assists = 0, autogoals = 0;
+        let goals = 0, assists = 0, autogoals = 0, injuries = 0;
         for (const ev of (match.events || [])) {
           if (ev.type === 'goal'     && ev.scorerId === player.id) goals++;
           if (ev.type === 'goal'     && ev.assistId === player.id) assists++;
           if (ev.type === 'autogoal' && ev.scorerId === player.id) autogoals++;
+          if (ev.type === 'injury'   && ev.playerId === player.id) injuries++;
         }
-        return { result, goals, assists, autogoals };
+        return { result, goals, assists, autogoals, injuries };
       });
 
       const weatherStats = computePlayerWeatherStats(
         playerMatches.filter(m => !m.isHistorical),
         player.id,
       );
-      const text = await generatePlayerTrendAnalysis(player, recentData, weatherStats);
+
+      // Cronistoria infortuni complessiva (su tutte le partite app, non solo le 4 recenti)
+      let totalInjuries = 0;
+      let lastInjuryMs = 0;
+      for (const match of playerMatches) {
+        if (match.isHistorical) continue;
+        for (const ev of (match.events || [])) {
+          if (ev.type === 'injury' && ev.playerId === player.id) {
+            totalInjuries++;
+            const ms = getMs(match.date);
+            if (ms > lastInjuryMs) lastInjuryMs = ms;
+          }
+        }
+      }
+      const injuryStats = totalInjuries > 0 ? {
+        total: totalInjuries,
+        lastInjuryDate: lastInjuryMs ? new Date(lastInjuryMs).toLocaleDateString('it-IT') : null,
+      } : null;
+
+      const text = await generatePlayerTrendAnalysis(player, recentData, weatherStats, injuryStats);
       setPendingText(text);
       const latestMatch = played[played.length - 1];
       await updatePlayer(player.id, {

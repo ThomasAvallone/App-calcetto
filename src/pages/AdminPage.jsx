@@ -13,6 +13,14 @@ import toast from 'react-hot-toast';
 
 const CHANGELOG = [
   {
+    version: '3.12.1',
+    date: 'Maggio 2026',
+    entries: [
+      { type: 'new', text: 'Infortuni nell\'analisi AI giocatore: il prompt di generatePlayerTrendAnalysis ora riceve, oltre a goal/assist/autogol, anche le uscite per infortunio nelle ultime 4 partite e il totale carriera (con data dell\'ultimo). Istruzione esplicita al modello di citarli con umorismo bonario ("vetro di Murano", "l\'infermeria è la sua seconda casa") senza essere cattivo.' },
+      { type: 'new', text: 'Infortuni nel Report AI periodico (Classifiche): aggiunte due metriche al prompt di generatePeriodReport — "Più sfortunato" (giocatore con più uscite per infortunio nel periodo, fallback su playerName dell\'evento se il giocatore è stato eliminato) e "bollettino medico" col totale infortuni del periodo. Linea omessa se totalInjuries=0.' },
+    ],
+  },
+  {
     version: '3.12.0',
     date: 'Maggio 2026',
     entries: [

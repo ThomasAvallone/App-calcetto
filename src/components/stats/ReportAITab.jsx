@@ -48,6 +48,23 @@ export default function ReportAITab({ finishedMatches, players, reportText, setR
         matches: cp.totalMatches, wins: cp.totalWins,
       };
     }
+
+    // Infortuni: computeStatsFromMatches non li traccia, ricavati direttamente
+    // dagli eventi (skip partite storiche — non hanno injury events)
+    const injuriesByPid = {};
+    const fallbackNameByPid = {};
+    let totalInjuries = 0;
+    for (const m of filtered) {
+      if (m.isHistorical) continue;
+      for (const ev of (m.events || [])) {
+        if (ev.type === 'injury' && ev.playerId) {
+          injuriesByPid[ev.playerId] = (injuriesByPid[ev.playerId] || 0) + 1;
+          if (ev.playerName) fallbackNameByPid[ev.playerId] = ev.playerName;
+          totalInjuries++;
+        }
+      }
+    }
+
     const list = Object.values(ps).filter(p => p.matches > 0);
     const topScorer   = list.filter(p => p.goals > 0).sort((a, b) => b.goals - a.goals)[0] || null;
     const topAssist   = list.filter(p => p.assists > 0).sort((a, b) => b.assists - a.assists)[0] || null;
@@ -62,8 +79,13 @@ export default function ReportAITab({ finishedMatches, players, reportText, setR
     const bestStreak  = streaks.filter(p => p.streak.type === 'win').sort((a, b) => b.streak.count - a.streak.count)[0] || null;
     const worstStreak = streaks.filter(p => p.streak.type === 'loss').sort((a, b) => b.streak.count - a.streak.count)[0] || null;
 
+    const injuredEntries = Object.entries(injuriesByPid)
+      .map(([pid, n]) => ({ name: ps[pid]?.name || fallbackNameByPid[pid] || 'Sconosciuto', injuries: n }))
+      .sort((a, b) => b.injuries - a.injuries);
+    const mostInjured = injuredEntries[0] || null;
+
     return {
-      matchCount, totalGoals,
+      matchCount, totalGoals, totalInjuries,
       topScorer: topScorer ? { name: topScorer.name, goals: topScorer.goals } : null,
       topAssist: topAssist ? { name: topAssist.name, assists: topAssist.assists } : null,
       topAutogoal: topAutogoal ? { name: topAutogoal.name, autogoals: topAutogoal.autogoals } : null,
@@ -72,6 +94,7 @@ export default function ReportAITab({ finishedMatches, players, reportText, setR
       topWinRate: topWinRate ? { name: topWinRate.name, pct: Math.round((topWinRate.wins / topWinRate.matches) * 100) } : null,
       bestStreak: bestStreak ? { name: bestStreak.name, count: bestStreak.streak.count } : null,
       worstStreak: worstStreak ? { name: worstStreak.name, count: worstStreak.streak.count } : null,
+      mostInjured,
     };
   };
 

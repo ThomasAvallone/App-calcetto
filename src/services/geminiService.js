@@ -307,7 +307,7 @@ Scrivi il pronostico ora:`;
 
 // ─── Report mensile/stagionale AI ─────────────────────────────────────────────
 export async function generatePeriodReport(periodLabel, topStats, weatherStats) {
-  const { topScorer, topAssist, topWinRate, mostMatches, topAutogoal, worstGk, matchCount, totalGoals, bestStreak, worstStreak } = topStats;
+  const { topScorer, topAssist, topWinRate, mostMatches, topAutogoal, worstGk, matchCount, totalGoals, bestStreak, worstStreak, mostInjured, totalInjuries } = topStats;
   const line = (label, val) => val ? `\n- ${label}: ${val}` : '';
 
   const filteredWeather = Array.isArray(weatherStats)
@@ -319,6 +319,10 @@ export async function generatePeriodReport(periodLabel, topStats, weatherStats) 
         .join('\n')
     : '';
 
+  const injuryNote = totalInjuries > 0
+    ? `\nIl bollettino medico del periodo conta ${totalInjuries} uscit${totalInjuries === 1 ? 'a' : 'e'} per infortunio${mostInjured ? `, con ${mostInjured.name} a guidare la classifica (${mostInjured.injuries})` : ''}. Cita la cosa con umorismo bonario nel report.`
+    : '';
+
   const prompt = `Sei il cronista ufficiale di un torneo di calcetto amatoriale tra amici. \
 Scrivi un report del periodo "${periodLabel}" in italiano, nello stile di un giornale sportivo: \
 drammatico, ironico, con aneddoti sui giocatori più significativi. \
@@ -326,7 +330,7 @@ Circa 4 paragrafi. No markdown, solo prosa.
 
 STATISTICHE DEL PERIODO:
 - Partite disputate: ${matchCount}
-- Gol totali: ${totalGoals}${line('Capocannoniere', topScorer ? `${topScorer.name} con ${topScorer.goals} gol` : null)}${line('Top Assistman', topAssist ? `${topAssist.name} con ${topAssist.assists} assist` : null)}${line('Miglior Win Rate', topWinRate ? `${topWinRate.name} (${topWinRate.pct}%, min 5 partite)` : null)}${line('Più presente', mostMatches ? `${mostMatches.name} con ${mostMatches.matches} partite` : null)}${line('Re degli Autogol', topAutogoal ? `${topAutogoal.name} con ${topAutogoal.autogoals} autogol` : null)}${line('Peggior Portiere', worstGk ? `${worstGk.name} con ${worstGk.goals} gol subiti` : null)}${line('Streak migliore', bestStreak ? `${bestStreak.name}: ${bestStreak.count} vittorie consecutive` : null)}${line('Streak peggiore', worstStreak ? `${worstStreak.name}: ${worstStreak.count} sconfitte consecutive` : null)}${weatherLines}
+- Gol totali: ${totalGoals}${line('Capocannoniere', topScorer ? `${topScorer.name} con ${topScorer.goals} gol` : null)}${line('Top Assistman', topAssist ? `${topAssist.name} con ${topAssist.assists} assist` : null)}${line('Miglior Win Rate', topWinRate ? `${topWinRate.name} (${topWinRate.pct}%, min 5 partite)` : null)}${line('Più presente', mostMatches ? `${mostMatches.name} con ${mostMatches.matches} partite` : null)}${line('Re degli Autogol', topAutogoal ? `${topAutogoal.name} con ${topAutogoal.autogoals} autogol` : null)}${line('Peggior Portiere', worstGk ? `${worstGk.name} con ${worstGk.goals} gol subiti` : null)}${line('Più sfortunato', mostInjured ? `${mostInjured.name} con ${mostInjured.injuries} uscit${mostInjured.injuries === 1 ? 'a' : 'e'} per infortunio` : null)}${line('Streak migliore', bestStreak ? `${bestStreak.name}: ${bestStreak.count} vittorie consecutive` : null)}${line('Streak peggiore', worstStreak ? `${worstStreak.name}: ${worstStreak.count} sconfitte consecutive` : null)}${weatherLines}${injuryNote}
 
 Scrivi il report ora:`;
 
@@ -464,16 +468,18 @@ Rispondi ESCLUSIVAMENTE con JSON valido (niente testo prima o dopo):
 }
 
 // ─── Analisi trend giocatore ──────────────────────────────────────────────────
-// recentData: array di max 4 oggetti { result: 'W'|'L'|'D', goals, assists, autogoals }
+// recentData: array di max 4 oggetti { result: 'W'|'L'|'D', goals, assists, autogoals, injuries }
 // weatherStats: array opzionale di { label, matches, wins, draws, losses, goals, assists }
 //   filtrato a ≥2 partite per condizione (small-sample escluso).
-export async function generatePlayerTrendAnalysis(player, recentData, weatherStats = []) {
+// injuryStats: { total, lastInjuryDate } opzionale — cronistoria infortuni complessiva
+export async function generatePlayerTrendAnalysis(player, recentData, weatherStats = [], injuryStats = null) {
   const matchLines = recentData.map((m, i) => {
     const res    = m.result === 'W' ? 'Vittoria' : m.result === 'L' ? 'Sconfitta' : 'Pareggio';
     const parts  = [];
     if (m.goals)     parts.push(`${m.goals} gol`);
     if (m.assists)   parts.push(`${m.assists} assist`);
     if (m.autogoals) parts.push(`${m.autogoals} autogol`);
+    if (m.injuries)  parts.push(`uscito per infortunio`);
     return `Partita ${i + 1}: ${res} — ${parts.length ? parts.join(', ') : 'nessun contributo offensivo'}`;
   }).join('\n');
 
@@ -490,12 +496,21 @@ export async function generatePlayerTrendAnalysis(player, recentData, weatherSta
       }).join('\n')
     : '';
 
+  const recentInjuries = recentData.reduce((s, m) => s + (m.injuries || 0), 0);
+  const injuryBlock = injuryStats && injuryStats.total > 0
+    ? `\n\nINFORTUNI: ${injuryStats.total} in carriera registrata${
+        recentInjuries > 0 ? `, di cui ${recentInjuries} nelle ultime ${recentData.length}` : ''
+      }${injuryStats.lastInjuryDate ? ` (ultimo: ${injuryStats.lastInjuryDate})` : ''}.`
+    : '';
+
   const prompt = `Sei un analista sportivo sarcastico, divertente e tagliente che commenta le prestazioni \
 di un giocatore di calcetto amatoriale tra amici. \
 Scrivi un'analisi del suo momento di forma in italiano: circa 3 paragrafi brevi. \
 Sii diretto, ironico, a tratti brutale ma bonario — come farebbe un amico. \
 Se ci sono dati meteo significativi e mostrano un pattern marcato (es. molto meglio col sole, \
 disastro sotto la pioggia), commentalo con ironia; altrimenti ignorali. \
+Se ci sono infortuni recenti o ricorrenti, citali con umorismo soft (tipo "vetro di Murano", \
+"l'infermeria è la sua seconda casa") senza essere cattivo. \
 Non usare markdown, asterischi o titoli. Solo prosa.
 
 DATI DI ${player.name.toUpperCase()}:
@@ -503,7 +518,7 @@ Power Index attuale: ${(player.powerIndex || 50).toFixed(1)} / 100
 Streak: ${streakStr}
 
 ULTIME ${recentData.length} PARTITE:
-${matchLines}${weatherBlock}
+${matchLines}${weatherBlock}${injuryBlock}
 
 Scrivi l'analisi ora:`;
 
