@@ -1,8 +1,5 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-
-const HISTORY_SS_KEY = 'history-page-state';
-const readSS = () => { try { return JSON.parse(sessionStorage.getItem(HISTORY_SS_KEY)) || {}; } catch { return {}; } };
 import { subscribeToMatches } from '../firebase/firestore';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -10,6 +7,9 @@ import { generateMatchReport } from '../services/reportService';
 import toast from 'react-hot-toast';
 import { safeDate } from '../utils/dateUtils';
 import { downloadICS } from '../utils/calendarUtils';
+
+const HISTORY_SS_KEY = 'history-page-state';
+const readSS = () => { try { return JSON.parse(sessionStorage.getItem(HISTORY_SS_KEY)) || {}; } catch { return {}; } };
 
 function getMatchSeason(d) {
   if (!d) return null;
@@ -161,9 +161,9 @@ export default function HistoryPage() {
     navigate(path);
   };
 
-  const scheduled = matches.filter(m => m.status === 'scheduled');
-  const active = matches.filter(m => m.status !== 'finished' && m.status !== 'scheduled');
-  const finished = matches.filter(m => m.status === 'finished');
+  const scheduled = useMemo(() => matches.filter(m => m.status === 'scheduled'), [matches]);
+  const active = useMemo(() => matches.filter(m => m.status !== 'finished' && m.status !== 'scheduled'), [matches]);
+  const finished = useMemo(() => matches.filter(m => m.status === 'finished'), [matches]);
 
   // Available seasons from match dates
   const seasons = useMemo(() => {
@@ -289,7 +289,7 @@ export default function HistoryPage() {
               📅 Esporta tutte
             </button>
           </div>
-          {scheduled.map(m => <ScheduledCard key={m.id} match={m} />)}
+          {scheduled.map(m => <ScheduledCard key={m.id} match={m} onClick={() => goToMatch(`/history/scheduled/${m.id}`)} />)}
           <div style={{ height: '0.5rem' }} />
         </>
       )}
@@ -297,7 +297,7 @@ export default function HistoryPage() {
       {active.length > 0 && (
         <>
           <h3 className="text-sm text-muted mb-2">IN CORSO</h3>
-          {active.map(m => <MatchCard key={m.id} match={m} onClick={() => navigate(`/match/${m.id}`)} />)}
+          {active.map(m => <MatchCard key={m.id} match={m} onClick={() => goToMatch(`/match/${m.id}`)} />)}
           <div style={{ height: '0.5rem' }} />
         </>
       )}
@@ -458,7 +458,7 @@ function CalendarView({ matches, onNavigate, year, month, selectedDay, onYearCha
   const matchesByDay = useMemo(() => {
     const map = {};
     for (const m of matches) {
-      const d = m.date?.toDate ? m.date.toDate() : m.date ? new Date(m.date) : null;
+      const d = safeDate(m.date);
       if (!d || isNaN(d)) continue;
       if (d.getFullYear() === year && d.getMonth() === month) {
         const day = d.getDate();
@@ -719,8 +719,7 @@ function MatchCard({ match: m, onClick }) {
   );
 }
 
-function ScheduledCard({ match: m }) {
-  const navigate = useNavigate();
+function ScheduledCard({ match: m, onClick }) {
   const d = safeDate(m.date);
   return (
     <div
@@ -730,7 +729,7 @@ function ScheduledCard({ match: m }) {
         background: 'rgba(246,224,94,0.06)',
         cursor: 'pointer',
       }}
-      onClick={() => navigate(`/history/scheduled/${m.id}`)}
+      onClick={onClick}
     >
       <div className="flex items-center gap-3 mb-2">
         <div style={{ fontSize: '1.2rem' }}>📅</div>
