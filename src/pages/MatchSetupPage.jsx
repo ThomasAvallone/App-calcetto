@@ -11,7 +11,7 @@ const ROLES = ['Portiere', 'Difensore', 'Centrocampista', 'Attaccante'];
 
 export default function MatchSetupPage() {
   const navigate = useNavigate();
-  const { players, balanceTeams } = usePlayersStore();
+  const { players, balanceTeams, balanceWithLocks } = usePlayersStore();
   const { createNewMatch, loadMatch } = useMatchStore();
 
   const [step, setStep] = useState('select'); // select | preview
@@ -20,6 +20,7 @@ export default function MatchSetupPage() {
   const [preview, setPreview] = useState('');
   const [loading, setLoading] = useState(false);
   const [weather, setWeather] = useState({ condition: 'cloudy', temp: '', description: '' });
+  const [lockedTeams, setLockedTeams] = useState({}); // { playerId: 'red' | 'blue' }
   const [swapPick, setSwapPick] = useState(null); // { id, team } of first-selected player
   const [matchDate, setMatchDate] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -29,9 +30,34 @@ export default function MatchSetupPage() {
   const [predictionLoading, setPredictionLoading] = useState(false);
 
   const togglePlayer = (id) => {
-    setSelectedIds(prev =>
-      prev.includes(id) ? prev.filter(x => x !== id) : prev.length < 10 ? [...prev, id] : prev
-    );
+    const isSelected = selectedIds.includes(id);
+    if (isSelected) {
+      setSelectedIds(prev => prev.filter(x => x !== id));
+      setLockedTeams(prev => { const next = { ...prev }; delete next[id]; return next; });
+    } else if (selectedIds.length < 10) {
+      setSelectedIds(prev => [...prev, id]);
+    }
+  };
+
+  const toggleLock = (pid, team) => {
+    setLockedTeams(prev => {
+      if (prev[pid] === team) {
+        const next = { ...prev };
+        delete next[pid];
+        return next;
+      }
+      return { ...prev, [pid]: team };
+    });
+  };
+
+  const getLockedValidation = (ids) => {
+    const total = ids.length;
+    const targetRed  = Math.ceil(total / 2);
+    const targetBlue = Math.floor(total / 2);
+    const lRed  = ids.filter(id => lockedTeams[id] === 'red').length;
+    const lBlue = ids.filter(id => lockedTeams[id] === 'blue').length;
+    if (lRed > targetRed || lBlue > targetBlue) return 'Troppi giocatori bloccati sulla stessa squadra';
+    return null;
   };
 
   const handlePlanEmpty = async () => {
@@ -55,15 +81,17 @@ export default function MatchSetupPage() {
 
   const handleBalance = () => {
     if (selectedIds.length < 2) { toast.error('Seleziona almeno 2 giocatori'); return; }
-    const balanced = balanceTeams(selectedIds);
+    const validationErr = getLockedValidation(selectedIds);
+    if (validationErr) { toast.error(validationErr); return; }
+    const hasLocks = Object.keys(lockedTeams).some(id => selectedIds.includes(id));
+    const balanced = hasLocks ? balanceWithLocks(selectedIds, lockedTeams) : balanceTeams(selectedIds);
+    if (!balanced) { toast.error('Troppi giocatori bloccati sulla stessa squadra'); return; }
     setTeams(balanced);
     setAiReasoning('');
     setPrediction('');
     const prev = generateMatchPreview({
-      redTeam: balanced.red,
-      blueTeam: balanced.blue,
-      weather,
-      date: matchDate ? new Date(matchDate) : new Date(),
+      redTeam: balanced.red, blueTeam: balanced.blue,
+      weather, date: matchDate ? new Date(matchDate) : new Date(),
     });
     setPreview(prev);
     setStep('preview');
@@ -71,32 +99,55 @@ export default function MatchSetupPage() {
 
   const handleAIBalance = async () => {
     if (selectedIds.length < 2) { toast.error('Seleziona almeno 2 giocatori'); return; }
+    const validationErr = getLockedValidation(selectedIds);
+    if (validationErr) { toast.error(validationErr); return; }
+
+    const allPool = players.filter(p => selectedIds.includes(p.id));
+    const hasLocks = Object.keys(lockedTeams).some(id => selectedIds.includes(id));
+    const lockedRed  = hasLocks ? allPool.filter(p => lockedTeams[p.id] === 'red')  : [];
+    const lockedBlue = hasLocks ? allPool.filter(p => lockedTeams[p.id] === 'blue') : [];
+    const freePool   = hasLocks ? allPool.filter(p => !lockedTeams[p.id]) : allPool;
+    const constraints = hasLocks ? {
+      slotsRed:  Math.ceil(allPool.length / 2) - lockedRed.length,
+      slotsBlue: Math.floor(allPool.length / 2) - lockedBlue.length,
+      lockedRedNames:  lockedRed.map(p => p.name).join(', ')  || 'nessuno',
+      lockedBlueNames: lockedBlue.map(p => p.name).join(', ') || 'nessuno',
+    } : null;
+
     setAiLoading(true);
-    const pool = players.filter(p => selectedIds.includes(p.id));
     try {
-      const { red, blue, reasoning } = await generateAIBalancedTeams(pool);
+      let red, blue, reasoning;
+      if (hasLocks && freePool.length === 0) {
+        red = lockedRed; blue = lockedBlue;
+        reasoning = 'Tutti i giocatori sono stati assegnati manualmente.';
+      } else {
+        const result = await generateAIBalancedTeams(freePool, constraints);
+        red  = [...lockedRed,  ...result.red];
+        blue = [...lockedBlue, ...result.blue];
+        reasoning = hasLocks
+          ? `Bloccati: ${lockedRed.map(p=>p.name).join(', ')||'–'} (🔴), ${lockedBlue.map(p=>p.name).join(', ')||'–'} (🔵). ${result.reasoning}`
+          : result.reasoning;
+      }
       setTeams({ red, blue });
       setAiReasoning(reasoning);
       setPrediction('');
       const prev = generateMatchPreview({
-        redTeam: red,
-        blueTeam: blue,
-        weather,
-        date: matchDate ? new Date(matchDate) : new Date(),
+        redTeam: red, blueTeam: blue,
+        weather, date: matchDate ? new Date(matchDate) : new Date(),
       });
       setPreview(prev);
       setStep('preview');
       toast.success('🤖 Squadre formate dall\'AI!');
     } catch (e) {
       toast.error('AI non disponibile, uso bilanciamento standard');
-      const balanced = balanceTeams(selectedIds);
+      const balanced = hasLocks
+        ? (balanceWithLocks(selectedIds, lockedTeams) || balanceTeams(selectedIds))
+        : balanceTeams(selectedIds);
       setTeams(balanced);
       setAiReasoning('');
       const prev = generateMatchPreview({
-        redTeam: balanced.red,
-        blueTeam: balanced.blue,
-        weather,
-        date: matchDate ? new Date(matchDate) : new Date(),
+        redTeam: balanced.red, blueTeam: balanced.blue,
+        weather, date: matchDate ? new Date(matchDate) : new Date(),
       });
       setPreview(prev);
       setStep('preview');
@@ -263,6 +314,7 @@ export default function MatchSetupPage() {
                 >
                   <span style={{ fontSize: '0.85rem' }}>{getRoleIcon(p.primaryRole)}</span>
                   <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>{p.name}</span>
+                  {lockedTeams[p.id] && <span style={{ fontSize: '0.7rem', opacity: 0.7 }}>🔒</span>}
                   <span className="text-xs text-muted" style={{ marginLeft: 'auto' }}>
                     {p.powerIndex?.toFixed(0) || 50}
                   </span>
@@ -289,6 +341,7 @@ export default function MatchSetupPage() {
                 >
                   <span style={{ fontSize: '0.85rem' }}>{getRoleIcon(p.primaryRole)}</span>
                   <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>{p.name}</span>
+                  {lockedTeams[p.id] && <span style={{ fontSize: '0.7rem', opacity: 0.7 }}>🔒</span>}
                   <span className="text-xs text-muted" style={{ marginLeft: 'auto' }}>
                     {p.powerIndex?.toFixed(0) || 50}
                   </span>
@@ -462,8 +515,12 @@ export default function MatchSetupPage() {
                     style={{
                       display: 'flex', alignItems: 'center', gap: '0.75rem',
                       padding: '0.7rem 0.75rem', borderRadius: '8px',
-                      background: sel ? 'rgba(79,209,197,0.12)' : 'transparent',
-                      border: `1px solid ${sel ? '#4FD1C5' : 'transparent'}`,
+                      background: lockedTeams[p.id] === 'red' ? 'rgba(252,129,129,0.1)'
+                               : lockedTeams[p.id] === 'blue' ? 'rgba(99,179,237,0.1)'
+                               : sel ? 'rgba(79,209,197,0.12)' : 'transparent',
+                      border: `1px solid ${lockedTeams[p.id] === 'red' ? '#FC8181'
+                               : lockedTeams[p.id] === 'blue' ? '#63B3ED'
+                               : sel ? '#4FD1C5' : 'transparent'}`,
                       cursor: 'pointer', width: '100%', textAlign: 'left',
                       transition: 'all 0.15s',
                     }}
@@ -485,6 +542,27 @@ export default function MatchSetupPage() {
                     <span style={{ fontSize: '0.8rem', color: '#718096' }}>
                       PI: {p.powerIndex?.toFixed(0) || 50}
                     </span>
+                    {sel && (
+                      <div style={{ display: 'flex', gap: '4px' }} onClick={e => e.stopPropagation()}>
+                        {['red', 'blue'].map(team => {
+                          const locked = lockedTeams[p.id] === team;
+                          const color  = team === 'red' ? '#FC8181' : '#63B3ED';
+                          return (
+                            <button key={team} onClick={() => toggleLock(p.id, team)}
+                              title={`Blocca in ${team === 'red' ? 'Rossi' : 'Blu'}`}
+                              style={{
+                                padding: '2px 7px', borderRadius: '999px', fontSize: '0.72rem',
+                                border: `1px solid ${locked ? color : 'rgba(74,85,104,0.5)'}`,
+                                background: locked ? `${color}28` : 'transparent',
+                                color: locked ? color : '#4A5568',
+                                cursor: 'pointer', lineHeight: 1,
+                              }}>
+                              {team === 'red' ? '🔴' : '🔵'}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </button>
                 );
               })}

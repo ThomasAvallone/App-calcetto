@@ -198,9 +198,10 @@ Scrivi il commento ora:`;
 }
 
 // ─── Formazione squadre equilibrate con AI ────────────────────────────────────
-// players: array di oggetti player con id, name, powerIndex, primaryRole, streak
+// players: giocatori liberi da distribuire (i locked sono già separati dal chiamante)
+// constraints (opzionale): { slotsRed, slotsBlue, lockedRedNames, lockedBlueNames }
 // Ritorna { red: [...], blue: [...], reasoning: string }
-export async function generateAIBalancedTeams(players) {
+export async function generateAIBalancedTeams(players, constraints = null) {
   const playerList = players.map(p => {
     const pi = (p.powerIndex || 50).toFixed(1);
     const role = p.primaryRole || 'N/A';
@@ -210,7 +211,12 @@ export async function generateAIBalancedTeams(players) {
     return `- ${p.name} (PI: ${pi}, Ruolo: ${role}${streakStr})`;
   }).join('\n');
 
-  const half = Math.ceil(players.length / 2);
+  const lockNote = constraints
+    ? `\nVINCOLO FORMAZIONE: dei ${players.length} giocatori liberi qui sopra, \
+assegna ESATTAMENTE ${constraints.slotsRed} ai Rossi e ${constraints.slotsBlue} ai Blu. \
+(Già bloccati — Rossi: ${constraints.lockedRedNames || 'nessuno'}; \
+Blu: ${constraints.lockedBlueNames || 'nessuno'}. Non includerli nella risposta JSON.)`
+    : `\nOgni squadra deve avere al massimo ${Math.ceil(players.length / 2)} giocatori.`;
 
   const prompt = `Sei il responsabile tecnico di un torneo di calcetto amatoriale. \
 Devi formare due squadre il più equilibrate possibile tra i seguenti ${players.length} giocatori.
@@ -223,8 +229,7 @@ CRITERI DI EQUILIBRIO (in ordine di priorità):
 2. Almeno un portiere per squadra (se disponibili tra i giocatori)
 3. Distribuzione equilibrata degli altri ruoli
 4. Non concentrare tutte le streak positive nella stessa squadra
-
-Ogni squadra deve avere al massimo ${half} giocatori. \
+${lockNote}
 Assegna ogni giocatore a una sola squadra, nessuno deve essere escluso.
 
 Rispondi ESCLUSIVAMENTE con un JSON valido (niente testo prima o dopo):
