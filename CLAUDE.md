@@ -93,6 +93,10 @@ src/
 - `PlayerAchievements.jsx` — 18 traguardi in 5 categorie, on-the-fly
 - `PlayerDetailComponents.jsx` — `PiArc`, `PlayerAvatar`, `PlayerMatchHistory`, `PlayerRecords`, `PlayerBadges`, `PowerIndexChart`, `StreakBadge`
 
+### `src/components/dashboard/`
+- `MyStatsCard.jsx` — Card "I tuoi numeri" della Dashboard: avatar, stats stagione/all-time, forma, hint prossimo badge
+- `CoppaDiLattaCard.jsx` — Card "Coppa di Latta del Mese" con confronto vs mese precedente
+
 ### `src/components/stats/`
 - `ReportAITab.jsx` — Report AI periodico (Gemini), include `REPORT_PERIODS`
 - `HallTab.jsx` — Hall of Fame/Shame AI (Gemini)
