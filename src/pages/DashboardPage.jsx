@@ -181,7 +181,15 @@ export default function DashboardPage() {
     };
   }, [myPlayer, finishedMatches, seasonStartMs]);
 
-  const ranking = getRanking().slice(0, 5);
+  const ranking = useMemo(() => getRanking().slice(0, 5), [players, getRanking]);
+
+  const liveMatch = useMemo(() => allMatches.find(m => m.status === 'active') || null, [allMatches]);
+
+  const hotStreaks = useMemo(() => players
+    .filter(p => p.streak?.count >= 3 && seasonMatchesPerPlayer.has(p.id))
+    .sort((a, b) => b.streak.count - a.streak.count)
+    .slice(0, 5),
+    [players, seasonMatchesPerPlayer]);
 
   const coppaDiLatta = useMemo(() => {
     const cutoff = now - 30 * 24 * 60 * 60 * 1000;
@@ -593,9 +601,7 @@ export default function DashboardPage() {
       </div>
 
       {/* ── Live match banner ───────────────────────────────────────────────── */}
-      {(() => {
-        const liveMatch = allMatches.find(m => m.status === 'active');
-        if (!liveMatch) return null;
+      {liveMatch && (() => {
         const isMyMatch  = activeMatchId === liveMatch.id;
         const accentVar  = isMyMatch ? 'var(--teal)' : 'var(--red)';
         const accentRgb  = isMyMatch ? '79,209,197' : '252,129,129';
@@ -846,14 +852,8 @@ export default function DashboardPage() {
       )}
 
       {/* ── Streak attive ───────────────────────────────────────────────────── */}
-      {(() => {
-        const hotStreaks = players
-          .filter(p => p.streak?.count >= 3 && seasonMatchesPerPlayer.has(p.id))
-          .sort((a, b) => b.streak.count - a.streak.count)
-          .slice(0, 5);
-        if (!hotStreaks.length) return null;
-        return (
-          <div className="card mb-4 stagger-5" style={{
+      {hotStreaks.length > 0 && (
+        <div className="card mb-4 stagger-5" style={{
             background: 'rgba(252,129,129,0.02)',
             border: '1px solid rgba(252,129,129,0.12)',
           }}>
@@ -908,8 +908,7 @@ export default function DashboardPage() {
               })}
             </div>
           </div>
-        );
-      })()}
+      )}
 
       {/* ── Power Ranking ───────────────────────────────────────────────────── */}
       <div className="card mb-4 stagger-6">
