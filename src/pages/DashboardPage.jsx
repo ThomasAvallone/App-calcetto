@@ -13,6 +13,7 @@ import { safeDate, getMs } from '../utils/dateUtils';
 import { CLR_WIN, CLR_LOSS, CLR_MUTED, RESULT_COLORS, AVATAR_COLORS } from '../constants/colors';
 import { fetchWeatherForDate } from '../services/weatherService';
 import { SEASON_PLAYER_MAP, getSeasonId } from '../utils/playerStats';
+import { getNextBadgeHint } from '../utils/nextBadge';
 
 // Spread on a non-button element to make it keyboard-accessible (Enter / Space) and
 // announced as a button by screen readers. Use only on visually card-like clickable areas
@@ -200,6 +201,11 @@ export default function DashboardPage() {
   }, [myPlayer, finishedMatches, seasonStartMs]);
 
   const ranking = useMemo(() => getRanking().slice(0, 5), [players, getRanking]);
+
+  const nextBadge = useMemo(
+    () => myPlayer && myStats ? getNextBadgeHint(myPlayer, myStats.season) : null,
+    [myPlayer, myStats],
+  );
 
   const liveMatch = useMemo(() => allMatches.find(m => m.status === 'active') || null, [allMatches]);
 
@@ -586,6 +592,65 @@ export default function DashboardPage() {
                   )}
                 </div>
               )}
+
+              {/* Riga 5: prossimo badge a portata (se siamo abbastanza vicini) */}
+              {nextBadge && (() => {
+                const isDecimal = nextBadge.remaining < 10 && nextBadge.remaining % 1 !== 0;
+                const remainingStr = isDecimal ? nextBadge.remaining.toFixed(1) : Math.ceil(nextBadge.remaining);
+                const currentStr = nextBadge.target > 50 && nextBadge.target < 100 ? nextBadge.current.toFixed(1) : Math.floor(nextBadge.current);
+                const targetStr = Number.isInteger(nextBadge.target) ? nextBadge.target : nextBadge.target.toFixed(0);
+                const pct = Math.round(nextBadge.progress * 100);
+                return (
+                  <div
+                    role="img"
+                    aria-label={`Prossimo badge ${nextBadge.label}: ${currentStr} su ${targetStr} ${nextBadge.unit}, ${pct} percento completato`}
+                    style={{
+                      marginTop: '0.6rem',
+                      padding: '0.55rem 0.7rem',
+                      borderRadius: '8px',
+                      background: 'rgba(159,122,234,0.08)',
+                      border: '1px solid rgba(159,122,234,0.22)',
+                      display: 'flex', alignItems: 'center', gap: '0.6rem',
+                    }}
+                  >
+                    <span style={{ fontSize: '1.3rem', flexShrink: 0 }} aria-hidden="true">{nextBadge.icon}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: '0.58rem', color: '#B794F4', letterSpacing: '0.08em', fontWeight: 800, marginBottom: '2px' }}>
+                        🎯 PROSSIMO BADGE
+                      </div>
+                      <div style={{ fontSize: '0.78rem', color: 'var(--text-primary)', fontWeight: 600, marginBottom: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {nextBadge.label}
+                        <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>
+                          {' · '}{currentStr}/{targetStr} {nextBadge.unit}
+                        </span>
+                      </div>
+                      <div style={{
+                        height: 4,
+                        borderRadius: 2,
+                        background: 'rgba(74,85,104,0.4)',
+                        overflow: 'hidden',
+                      }}>
+                        <div style={{
+                          width: `${pct}%`,
+                          height: '100%',
+                          background: 'linear-gradient(90deg, #9F7AEA, #B794F4)',
+                          transition: 'width 0.3s',
+                        }} />
+                      </div>
+                    </div>
+                    <span style={{
+                      fontSize: '0.78rem',
+                      fontWeight: 800,
+                      color: '#B794F4',
+                      whiteSpace: 'nowrap',
+                      minWidth: '32px',
+                      textAlign: 'right',
+                    }}>
+                      -{remainingStr}
+                    </span>
+                  </div>
+                );
+              })()}
             </>
           )}
         </div>
