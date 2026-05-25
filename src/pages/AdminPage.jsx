@@ -13,6 +13,17 @@ import toast from 'react-hot-toast';
 
 const CHANGELOG = [
   {
+    version: '3.12.0',
+    date: 'Maggio 2026',
+    entries: [
+      { type: 'new', text: 'Reazioni emoji alle partite: sezione "💬 Reazioni" visibile a tutti gli utenti loggati nel dettaglio di ogni partita conclusa. Ogni utente può lasciare una reazione tra 6 emoji (👑 MVP, 🔥 In fuoco, 🎯 Precisione, 🧤 Muro, 🤦 Papera, 🎉 Gran partita) — ri-clicca per rimuoverla o cambiarla. Il nome visualizzato usa il giocatore collegato all\'account (linkedPlayerId) o il displayName Google, mai l\'email. Salvate in subcollection Firestore matches/{matchId}/reactions/{userId} con regole proprie: owner può creare/aggiornare/eliminare, admin può eliminare. deleteMatch pulisce la subcollection in automatico.' },
+      { type: 'new', text: 'Tab "📈 Trend" nelle Classifiche: grafico SVG a linee con gol/assist/vittorie cumulativi per i top 6 giocatori nel periodo selezionato (30d, stagione, all-time). Toggle tra le 3 metriche; le partite storiche importate sono escluse (mancano di assistId granulare). Legenda interattiva con totale finale per ogni giocatore.' },
+      { type: 'new', text: 'Parata e Infortunio nella cronaca: due nuovi tipi di evento (save 🧤 / injury 🚑) aggiungibili solo su partite concluse — non appesantiscono l\'UI live. Campo singolo (giocatore coinvolto), non incidono su punteggio né statistiche. Il commento AI post-partita li cita se pertinenti ("ALTRI EVENTI" nel prompt Gemini). Visibili nella cronaca con stile teal/rosso distinto, cancellabili dall\'admin.' },
+      { type: 'new', text: 'Formazione parziale (lock giocatori): nella schermata di setup partita ogni giocatore selezionato mostra due pill 🔴/🔵 per bloccarlo su una squadra. Il resto viene bilanciato automaticamente (algoritmo greedy che minimizza il gap di Power Index). L\'AI Bilancia rispetta i lock passando slot esatti al prompt Gemini. I giocatori bloccati mostrano 🔒 nella preview. Validazione: se i lock saturano una squadra appare un toast d\'errore.' },
+      { type: 'fix', text: 'MatchSetupPage: corretto bug HTML — le righe giocatore erano <button> contenenti altri <button> (lock pill), nesting non valido secondo la spec HTML che può causare double-fire degli handler su mobile Safari/Chrome. Rifattorizzato in <div role="button"> con onKeyDown equivalente.' },
+    ],
+  },
+  {
     version: '3.11.0',
     date: 'Maggio 2026',
     entries: [

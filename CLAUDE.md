@@ -96,6 +96,10 @@ src/
 ### `src/components/stats/`
 - `ReportAITab.jsx` — Report AI periodico (Gemini), include `REPORT_PERIODS`
 - `HallTab.jsx` — Hall of Fame/Shame AI (Gemini)
+- `TrendTab.jsx` — Grafico SVG a linee (gol/assist/vittorie cumulativi nel tempo); top 6 per metrica; partite storiche escluse
+
+### Componenti inline (non estratti)
+- `ReactionsSection` — in `MatchDetailPage.jsx`; subscribe a `matches/{matchId}/reactions/{userId}`, emoji picker a 6 reazioni, aggregazione live
 
 ## Convenzioni
 
@@ -108,6 +112,9 @@ src/
 - **Power Index configurabile**: i 17 parametri della formula sono esposti come `DEFAULT_PI_CONFIG` in `playerStats.js`. `computePowerIndex(stats, cfg)` e `computeCombinedPowerIndex(stats, hist, cfg)` accettano un parametro `cfg` opzionale (default = valori storici → retrocompatibile). La config attuale vive su Firestore in `settings/piConfig`; l'editor in AdminPage permette agli admin di modulare i pesi. `recalculatePlayerStats` legge la config a ogni ricalcolo. Il hook `usePIConfig` (in `src/hooks/`) sottoscrive la config in real-time per le viste live (PlayersPage, PiTrendChart) con deduplicazione via JSON key per evitare render spurii.
 - **Funzioni pure**: tutti i calcoli su giocatori/partite (stats, PI, streak, recentForm) stanno in `utils/playerStats.js` senza dipendenze da Firestore, per essere testabili in isolamento.
 - **Logica portiere (GK)**: il portiere NON è fisso — tutti i giocatori ruotano in porta. Ogni giocatore fa **2 turni in porta per partita** (uno per tempo). Di conseguenza `gkMatches` si incrementa di **2** per ogni partita giocata (`s.gkMatches += 2`). Tutti i calcoli GK (Power Index, badge Muro/Colabrodo/Gufo) usano questa unità: `gkGoalsConceded / gkMatches` = media gol subiti per turno. Non correggere questo comportamento: è intenzionale.
+- **Tipi di evento**: `goal`, `autogoal` (incidono su punteggio e statistiche), `save` e `injury` (solo cronaca, aggiunti post-partita, non incidono su nulla). I campi differiscono: goal/autogoal usano `scorerId/scorerName`; save/injury usano `playerId/playerName`. `generateMatchCommentary` include save/injury nel prompt AI sotto "ALTRI EVENTI".
+- **Reazioni partita**: subcollection `matches/{matchId}/reactions/{userId}`. Ogni documento ha `{ emoji, playerName, updatedAt }`. Il `playerName` viene calcolato a runtime da `linkedPlayerId→player.name || user.displayName` (mai l'email). Gestite da `subscribeToMatchReactions`, `upsertMatchReaction`, `deleteMatchReaction` in `firestore.js`. `deleteMatch` pulisce la subcollection (best-effort).
+- **Formazione parziale**: `balanceWithLocks(selectedIds, lockedTeams)` in `playersStore` — i giocatori con lock restano fissi, i liberi sono distribuiti con greedy PI-minimization. Ritorna `null` se i lock eccedono la capienza di una squadra. `generateAIBalancedTeams(players, constraints)` accetta `constraints = { slotsRed, slotsBlue, lockedRedNames, lockedBlueNames }` per vincolare il numero di giocatori liberi per squadra.
 
 ## Comandi
 
@@ -142,6 +149,7 @@ che Firestore rules** (`--only hosting,firestore:rules`). Le rules sono in
 Le regole di sicurezza in `firestore.rules` definiscono:
 - `users/{userId}`: read auth users (self) + admin; gerarchia superadmin > admin > viewer per gli update.
 - `players`, `matches`, `matchStates`, `historicalSeasons`: read per ogni auth user, write solo admin.
+- `matches/{matchId}/reactions/{userId}`: read per ogni auth user; create/update solo owner (`request.auth.uid == userId`); delete owner o admin.
 - `settings/{settingId}`: read per ogni auth user; write solo admin **eccetto** documenti `aiCache_*` (cache effimere) scrivibili da qualunque auth user.
 
 Punti chiave:

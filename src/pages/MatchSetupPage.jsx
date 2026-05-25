@@ -509,9 +509,15 @@ export default function MatchSetupPage() {
               {list.map(p => {
                 const sel = selectedIds.includes(p.id);
                 return (
-                  <button
+                  // <div> invece di <button> per evitare il nesting di elementi
+                  // interattivi (i pulsanti lock interni sarebbero figli di <button>):
+                  // HTML invalido, comportamento imprevedibile su mobile Safari/Chrome.
+                  <div
                     key={p.id}
+                    role="button"
+                    tabIndex={0}
                     onClick={() => togglePlayer(p.id)}
+                    onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && togglePlayer(p.id)}
                     style={{
                       display: 'flex', alignItems: 'center', gap: '0.75rem',
                       padding: '0.7rem 0.75rem', borderRadius: '8px',
@@ -563,7 +569,7 @@ export default function MatchSetupPage() {
                         })}
                       </div>
                     )}
-                  </button>
+                  </div>
                 );
               })}
             </div>
