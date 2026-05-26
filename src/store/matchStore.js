@@ -5,7 +5,7 @@ import {
   createMatch, updateMatch, getMatch,
   saveMatchTimerState, getMatchTimerState,
   subscribeToMatch, subscribeToMatchState,
-  recordGoalEvent, deleteGoalEvent,
+  recordGoalEvent, deleteGoalEvent, recordChronicleEvent,
 } from '../firebase/firestore';
 
 // ─── STORE ────────────────────────────────────────────────────────────────────
@@ -172,6 +172,20 @@ const useMatchStore = create(
         const blueScore = team === 'red' ? (match.blueScore || 0) + 1 : (match.blueScore || 0);
         set({ match: { ...match, events: [...(match.events || []), autogoalEvent], redScore, blueScore } });
         await recordGoalEvent(activeMatchId, autogoalEvent);
+      },
+
+      async recordInjury({ playerId, playerName }) {
+        const { activeMatchId, match, getElapsedSeconds } = get();
+        if (!activeMatchId || !match) return;
+        const minute = Math.floor(getElapsedSeconds() / 60);
+        const injuryEvent = {
+          id: crypto.randomUUID(),
+          type: 'injury',
+          playerId, playerName,
+          minute, timestamp: Date.now(),
+        };
+        set({ match: { ...match, events: [...(match.events || []), injuryEvent] } });
+        await recordChronicleEvent(activeMatchId, injuryEvent);
       },
 
       async deleteEvent(eventId) {

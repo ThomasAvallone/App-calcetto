@@ -98,12 +98,23 @@ export async function recordGoalEvent(matchId, event) {
 }
 
 export async function deleteGoalEvent(matchId, event) {
+  const isScoreEvent = event.type === 'goal' || event.type === 'autogoal';
   const pointTeam = event.type === 'autogoal'
     ? (event.team === 'red' ? 'blue' : 'red')
     : event.team;
   await updateDoc(doc(db, 'matches', matchId), {
     events: arrayRemove(event),
-    ...(pointTeam === 'red' ? { redScore: increment(-1) } : { blueScore: increment(-1) }),
+    ...(isScoreEvent
+      ? (pointTeam === 'red' ? { redScore: increment(-1) } : { blueScore: increment(-1) })
+      : {}
+    ),
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export async function recordChronicleEvent(matchId, event) {
+  await updateDoc(doc(db, 'matches', matchId), {
+    events: arrayUnion(event),
     updatedAt: serverTimestamp(),
   });
 }

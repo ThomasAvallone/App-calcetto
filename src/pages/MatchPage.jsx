@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useBlocker } from 'react-router-dom';
 import useMatchStore from '../store/matchStore';
 import usePlayersStore from '../store/playersStore';
 import useAuthStore, { selectIsAdmin } from '../store/authStore';
@@ -27,7 +27,7 @@ export default function MatchPage() {
   const {
     match, activeMatchId, timerState,
     loadMatch, unloadMatch, startTimer, pauseTimer, getElapsedSeconds,
-    recordGoal, recordAutogoal, deleteEvent, endMatch,
+    recordGoal, recordAutogoal, recordInjury, deleteEvent, endMatch,
   } = useMatchStore();
 
   const [displayTime, setDisplayTime] = useState(0);
@@ -49,12 +49,16 @@ export default function MatchPage() {
   const [scoreBounce, setScoreBounce] = useState(null); // 'red' | 'blue' | null
   const [scoreShake, setScoreShake] = useState(null);   // 'red' | 'blue' | null
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+  const [injuryModal, setInjuryModal] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [voiceListening, setVoiceListening] = useState(false);
   const [voiceProcessing, setVoiceProcessing] = useState(false);
   const [voiceTranscript, setVoiceTranscript] = useState('');
   const recognitionRef = useRef(null);
   const voiceTranscriptTimerRef = useRef(null);
+  const scoreBounceTimerRef = useRef(null);
+  const scoreShakeTimerRef = useRef(null);
+  const goalFlashTimerRef = useRef(null);
   const isMountedRef = useRef(true);
   const prevRedScore  = useRef(null); // null on first render to avoid false bounce on load
   const prevBlueScore = useRef(null);
@@ -62,12 +66,27 @@ export default function MatchPage() {
   const timerRef = useRef(null);
   const reportTimeoutRef = useRef(null);
 
+  // Block in-app navigation when there are unsaved events in an active match
+  const blocker = useBlocker(({ currentLocation, nextLocation }) =>
+    match?.status === 'active' &&
+    (match?.events || []).length > 0 &&
+    currentLocation.pathname !== nextLocation.pathname
+  );
+
   // Bounce/shake when scores change — skip the initial load to avoid false bounce on refresh
   useEffect(() => {
     const red  = match?.redScore  ?? 0;
     const blue = match?.blueScore ?? 0;
-    if (prevRedScore.current !== null  && red  > prevRedScore.current)  { setScoreBounce('red');  setTimeout(() => setScoreBounce(null), 450); }
-    if (prevBlueScore.current !== null && blue > prevBlueScore.current) { setScoreBounce('blue'); setTimeout(() => setScoreBounce(null), 450); }
+    if (prevRedScore.current !== null && red > prevRedScore.current) {
+      if (scoreBounceTimerRef.current) clearTimeout(scoreBounceTimerRef.current);
+      setScoreBounce('red');
+      scoreBounceTimerRef.current = setTimeout(() => { if (isMountedRef.current) setScoreBounce(null); }, 450);
+    }
+    if (prevBlueScore.current !== null && blue > prevBlueScore.current) {
+      if (scoreBounceTimerRef.current) clearTimeout(scoreBounceTimerRef.current);
+      setScoreBounce('blue');
+      scoreBounceTimerRef.current = setTimeout(() => { if (isMountedRef.current) setScoreBounce(null); }, 450);
+    }
     prevRedScore.current  = red;
     prevBlueScore.current = blue;
   }, [match?.redScore, match?.blueScore]);
@@ -84,6 +103,14 @@ export default function MatchPage() {
   // Cleanup report modal timeout on unmount
   useEffect(() => () => { if (reportTimeoutRef.current) clearTimeout(reportTimeoutRef.current); }, []);
 
+  // Warn on browser-level navigation (refresh / tab close) when match is active with events
+  useEffect(() => {
+    if (match?.status !== 'active' || (match?.events || []).length === 0) return;
+    const handler = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [match?.status, match?.events?.length]);
+
   // Cleanup voice recognition + transcript-clear timer on unmount.
   // NOTA: re-set isMountedRef=true in setup è necessario in React StrictMode (dev),
   // dove gli effect runnano due volte: dopo la prima cleanup (che mette il ref a
@@ -98,6 +125,9 @@ export default function MatchPage() {
         recognitionRef.current = null;
       }
       if (voiceTranscriptTimerRef.current) clearTimeout(voiceTranscriptTimerRef.current);
+      if (scoreBounceTimerRef.current) clearTimeout(scoreBounceTimerRef.current);
+      if (scoreShakeTimerRef.current) clearTimeout(scoreShakeTimerRef.current);
+      if (goalFlashTimerRef.current) clearTimeout(goalFlashTimerRef.current);
     };
   }, []);
 
@@ -183,11 +213,13 @@ export default function MatchPage() {
   // Esegue il parsed (rule-based o AI): flash + recordGoal/Autogoal o apre il modal GK.
   const applyParsedGoal = async (parsed) => {
     if (!parsed.isAutogoal) {
+      if (goalFlashTimerRef.current) clearTimeout(goalFlashTimerRef.current);
       setGoalFlash(parsed.team);
-      setTimeout(() => setGoalFlash(null), 600);
+      goalFlashTimerRef.current = setTimeout(() => { if (isMountedRef.current) setGoalFlash(null); }, 600);
     } else {
+      if (scoreShakeTimerRef.current) clearTimeout(scoreShakeTimerRef.current);
       setScoreShake(parsed.team);
-      setTimeout(() => setScoreShake(null), 450);
+      scoreShakeTimerRef.current = setTimeout(() => { if (isMountedRef.current) setScoreShake(null); }, 450);
     }
     if (parsed.gk) {
       const gkFields = { gkConcededId: parsed.gk.id, gkConcededName: parsed.gk.name };
@@ -352,15 +384,17 @@ export default function MatchPage() {
         await recordAutogoal({ team: pendingGoalData.team, scorerId: pendingGoalData.scorerId, scorerName: pendingGoalData.scorerName, ...gkFields });
         toast.success(`🤦 Autogol di ${pendingGoalData.scorerName}`);
         navigator.vibrate?.([80]);
+        if (scoreShakeTimerRef.current) clearTimeout(scoreShakeTimerRef.current);
         setScoreShake(pendingGoalData.team);
-        setTimeout(() => setScoreShake(null), 450);
+        scoreShakeTimerRef.current = setTimeout(() => { if (isMountedRef.current) setScoreShake(null); }, 450);
       } else {
         await recordGoal({ ...pendingGoalData, ...gkFields });
         const assistMsg = pendingGoalData.assistId ? ` (assist: ${pendingGoalData.assistName})` : '';
         toast.success(`⚽ Gol di ${pendingGoalData.scorerName}${assistMsg}!`);
         navigator.vibrate?.([100, 50, 100]);
+        if (goalFlashTimerRef.current) clearTimeout(goalFlashTimerRef.current);
         setGoalFlash(pendingGoalData.team);
-        setTimeout(() => setGoalFlash(null), 600);
+        goalFlashTimerRef.current = setTimeout(() => { if (isMountedRef.current) setGoalFlash(null); }, 600);
       }
     } catch (e) {
       toast.error('Errore registrazione gol: ' + e.message);
@@ -416,6 +450,23 @@ export default function MatchPage() {
 
   const teamPlayers = goalTeam === 'red' ? redTeam : blueTeam;
   const scorerLabel = autogoalMode ? 'Chi ha fatto autogol?' : `Gol ${goalTeam === 'red' ? '🔴 Rosso' : '🔵 Blu'} — Chi ha segnato?`;
+
+  // ── Leave Confirm Modal (A4) ─────────────────────────────────────────────────
+  if (blocker.state === 'blocked') {
+    return (
+      <div className="modal-overlay">
+        <div className="modal animate-slide-up" style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '3rem', marginBottom: '0.5rem' }}>⚠️</div>
+          <h2 className="modal-title">Abbandonare la partita?</h2>
+          <p className="text-secondary mb-4">Ci sono eventi registrati. Uscendo perderai il tracciamento live.</p>
+          <div className="flex gap-3">
+            <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => blocker.reset()}>Rimani</button>
+            <button className="btn btn-danger" style={{ flex: 1 }} onClick={() => blocker.proceed()}>Esci lo stesso</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // ── Scorer Selection Modal ──────────────────────────────────────────────────
   if (goalScorerModal) {
@@ -512,6 +563,42 @@ export default function MatchPage() {
           </div>
           <button className="btn btn-ghost btn-full mt-2" onClick={() => handleGkConcededSelected(null)}>
             — Non ricordo / Salta
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Injury Modal (C1) ───────────────────────────────────────────────────────
+  if (injuryModal) {
+    const allPlayers = [...redTeam, ...blueTeam];
+    return (
+      <div className="modal-overlay">
+        <div className="modal animate-slide-up">
+          <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
+            <div style={{ fontSize: '2rem', marginBottom: '0.25rem' }}>🩹</div>
+            <h2 className="modal-title">Chi si è infortunato?</h2>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', maxHeight: '55vh', overflowY: 'auto' }}>
+            {allPlayers.map(p => (
+              <button key={p.id} className="btn btn-ghost"
+                style={{ justifyContent: 'flex-start', padding: '0.875rem 1rem' }}
+                onClick={async () => {
+                  setInjuryModal(false);
+                  try {
+                    await recordInjury({ playerId: p.id, playerName: p.name });
+                    toast.success(`🩹 Infortunio registrato: ${p.name}`);
+                  } catch (e) {
+                    toast.error('Errore registrazione infortunio: ' + (e?.message || 'riprova'));
+                  }
+                }}>
+                <span style={{ fontSize: '1.1rem' }}>{getRoleIcon(p.primaryRole)}</span>
+                {p.name}
+              </button>
+            ))}
+          </div>
+          <button className="btn btn-ghost btn-full mt-2" onClick={() => setInjuryModal(false)}>
+            ✕ Annulla
           </button>
         </div>
       </div>
@@ -799,6 +886,14 @@ export default function MatchPage() {
             <button className="btn btn-ghost text-sm" disabled={voiceListening || voiceProcessing} onClick={() => handleAutogoalTap('red')} style={{ fontSize: '0.8rem', opacity: (voiceListening || voiceProcessing) ? 0.5 : 1 }}>🤦 Autogol Rossi</button>
             <button className="btn btn-ghost text-sm" disabled={voiceListening || voiceProcessing} onClick={() => handleAutogoalTap('blue')} style={{ fontSize: '0.8rem', opacity: (voiceListening || voiceProcessing) ? 0.5 : 1 }}>🤦 Autogol Blu</button>
           </div>
+          <button
+            className="btn btn-ghost btn-full mt-1"
+            disabled={voiceListening || voiceProcessing}
+            onClick={() => setInjuryModal(true)}
+            style={{ fontSize: '0.8rem', borderColor: 'rgba(246,173,85,0.3)', color: '#F6AD55', opacity: (voiceListening || voiceProcessing) ? 0.5 : 1 }}
+          >
+            🩹 Infortunio
+          </button>
           {hasSpeech && (
             <button
               className="btn btn-ghost btn-full mt-2"
@@ -839,12 +934,15 @@ export default function MatchPage() {
                 <div key={ev.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem 0', borderBottom: '1px solid #2D3748' }}>
                   <span style={{ fontSize: '0.8rem', color: '#718096', minWidth: '28px' }}>{ev.minute}'</span>
                   <span style={{ fontSize: '1rem' }}>
-                    {ev.type === 'goal' ? (ev.team === 'red' ? '🔴⚽' : '🔵⚽') : (ev.team === 'red' ? '🔴🤦' : '🔵🤦')}
+                    {ev.type === 'goal' ? (ev.team === 'red' ? '🔴⚽' : '🔵⚽')
+                      : ev.type === 'autogoal' ? (ev.team === 'red' ? '🔴🤦' : '🔵🤦')
+                      : '🩹'}
                   </span>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: '0.9rem', fontWeight: 500 }}>
                       {ev.type === 'autogoal' && <span style={{ color: '#FC8181', fontSize: '0.72rem', fontWeight: 700, marginRight: '0.3rem' }}>AUTO</span>}
-                      {ev.scorerName}
+                      {ev.type === 'injury' && <span style={{ color: '#F6AD55', fontSize: '0.72rem', fontWeight: 700, marginRight: '0.3rem' }}>INFORT.</span>}
+                      {ev.scorerName || ev.playerName}
                     </div>
                     {ev.assistName && ev.assistName !== 'Nessuno' && (
                       <div style={{ fontSize: '0.75rem', color: '#718096' }}>assist: {ev.assistName}</div>

@@ -36,6 +36,8 @@ export default function MatchSetupPage() {
       setLockedTeams(prev => { const next = { ...prev }; delete next[id]; return next; });
     } else if (selectedIds.length < 10) {
       setSelectedIds(prev => [...prev, id]);
+    } else {
+      toast.error('Hai già selezionato 10 giocatori');
     }
   };
 
@@ -62,6 +64,7 @@ export default function MatchSetupPage() {
 
   const handlePlanEmpty = async () => {
     if (!matchDate) { toast.error('Seleziona una data prima di pianificare'); return; }
+    if (selectedIds.length > 0 && !window.confirm(`Hai ${selectedIds.length} giocator${selectedIds.length === 1 ? 'e' : 'i'} selezionat${selectedIds.length === 1 ? 'o' : 'i'}. Pianificare senza aggiungerli?`)) return;
     setLoading(true);
     try {
       await createNewMatch({
@@ -228,7 +231,7 @@ export default function MatchSetupPage() {
 
   const buildFreshPreview = async () => {
     const date = matchDate ? new Date(matchDate) : new Date();
-    const fw = await fetchWeatherForDate(date);
+    const fw = await fetchWeatherForDate(date).catch(() => null);
     const w = fw || weather;
     if (fw) setWeather(fw);
     const text = generateMatchPreview({ redTeam: teams.red, blueTeam: teams.blue, weather: w, date });
@@ -517,7 +520,7 @@ export default function MatchSetupPage() {
                     role="button"
                     tabIndex={0}
                     onClick={() => togglePlayer(p.id)}
-                    onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && togglePlayer(p.id)}
+                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePlayer(p.id); } }}
                     style={{
                       display: 'flex', alignItems: 'center', gap: '0.75rem',
                       padding: '0.7rem 0.75rem', borderRadius: '8px',
