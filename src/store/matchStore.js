@@ -174,18 +174,29 @@ const useMatchStore = create(
         await recordGoalEvent(activeMatchId, autogoalEvent);
       },
 
-      async recordInjury({ playerId, playerName }) {
+      async recordInjury({ playerId, playerName, team }) {
         const { activeMatchId, match, getElapsedSeconds } = get();
         if (!activeMatchId || !match) return;
         const minute = Math.floor(getElapsedSeconds() / 60);
         const injuryEvent = {
           id: crypto.randomUUID(),
           type: 'injury',
+          team,
           playerId, playerName,
           minute, timestamp: Date.now(),
         };
         set({ match: { ...match, events: [...(match.events || []), injuryEvent] } });
-        await recordChronicleEvent(activeMatchId, injuryEvent);
+        try {
+          await recordChronicleEvent(activeMatchId, injuryEvent);
+        } catch (e) {
+          // Rollback letto dallo stato corrente per evitare di sovrascrivere
+          // update arrivati dalla subscription tra l'optimistic set e l'errore.
+          const cur = get().match;
+          if (cur && (cur.events || []).some(ev => ev.id === injuryEvent.id)) {
+            set({ match: { ...cur, events: (cur.events || []).filter(ev => ev.id !== injuryEvent.id) } });
+          }
+          throw e;
+        }
       },
 
       async deleteEvent(eventId) {

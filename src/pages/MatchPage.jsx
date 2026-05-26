@@ -571,7 +571,10 @@ export default function MatchPage() {
 
   // ── Injury Modal (C1) ───────────────────────────────────────────────────────
   if (injuryModal) {
-    const allPlayers = [...redTeam, ...blueTeam];
+    const taggedPlayers = [
+      ...redTeam.map(p => ({ ...p, _team: 'red' })),
+      ...blueTeam.map(p => ({ ...p, _team: 'blue' })),
+    ];
     return (
       <div className="modal-overlay">
         <div className="modal animate-slide-up">
@@ -580,18 +583,19 @@ export default function MatchPage() {
             <h2 className="modal-title">Chi si è infortunato?</h2>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', maxHeight: '55vh', overflowY: 'auto' }}>
-            {allPlayers.map(p => (
+            {taggedPlayers.map(p => (
               <button key={p.id} className="btn btn-ghost"
                 style={{ justifyContent: 'flex-start', padding: '0.875rem 1rem' }}
                 onClick={async () => {
                   setInjuryModal(false);
                   try {
-                    await recordInjury({ playerId: p.id, playerName: p.name });
+                    await recordInjury({ playerId: p.id, playerName: p.name, team: p._team });
                     toast.success(`🩹 Infortunio registrato: ${p.name}`);
                   } catch (e) {
                     toast.error('Errore registrazione infortunio: ' + (e?.message || 'riprova'));
                   }
                 }}>
+                <span style={{ fontSize: '1.1rem' }}>{p._team === 'red' ? '🔴' : '🔵'}</span>
                 <span style={{ fontSize: '1.1rem' }}>{getRoleIcon(p.primaryRole)}</span>
                 {p.name}
               </button>
@@ -936,7 +940,7 @@ export default function MatchPage() {
                   <span style={{ fontSize: '1rem' }}>
                     {ev.type === 'goal' ? (ev.team === 'red' ? '🔴⚽' : '🔵⚽')
                       : ev.type === 'autogoal' ? (ev.team === 'red' ? '🔴🤦' : '🔵🤦')
-                      : '🩹'}
+                      : ev.team === 'red' ? '🔴🩹' : ev.team === 'blue' ? '🔵🩹' : '🩹'}
                   </span>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: '0.9rem', fontWeight: 500 }}>
