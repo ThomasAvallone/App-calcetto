@@ -35,24 +35,31 @@ src/
 │   └── stats/                # Sub-componenti di StatsPage
 ├── store/                    # Zustand stores
 ├── firebase/
-│   └── firestore.js          # Tutte le operazioni Firestore (~475 righe)
+│   ├── firestore.js          # Tutte le operazioni Firestore
+│   └── sanitizePublicName.test.js  # Test invariante privacy (no email nei campi pubblici)
 ├── services/
-│   └── geminiService.js      # Chiamate Gemini AI (~412 righe)
+│   ├── geminiService.js      # Chiamate Gemini AI; logica pura estratta in utils/aiResolve.js
+│   └── reportService.test.js # Test preview/verdetto post-partita
 ├── data/
-│   ├── historicalData.js     # Dati storici stagioni (~551 righe)
-│   └── historicalMatches.js  # Partite storiche (~306 righe)
-├── utils/
-│   ├── badges.js             # Calcolo badge (~467 righe)
-│   ├── dateUtils.js          # getMs() helper
-│   ├── playerStats.js        # Funzioni pure + DEFAULT_PI_CONFIG (132 righe)
-│   ├── playerStats.test.js   # Test Vitest su playerStats (17 test)
-│   ├── dataExport.js         # Export locale CSV/JSON (partite, giocatori, backup completo)
+│   ├── historicalData.js     # Dati storici stagioni
+│   ├── historicalData.test.js # Test computeCumulativeStats + integrità dati
+│   └── historicalMatches.js  # Partite storiche
+├── utils/                    # ⚠️ Funzioni PURE (no Firestore/DOM) — vedi "Moduli puri & test"
+│   ├── badges.js / badges.test.js
+│   ├── playerStats.js / playerStats.test.js   # + DEFAULT_PI_CONFIG
+│   ├── leaderboards.js / leaderboards.test.js # Classifica/duo/h2h/squadre/GK (estratti da StatsPage)
+│   ├── weatherStats.js / weatherStats.test.js
+│   ├── nextBadge.js / nextBadge.test.js       # Hint "prossimo badge" Dashboard
+│   ├── aiResolve.js / aiResolve.test.js       # Risolve output JSON Gemini → player objects
+│   ├── voiceParser.js / voiceParser.test.js
+│   ├── dataExport.js / dataExport.test.js     # Export CSV/JSON (anti CSV-injection)
+│   ├── dateUtils.js          # getMs(), safeDate()
 │   └── waitUndo.js           # Toast con countdown per operazioni annullabili
 ├── constants/
 │   └── colors.js             # Costanti colori (CLR_WIN, CLR_LOSS, ecc.)
 └── hooks/
     ├── useMatchesSubscription.js  # Real-time subscription alla collezione matches
-    └── usePIConfig.js              # Real-time subscription a settings/piConfig
+    └── usePIConfig.js              # Real-time subscription a settings/piConfig (dedup JSON key)
 ```
 
 ## Route
@@ -75,7 +82,7 @@ src/
 
 | File | Righe | Note |
 |------|-------|------|
-| `pages/StatsPage.jsx` | ~1045 | Classifiche + stats; tab AI estratti in `components/stats/` |
+| `pages/StatsPage.jsx` | ~1000 | Classifiche + stats; tab AI in `components/stats/`, aggregazioni pure in `utils/leaderboards.js` |
 | `pages/MatchDetailPage.jsx` | ~987 | Dettaglio partita storica |
 | `pages/AdminPage.jsx` | ~901 | Gestione admin (include CHANGELOG + Editor PI) |
 | `pages/PlayersPage.jsx` | ~872 | Scheda giocatore + lista; sub-componenti estratti in `components/players/` |
@@ -114,9 +121,9 @@ src/
 - **Firestore**: ogni documento ha ID gestito da Firebase; `getMs()` converte Timestamp → ms
 - **Power Index**: calcolato con `computePowerIndex()` in `utils/playerStats.js` (re-esportato da `firebase/firestore.js` per retrocompat). Formula: `50 + winRate×20 + attackPerMatch×6 - gkPenalty`. Dopo il blend recent/overall (60/40), si applica un `ratingBonus = (avgRating - 5.5) × 1.5` (solo se ≥3 partite votate), poi l'`activityFactor` (decay da inattività). Il tutto in `recalculatePlayerStats`.
 - **Power Index configurabile**: i 17 parametri della formula sono esposti come `DEFAULT_PI_CONFIG` in `playerStats.js`. `computePowerIndex(stats, cfg)` e `computeCombinedPowerIndex(stats, hist, cfg)` accettano un parametro `cfg` opzionale (default = valori storici → retrocompatibile). La config attuale vive su Firestore in `settings/piConfig`; l'editor in AdminPage permette agli admin di modulare i pesi. `recalculatePlayerStats` legge la config a ogni ricalcolo. Il hook `usePIConfig` (in `src/hooks/`) sottoscrive la config in real-time per le viste live (PlayersPage, PiTrendChart) con deduplicazione via JSON key per evitare render spurii.
-- **Funzioni pure**: tutti i calcoli su giocatori/partite (stats, PI, streak, recentForm) stanno in `utils/playerStats.js` senza dipendenze da Firestore, per essere testabili in isolamento.
+- **Funzioni pure**: tutti i calcoli (stats, PI, classifiche, badge, meteo, parsing AI, export…) stanno in moduli `utils/*.js` (+ `data/historicalData.js`) senza dipendenze Firestore/DOM, per essere testabili in isolamento. Vedi sezione "Moduli puri & test". Regola: una nuova funzione di calcolo va estratta lì, non lasciata inline in un componente.
 - **Logica portiere (GK)**: il portiere NON è fisso — tutti i giocatori ruotano in porta. Ogni giocatore fa **2 turni in porta per partita** (uno per tempo). Di conseguenza `gkMatches` si incrementa di **2** per ogni partita giocata (`s.gkMatches += 2`). Tutti i calcoli GK (Power Index, badge Muro/Colabrodo/Gufo) usano questa unità: `gkGoalsConceded / gkMatches` = media gol subiti per turno. Non correggere questo comportamento: è intenzionale.
-- **Tipi di evento**: `goal`, `autogoal` (incidono su punteggio e statistiche), `save` e `injury` (solo cronaca, aggiunti post-partita, non incidono su nulla). I campi differiscono: goal/autogoal usano `scorerId/scorerName`; save/injury usano `playerId/playerName`. `generateMatchCommentary` include save/injury nel prompt AI sotto "ALTRI EVENTI".
+- **Tipi di evento**: `goal`, `autogoal` (incidono su punteggio e statistiche), `save` e `injury` (solo cronaca, non incidono su punteggio/PI). I campi differiscono: goal/autogoal usano `scorerId/scorerName`; save/injury usano `playerId/playerName`. Gli **infortuni** si registrano sia post-partita (MatchDetailPage) sia **live** durante la partita (`matchStore.recordInjury`, bottone 🩹 in MatchPage) — l'evento `injury` include `team` (serve a `InjuryHistory`). `deleteGoalEvent` decrementa il punteggio solo per goal/autogoal. `generateMatchCommentary` include save/injury nel prompt AI sotto "ALTRI EVENTI".
 - **Reazioni partita**: subcollection `matches/{matchId}/reactions/{userId}`. Ogni documento ha `{ emoji, playerName, updatedAt }`. Il `playerName` viene calcolato a runtime da `linkedPlayerId→player.name || user.displayName` (mai l'email). Gestite da `subscribeToMatchReactions`, `upsertMatchReaction`, `deleteMatchReaction` in `firestore.js`. `deleteMatch` pulisce la subcollection (best-effort).
 - **Formazione parziale**: `balanceWithLocks(selectedIds, lockedTeams)` in `playersStore` — i giocatori con lock restano fissi, i liberi sono distribuiti con greedy PI-minimization. Ritorna `null` se i lock eccedono la capienza di una squadra. `generateAIBalancedTeams(players, constraints)` accetta `constraints = { slotsRed, slotsBlue, lockedRedNames, lockedBlueNames }` per vincolare il numero di giocatori liberi per squadra.
 
@@ -126,9 +133,46 @@ src/
 npm run dev        # Dev server
 npm run build      # Build produzione
 npm run preview    # Preview build
-npm test           # Run Vitest (headless)
+npm test           # Run Vitest (headless) — ~190 test, 11 file
 npm run test:watch # Vitest watch mode
 ```
+
+## Moduli puri & test
+
+Vitest gira in ambiente **node (no DOM, no localStorage)**. Tutta la logica
+testabile è isolata in moduli puri senza dipendenze da Firestore/DOM/React, così
+ogni nuova funzione di calcolo va messa lì (non inline nei componenti) e testata.
+
+| Modulo | Cosa copre |
+|--------|-----------|
+| `playerStats.js` | stats, Power Index, streak, recentForm, `computeStatsFromMatches` |
+| `leaderboards.js` | `computeStandings`, `computeDuoStats`, `computeH2HStats`, `computeSquadreStats`, `rankGoalkeepers`, `getSeasonStartMs` |
+| `badges.js` | 40 badge def + `computeBadges` (error-isolation per badge) |
+| `weatherStats.js` | aggregati meteo per partita/giocatore |
+| `nextBadge.js` | hint prossimo badge |
+| `aiResolve.js` | `resolveBalancedTeams`, `resolveVoiceGoal` (output Gemini → player) |
+| `voiceParser.js` | parser vocale rule-based |
+| `dataExport.js` | `escapeCsv`, `buildMatchesCSV`, `buildPlayersCSV` |
+| `historicalData.js` | `computeCumulativeStats` ecc. + integrità dati |
+| `reportService.js` | preview/verdetto post-partita |
+| `firestore.js` | solo `sanitizePublicName` (resto non testato: richiede Firebase) |
+
+⚠️ `geminiService.js` e `firestore.js` **non** sono importabili nei test in blocco
+(leggono `localStorage`/Firebase a load-time): estrai la logica pura in `utils/`.
+
+## Audit svolti & invarianti da preservare
+
+Aree già revisionate a fondo (bug + hardening + test). **Non rifare questi check da zero**; rispetta gli invarianti:
+
+- **Privacy email** 🔒: l'email vive SOLO su `users/{uid}` (read self/admin via rules). NON deve mai finire in documenti world-readable. `rateMatch`/`upsertMatchReaction` passano da `sanitizePublicName()` (scarta valori con `@`). I display name pubblici usano `myPlayer?.name || user.displayName || 'Anonimo'`, **mai** `user.email`.
+- **CSV export**: `escapeCsv` neutralizza la **CSV formula injection** (prefisso `'` se il campo inizia con `= + - @` tab/CR) e quota anche su `\r`. Non rimuovere.
+- **Power Index engine** (`recalculatePlayerStats`): commit in **batch da ≤450** (limite Firestore 500); esclude i doc `isHistorical` e somma `computeCumulativeStats` (no doppio conteggio); skip dei player eliminati.
+- **Dati storici** (`historicalData.js`): invarianti garantiti da test → `players.length === totalPlayers` e `vinte+nulle+perse === presenze` per ogni giocatore. La classifica all-time ci si appoggia.
+- **Subscription** (`firestore.js`): tutte le `onSnapshot` hanno error callback (`_subError`); le liste preservano l'ultimo dato (no-wipe), le settings resettano a null.
+- **Gemini**: `resolveBalancedTeams` garantisce squadre **disgiunte** (nome duplicato da Gemini non finisce in entrambe); `resolveVoiceGoal` scarta gli ID inventati e deduce il team dallo scorer.
+- **reportService**: l'MVP del verdetto è nominato solo con punteggio **> 0** (niente MVP a chi ha solo autogol).
+- **StatsPage**: classifica GK = `rankGoalkeepers` (media gol/turno **crescente**, min 6 turni — più basso = migliore; diverso dai badge GK). Cronologie ordinate per data reale (`getMs`/`dateMs`), mai per stringa `GG/MM/AA`. Finestra 30gg legata allo stato `now` (refresh su visibilitychange).
+- **Infortuni live**: registrabili durante la partita (`matchStore.recordInjury` → evento `injury` con `team`, optimistic + rollback). Lo storico infortuni (`InjuryHistory`) usa `ev.team`.
 
 ## Gemini (modelli)
 
