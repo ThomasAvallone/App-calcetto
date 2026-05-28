@@ -49,10 +49,18 @@ export async function deletePlayer(id) {
   await deleteDoc(doc(db, 'players', id));
 }
 
+// Error callback su tutte le subscription: su errore terminale (permessi, sessione
+// scaduta) l'onSnapshot altrimenti lancerebbe un errore non gestito e ucciderebbe
+// la subscription in silenzio. Lo logghiamo e manteniamo l'ultimo dato buono (no-wipe)
+// per non svuotare la UI; le settings resettano invece al default (null).
+function _subError(label) {
+  return (e) => console.warn(`[firestore-sub:${label}]`, e?.code || e?.message || e);
+}
+
 export function subscribeToPlayers(callback) {
   return onSnapshot(query(collection(db, 'players'), orderBy('name')), snap => {
     callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-  });
+  }, _subError('players'));
 }
 
 // ─── MATCHES ─────────────────────────────────────────────────────────────────
@@ -134,7 +142,8 @@ export async function deleteMatch(id) {
 export function subscribeToMatchReactions(matchId, callback) {
   return onSnapshot(
     collection(db, 'matches', matchId, 'reactions'),
-    snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+    _subError('reactions'),
   );
 }
 
@@ -153,13 +162,13 @@ export async function deleteMatchReaction(matchId, userId) {
 export function subscribeToMatch(id, callback) {
   return onSnapshot(doc(db, 'matches', id), snap => {
     callback(snap.exists() ? { id: snap.id, ...snap.data() } : null);
-  });
+  }, _subError('match'));
 }
 
 export function subscribeToMatches(callback) {
   return onSnapshot(query(collection(db, 'matches'), orderBy('date', 'desc')), snap => {
     callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-  });
+  }, _subError('matches'));
 }
 
 // ─── POWER INDEX RECALCULATION ────────────────────────────────────────────────
@@ -355,7 +364,7 @@ export async function getMatchTimerState(matchId) {
 export function subscribeToMatchState(matchId, callback) {
   return onSnapshot(doc(db, 'matchStates', matchId), snap => {
     callback(snap.exists() ? snap.data() : null);
-  });
+  }, _subError('matchState'));
 }
 
 // ─── ONE-TIME FIX: ricalcola minuti gol usando timestamps assoluti ────────────
@@ -443,7 +452,7 @@ export async function clearScheduledMatch() {
 export function subscribeToScheduledMatch(callback) {
   return onSnapshot(doc(db, 'settings', 'nextMatch'), snap => {
     callback(snap.exists() ? snap.data() : null);
-  });
+  }, () => callback(null));
 }
 
 // ─── HISTORICAL MATCH IMPORT ─────────────────────────────────────────────────
