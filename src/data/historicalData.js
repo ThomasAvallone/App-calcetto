@@ -483,10 +483,13 @@ export function computeCumulativeStats(historicalNames) {
 
 // ─── Utility: suggerisci nomi storici per un dato nome giocatore ────────────
 export function suggestHistoricalNames(playerName, linkedNames = []) {
+  const needle = (playerName || '').toUpperCase().replace(/[.\s]/g, '');
+  // Needle vuoto → `startsWith('')`/`includes('')` matcherebbero ogni nome a 80%,
+  // restituendo tutti i nomi storici come falsi suggerimenti. Meglio nessun match.
+  if (!needle) return [];
   const allNames = getAllHistoricalNames();
   const alreadyLinked = new Set(linkedNames.map(n => n.toUpperCase()));
   const available = allNames.filter(n => !alreadyLinked.has(n.toUpperCase()));
-  const needle = playerName.toUpperCase().replace(/[.\s]/g, '');
 
   return available
     .map(name => {
