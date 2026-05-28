@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeStandings, computeDuoStats, getSeasonStartMs } from './leaderboards';
+import { computeStandings, computeDuoStats, getSeasonStartMs, computeH2HStats, computeSquadreStats } from './leaderboards';
 
 const players = [
   { id: 'a', name: 'A' },
@@ -109,5 +109,65 @@ describe('computeDuoStats', () => {
   it('soglia e topN parametrizzabili', () => {
     const matches = Array.from({ length: 2 }, () => M({ redTeam: team(['a', 'b']) }));
     expect(computeDuoStats(matches, 2, 10)).toHaveLength(1);
+  });
+});
+
+describe('computeH2HStats', () => {
+  const team = (ids) => ids.map(id => ({ id, name: id.toUpperCase() }));
+  const pl = [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }];
+
+  it('ritorna null per selezione incompleta o stesso giocatore', () => {
+    expect(computeH2HStats([], '', 'b', pl)).toBeNull();
+    expect(computeH2HStats([], 'a', 'a', pl)).toBeNull();
+  });
+
+  it('distingue partite da compagni e da avversari', () => {
+    const insieme = M({ redTeam: team(['a', 'b']), blueTeam: team(['c']), redScore: 2, blueScore: 1 });
+    const contro  = M({ redTeam: team(['a']), blueTeam: team(['b']), redScore: 3, blueScore: 0 });
+    const r = computeH2HStats([insieme, contro], 'a', 'b', pl);
+    expect(r.together).toMatchObject({ matches: 1, wins: 1 });
+    expect(r.against).toMatchObject({ matches: 1, p1wins: 1, p2wins: 0 });
+  });
+
+  it('conta gli assist reciproci solo da compagni', () => {
+    const m = M({
+      redTeam: team(['a', 'b']), blueTeam: team(['c']),
+      events: [{ type: 'goal', scorerId: 'a', assistId: 'b' }],
+    });
+    expect(computeH2HStats([m], 'a', 'b', pl).together.mutualAssists).toBe(1);
+  });
+
+  it('cronologia scontri ordinata dal più recente (data reale, non stringa)', () => {
+    const vecchia = M({ id: 'v', redTeam: team(['a']), blueTeam: team(['b']), date: '2025-12-31T00:00:00Z' });
+    const nuova   = M({ id: 'n', redTeam: team(['a']), blueTeam: team(['b']), date: '2026-01-02T00:00:00Z' });
+    const r = computeH2HStats([vecchia, nuova], 'a', 'b', pl);
+    expect(r.againstMatchList.map(x => x.date)).toEqual(['2026-01-02T00:00:00Z', '2025-12-31T00:00:00Z']);
+  });
+});
+
+describe('computeSquadreStats', () => {
+  const team = (ids) => ids.map(id => ({ id, name: id.toUpperCase() }));
+
+  it('null se una delle due squadre è vuota', () => {
+    expect(computeSquadreStats([], ['a'], [])).toBeNull();
+    expect(computeSquadreStats([], [], ['b'])).toBeNull();
+  });
+
+  it('conta solo le partite con A e B su lati opposti', () => {
+    const opposte = M({ redTeam: team(['a']), blueTeam: team(['b']), redScore: 2, blueScore: 1 });
+    const stessoLato = M({ redTeam: team(['a', 'b']), blueTeam: team(['c']) });
+    const r = computeSquadreStats([opposte, stessoLato], ['a'], ['b']);
+    expect(r.total).toBe(1);
+    expect(r.aWins).toBe(1);
+  });
+
+  it('cronologia ordinata per data reale (non lessicografica sulla stringa GG/MM/AA)', () => {
+    // 31/01 è PIÙ VECCHIA di 02/02 ma "31/01" > "02/02" come stringa: il sort
+    // corretto (per millis) deve mettere la più recente per prima.
+    const gen31 = M({ id: 'g', redTeam: team(['a']), blueTeam: team(['b']), date: '2026-01-31T00:00:00Z' });
+    const feb02 = M({ id: 'f', redTeam: team(['a']), blueTeam: team(['b']), date: '2026-02-02T00:00:00Z' });
+    const r = computeSquadreStats([gen31, feb02], ['a'], ['b']);
+    expect(r.matches[0].id).toBe('f'); // 02/02 prima di 31/01
+    expect(r.matches[1].id).toBe('g');
   });
 });

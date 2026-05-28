@@ -11,7 +11,7 @@ import ReportAITab from '../components/stats/ReportAITab';
 import HallTab from '../components/stats/HallTab';
 import TrendTab from '../components/stats/TrendTab';
 import { computeWeatherStats } from '../utils/weatherStats';
-import { getSeasonStartMs, computeStandings, computeDuoStats } from '../utils/leaderboards';
+import { getSeasonStartMs, computeStandings, computeDuoStats, computeH2HStats, computeSquadreStats } from '../utils/leaderboards';
 
 const LEADERBOARD_TABS = [
   { key: 'goals',   label: '⚽ Gol' },
@@ -282,112 +282,14 @@ export default function StatsPage() {
   }, [players, finishedMatches]);
 
   // H2H stats
-  const h2hStats = useMemo(() => {
-    if (!h2hP1 || !h2hP2 || h2hP1 === h2hP2) return null;
-    const p1name = players.find(p => p.id === h2hP1)?.name || '?';
-    const p2name = players.find(p => p.id === h2hP2)?.name || '?';
-    let together = { wins: 0, draws: 0, losses: 0, matches: 0, mutualAssists: 0 };
-    let against  = { p1wins: 0, p2wins: 0, draws: 0, matches: 0 };
-    let p1Goals = 0, p2Goals = 0;
-    const againstMatchList = []; // cronologia scontri diretti
-    for (const m of finishedMatches) {
-      const p1InRed  = (m.redTeam  || []).some(p => p.id === h2hP1);
-      const p1InBlue = (m.blueTeam || []).some(p => p.id === h2hP1);
-      const p2InRed  = (m.redTeam  || []).some(p => p.id === h2hP2);
-      const p2InBlue = (m.blueTeam || []).some(p => p.id === h2hP2);
-      if ((!p1InRed && !p1InBlue) || (!p2InRed && !p2InBlue)) continue;
-      const sameTeam = (p1InRed && p2InRed) || (p1InBlue && p2InBlue);
-      if (sameTeam) {
-        together.matches++;
-        const my    = p1InRed ? (m.redScore ?? 0) : (m.blueScore ?? 0);
-        const their = p1InRed ? (m.blueScore ?? 0) : (m.redScore ?? 0);
-        if (my > their) together.wins++;
-        else if (my < their) together.losses++;
-        else together.draws++;
-      } else {
-        against.matches++;
-        const p1s = p1InRed ? (m.redScore ?? 0) : (m.blueScore ?? 0);
-        const p2s = p2InRed ? (m.redScore ?? 0) : (m.blueScore ?? 0);
-        if (p1s > p2s) against.p1wins++;
-        else if (p1s < p2s) against.p2wins++;
-        else against.draws++;
-        // Gol dei due in questa partita
-        let p1g = 0, p2g = 0;
-        for (const ev of (m.events || [])) {
-          if (ev.type === 'goal') {
-            if (ev.scorerId === h2hP1) p1g++;
-            if (ev.scorerId === h2hP2) p2g++;
-          }
-        }
-        againstMatchList.push({
-          date: m.date,
-          redScore: m.redScore ?? 0,
-          blueScore: m.blueScore ?? 0,
-          p1InRed,
-          p1Goals: p1g,
-          p2Goals: p2g,
-          outcome: p1s > p2s ? 'p1win' : p1s < p2s ? 'p2win' : 'draw',
-        });
-      }
-      // Assist reciproci (solo quando insieme): p1 assiste p2 o viceversa
-      if (sameTeam) {
-        const nameToId = {};
-        for (const pl of [...(m.redTeam || []), ...(m.blueTeam || [])]) {
-          if (pl.name) nameToId[pl.name.toUpperCase()] = pl.id;
-        }
-        for (const ev of (m.events || [])) {
-          if (ev.type !== 'goal' || !ev.scorerId) continue;
-          const assistId = ev.assistId || (ev.assistName ? nameToId[ev.assistName.trim().toUpperCase()] : null);
-          if (!assistId) continue;
-          const pair = new Set([ev.scorerId, assistId]);
-          if (pair.has(h2hP1) && pair.has(h2hP2)) together.mutualAssists++;
-        }
-      }
-      for (const ev of (m.events || [])) {
-        if (ev.type === 'goal') {
-          if (ev.scorerId === h2hP1) p1Goals++;
-          if (ev.scorerId === h2hP2) p2Goals++;
-        }
-      }
-    }
-    // Ordina cronologia dal più recente
-    againstMatchList.sort((a, b) => getMs(b.date) - getMs(a.date));
-    return { p1name, p2name, together, against, p1Goals, p2Goals, againstMatchList };
-  }, [finishedMatches, h2hP1, h2hP2, players]);
+  const h2hStats = useMemo(
+    () => computeH2HStats(finishedMatches, h2hP1, h2hP2, players),
+    [finishedMatches, h2hP1, h2hP2, players],
+  );
 
   // Squadre: team vs team historical comparison
   const squadreStats = useMemo(() => {
-    if (squadreA.length === 0 || squadreB.length === 0) return null;
-    const setA = new Set(squadreA);
-    const setB = new Set(squadreB);
-    const matchResults = [];
-    let aWins = 0, bWins = 0, draws = 0;
-    for (const m of finishedMatches) {
-      const redIds = (m.redTeam || []).map(p => p.id);
-      const blueIds = (m.blueTeam || []).map(p => p.id);
-      const aInRed  = redIds.filter(id => setA.has(id)).length;
-      const aInBlue = blueIds.filter(id => setA.has(id)).length;
-      const bInRed  = redIds.filter(id => setB.has(id)).length;
-      const bInBlue = blueIds.filter(id => setB.has(id)).length;
-      // A and B must be on opposite sides, each with at least 1 player overlap
-      const aRedBBlue  = aInRed  >= 1 && bInBlue >= 1;
-      const aBlueBRed  = aInBlue >= 1 && bInRed  >= 1;
-      if (!aRedBBlue && !aBlueBRed) continue;
-      const aScore = aRedBBlue ? (m.redScore ?? 0) : (m.blueScore ?? 0);
-      const bScore = aRedBBlue ? (m.blueScore ?? 0) : (m.redScore ?? 0);
-      if (aScore > bScore) aWins++;
-      else if (aScore < bScore) bWins++;
-      else draws++;
-      const dateVal = m.date;
-      const dateStr = dateVal?.toMillis
-        ? new Date(dateVal.toMillis()).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit' })
-        : new Date(dateVal).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit' });
-      matchResults.push({ aScore, bScore, date: dateStr, dateMs: getMs(m.date), id: m.id });
-    }
-    // Ordina per data reale (millis): la stringa "GG/MM/AA" ordinata lessicograficamente
-    // darebbe un ordine cronologico errato (es. 31/01 dopo 01/02).
-    matchResults.sort((a, b) => b.dateMs - a.dateMs);
-    return { aWins, bWins, draws, total: aWins + bWins + draws, matches: matchResults.slice(0, 20) };
+    return computeSquadreStats(finishedMatches, squadreA, squadreB);
   }, [finishedMatches, squadreA, squadreB]);
 
   // Leaderboard helpers
