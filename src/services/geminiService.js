@@ -3,6 +3,8 @@
 // La chiave viene letta dall'env e non è mai esposta nel codice sorgente.
 // Protezione aggiuntiva: imposta la restrizione HTTP referrer su Google Cloud Console.
 
+import { resolveBalancedTeams, resolveVoiceGoal } from '../utils/aiResolve';
+
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 
 // Gerarchia modelli: fast = velocità/costo, pro = ragionamento/qualità
@@ -248,21 +250,8 @@ Rispondi ESCLUSIVAMENTE con un JSON valido (niente testo prima o dopo):
     throw new Error('JSON AI non valido');
   }
 
-  // Map names back to player objects (case-insensitive)
-  const nameToPlayer = Object.fromEntries(players.map(p => [p.name.toLowerCase().trim(), p]));
-  const red = (parsed.red || []).map(n => nameToPlayer[n.toLowerCase().trim()]).filter(Boolean);
-  const blue = (parsed.blue || []).map(n => nameToPlayer[n.toLowerCase().trim()]).filter(Boolean);
-
-  // Safety: assign any unassigned player to the smaller team
-  const assigned = new Set([...red, ...blue].map(p => p.id));
-  for (const p of players) {
-    if (!assigned.has(p.id)) {
-      if (red.length <= blue.length) red.push(p);
-      else blue.push(p);
-    }
-  }
-
-  return { red, blue, reasoning: parsed.reasoning || '' };
+  // Mappatura nomi → player + squadre disgiunte + safety net (vedi aiResolve)
+  return resolveBalancedTeams(parsed, players);
 }
 
 // ─── Previsione risultato pre-partita ─────────────────────────────────────────
@@ -452,19 +441,14 @@ Rispondi ESCLUSIVAMENTE con JSON valido (niente testo prima o dopo):
   const raw = await callGemini(prompt, { temperature: 0.15, maxTokens: 200, tier: 'fast' });
   const jsonMatch = raw.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error('Risposta AI non valida');
-  const parsed = JSON.parse(jsonMatch[0]);
-  // Resolve IDs → player objects, scartando ID inventati da Gemini
-  const playerById = Object.fromEntries(
-    [...redTeam, ...blueTeam].map(p => [p.id, p]),
-  );
-  const scorer = parsed.scorerId ? (playerById[parsed.scorerId] || null) : null;
-  const assist = parsed.assistId ? (playerById[parsed.assistId] || null) : null;
-  const gk     = parsed.gkId     ? (playerById[parsed.gkId]     || null) : null;
-  // Team: trust Gemini if scorer absent (raro), altrimenti deduci dallo scorer
-  const team = scorer
-    ? (redTeam.some(p => p.id === scorer.id) ? 'red' : 'blue')
-    : (parsed.team === 'red' || parsed.team === 'blue' ? parsed.team : null);
-  return { isAutogoal: !!parsed.isAutogoal, scorer, assist, gk, team };
+  let parsed;
+  try {
+    parsed = JSON.parse(jsonMatch[0]);
+  } catch {
+    throw new Error('JSON AI non valido');
+  }
+  // Resolve IDs → player objects (scarta ID inventati) + deduzione team (vedi aiResolve)
+  return resolveVoiceGoal(parsed, redTeam, blueTeam);
 }
 
 // ─── Analisi trend giocatore ──────────────────────────────────────────────────
