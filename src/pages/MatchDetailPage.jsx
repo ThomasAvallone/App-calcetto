@@ -9,6 +9,7 @@ import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 import { safeDate } from '../utils/dateUtils';
+import { scoreFromEvents } from '../utils/matchScore';
 import MatchReplay from '../components/MatchReplay';
 
 function BestieSection({ match, onUpdate }) {
@@ -352,11 +353,7 @@ export default function MatchDetailPage() {
 
   const handleDeleteEvent = async (evId) => {
     const newEvents = events.filter(e => e.id !== evId);
-    let redScore = 0, blueScore = 0;
-    for (const ev of newEvents) {
-      if (ev.type === 'goal') { if (ev.team === 'red') redScore++; else blueScore++; }
-      else if (ev.type === 'autogoal') { if (ev.team === 'red') blueScore++; else redScore++; }
-    }
+    const { redScore, blueScore } = scoreFromEvents(newEvents);
     const updated = { ...match, events: newEvents, redScore, blueScore };
     setMatch(updated);
     setSaving(true);
@@ -434,11 +431,7 @@ export default function MatchDetailPage() {
       };
     }
     const newEvents = [...events, newEvent];
-    let redScore = 0, blueScore = 0;
-    for (const ev of newEvents) {
-      if (ev.type === 'goal') { if (ev.team === 'red') redScore++; else blueScore++; }
-      else if (ev.type === 'autogoal') { if (ev.team === 'red') blueScore++; else redScore++; }
-    }
+    const { redScore, blueScore } = scoreFromEvents(newEvents);
     const updated = { ...match, events: newEvents, redScore, blueScore };
     setMatch(updated);
     setSaving(true);

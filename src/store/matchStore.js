@@ -7,6 +7,7 @@ import {
   subscribeToMatch, subscribeToMatchState,
   recordGoalEvent, deleteGoalEvent, recordChronicleEvent,
 } from '../firebase/firestore';
+import { scoreFromEvents } from '../utils/matchScore';
 
 // ─── STORE ────────────────────────────────────────────────────────────────────
 
@@ -132,11 +133,31 @@ const useMatchStore = create(
       openGoalModal(team, minute) { set({ goalModal: { team, minute } }); },
       closeGoalModal() { set({ goalModal: null }); },
 
-      async recordGoal({ team, scorerId, scorerName, assistId, assistName, gkConcededId, gkConcededName }) {
-        const { activeMatchId, match, getElapsedSeconds } = get();
+      // Aggiunge un evento con optimistic update + rollback in caso di errore.
+      // Il punteggio è SEMPRE derivato dagli eventi (scoreFromEvents) — niente
+      // increment manuale, così local state ed eventi non possono divergere.
+      async _appendEvent(event, persist) {
+        const { activeMatchId, match } = get();
         if (!activeMatchId || !match) return;
-        const minute = Math.floor(getElapsedSeconds() / 60);
-        const goalEvent = {
+        const events = [...(match.events || []), event];
+        set({ match: { ...match, events, ...scoreFromEvents(events) } });
+        try {
+          await persist(activeMatchId, event);
+        } catch (e) {
+          // Rollback dallo stato CORRENTE (non dal closure): evita di sovrascrivere
+          // update arrivati dalla subscription Firestore tra l'optimistic set e l'errore.
+          const cur = get().match;
+          if (cur && (cur.events || []).some(ev => ev.id === event.id)) {
+            const rolled = (cur.events || []).filter(ev => ev.id !== event.id);
+            set({ match: { ...cur, events: rolled, ...scoreFromEvents(rolled) } });
+          }
+          throw e;
+        }
+      },
+
+      async recordGoal({ team, scorerId, scorerName, assistId, assistName, gkConcededId, gkConcededName }) {
+        const minute = Math.floor(get().getElapsedSeconds() / 60);
+        await get()._appendEvent({
           id: crypto.randomUUID(),
           type: 'goal',
           team, scorerId, scorerName,
@@ -146,57 +167,30 @@ const useMatchStore = create(
           gkConcededName: gkConcededName || null,
           minute,
           timestamp: Date.now(),
-        };
-        // Optimistic update immediato — la subscription Firestore confermerà la verità
-        const redScore = team === 'red' ? (match.redScore || 0) + 1 : (match.redScore || 0);
-        const blueScore = team === 'blue' ? (match.blueScore || 0) + 1 : (match.blueScore || 0);
-        set({ match: { ...match, events: [...(match.events || []), goalEvent], redScore, blueScore } });
-        // Scrittura atomica: arrayUnion + increment prevengono race condition
-        await recordGoalEvent(activeMatchId, goalEvent);
+        }, recordGoalEvent);
       },
 
       async recordAutogoal({ team, scorerId, scorerName, gkConcededId, gkConcededName }) {
-        const { activeMatchId, match, getElapsedSeconds } = get();
-        if (!activeMatchId || !match) return;
-        const minute = Math.floor(getElapsedSeconds() / 60);
-        const autogoalEvent = {
+        const minute = Math.floor(get().getElapsedSeconds() / 60);
+        await get()._appendEvent({
           id: crypto.randomUUID(),
           type: 'autogoal',
           team, scorerId, scorerName,
           gkConcededId: gkConcededId || null,
           gkConcededName: gkConcededName || null,
           minute, timestamp: Date.now(),
-        };
-        // Autogoal: la squadra avversaria segna
-        const redScore = team === 'blue' ? (match.redScore || 0) + 1 : (match.redScore || 0);
-        const blueScore = team === 'red' ? (match.blueScore || 0) + 1 : (match.blueScore || 0);
-        set({ match: { ...match, events: [...(match.events || []), autogoalEvent], redScore, blueScore } });
-        await recordGoalEvent(activeMatchId, autogoalEvent);
+        }, recordGoalEvent);
       },
 
       async recordInjury({ playerId, playerName, team }) {
-        const { activeMatchId, match, getElapsedSeconds } = get();
-        if (!activeMatchId || !match) return;
-        const minute = Math.floor(getElapsedSeconds() / 60);
-        const injuryEvent = {
+        const minute = Math.floor(get().getElapsedSeconds() / 60);
+        await get()._appendEvent({
           id: crypto.randomUUID(),
           type: 'injury',
           team,
           playerId, playerName,
           minute, timestamp: Date.now(),
-        };
-        set({ match: { ...match, events: [...(match.events || []), injuryEvent] } });
-        try {
-          await recordChronicleEvent(activeMatchId, injuryEvent);
-        } catch (e) {
-          // Rollback letto dallo stato corrente per evitare di sovrascrivere
-          // update arrivati dalla subscription tra l'optimistic set e l'errore.
-          const cur = get().match;
-          if (cur && (cur.events || []).some(ev => ev.id === injuryEvent.id)) {
-            set({ match: { ...cur, events: (cur.events || []).filter(ev => ev.id !== injuryEvent.id) } });
-          }
-          throw e;
-        }
+        }, recordChronicleEvent);
       },
 
       async deleteEvent(eventId) {
@@ -204,29 +198,19 @@ const useMatchStore = create(
         if (!activeMatchId || !match) return;
         const event = (match.events || []).find(e => e.id === eventId);
         if (!event) return;
-        // Optimistic update
+        // Optimistic removal — punteggio ri-derivato dagli eventi rimasti
         const events = (match.events || []).filter(e => e.id !== eventId);
-        let redScore = 0, blueScore = 0;
-        for (const ev of events) {
-          if (ev.type === 'goal') { if (ev.team === 'red') redScore++; else blueScore++; }
-          else if (ev.type === 'autogoal') { if (ev.team === 'red') blueScore++; else redScore++; }
-        }
-        set({ match: { ...match, events, redScore, blueScore } });
+        set({ match: { ...match, events, ...scoreFromEvents(events) } });
         try {
           // Atomic removal via arrayRemove + decrement (no race with concurrent recordGoalEvent)
           await deleteGoalEvent(activeMatchId, event);
         } catch (e) {
-          // Rollback letto dallo stato corrente (evita di sovrascrivere update arrivati
+          // Rollback dallo stato corrente (evita di sovrascrivere update arrivati
           // dalla subscription Firestore tra l'optimistic set e l'errore).
           const cur = get().match;
           if (cur && !(cur.events || []).some(ev => ev.id === eventId)) {
             const restoredEvents = [...(cur.events || []), event];
-            let r = 0, b = 0;
-            for (const ev of restoredEvents) {
-              if (ev.type === 'goal') { if (ev.team === 'red') r++; else b++; }
-              else if (ev.type === 'autogoal') { if (ev.team === 'red') b++; else r++; }
-            }
-            set({ match: { ...cur, events: restoredEvents, redScore: r, blueScore: b } });
+            set({ match: { ...cur, events: restoredEvents, ...scoreFromEvents(restoredEvents) } });
           }
           throw e;
         }
