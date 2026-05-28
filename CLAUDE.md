@@ -173,6 +173,7 @@ Aree già revisionate a fondo (bug + hardening + test). **Non rifare questi chec
 - **reportService**: l'MVP del verdetto è nominato solo con punteggio **> 0** (niente MVP a chi ha solo autogol).
 - **StatsPage**: classifica GK = `rankGoalkeepers` (media gol/turno **crescente**, min 6 turni — più basso = migliore; diverso dai badge GK). Cronologie ordinate per data reale (`getMs`/`dateMs`), mai per stringa `GG/MM/AA`. Finestra 30gg legata allo stato `now` (refresh su visibilitychange).
 - **Infortuni live**: registrabili durante la partita (`matchStore.recordInjury` → evento `injury` con `team`, optimistic + rollback). Lo storico infortuni (`InjuryHistory`) usa `ev.team`.
+- **Flusso match (MatchPage/MatchSetupPage)** — comportamenti da non disfare: (A4) conferma prima di lasciare/ricaricare una partita `active` con eventi (`useBlocker` + `beforeunload`); (D2) MatchSetupPage avvisa con toast al superamento dei 10 giocatori e chiede conferma su "Pianifica senza giocatori"; (D3) i timer di animazione (goalFlash/scoreShake/scoreBounce) usano ref dedicate e guard `isMountedRef` nei `setTimeout` per evitare set su componente smontato e collisioni su gol ravvicinati.
 
 ## Gemini (modelli)
 

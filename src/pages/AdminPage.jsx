@@ -13,6 +13,18 @@ import toast from 'react-hot-toast';
 
 const CHANGELOG = [
   {
+    version: '3.13.0',
+    date: 'Maggio 2026',
+    entries: [
+      { type: 'new', text: 'Infortuni registrabili anche DURANTE la partita live: nuovo bottone 🩹 Infortunio nella sezione "Registra evento" di MatchPage, con modale di selezione giocatore (mostra la squadra 🔴/🔵). L\'evento appare subito nella cronaca e nello storico infortuni della scheda giocatore. Non incide su punteggio né Power Index.' },
+      { type: 'new', text: 'Protezione anti-uscita durante una partita live: se provi a navigare via (o ricaricare/chiudere la scheda) mentre una partita è in corso e ha già eventi registrati, compare una conferma "Rimani / Esci lo stesso" per non perdere il tracciamento.' },
+      { type: 'fix', text: 'Classifica 🧤 GK ora premia il MIGLIOR portiere: ordina per media gol subiti per turno crescente (più bassa = meglio), con minimo 6 turni in porta e tie-break sui clean sheet. Prima ordinava per totale gol subiti, che di fatto premiava solo chi giocava più spesso in porta.' },
+      { type: 'fix', text: 'Privacy email blindata: l\'email collegata non può più finire in alcun campo visibile agli altri utenti (voti partita, reazioni). Resta leggibile solo dagli admin.' },
+      { type: 'fix', text: 'Verdetto post-partita: l\'MVP non viene più assegnato a chi ha solo un autogol (richiesto un punteggio positivo). Cronologie scontri (Squadre) ordinate correttamente per data. Corrette 3 piccole incongruenze nei dati storici (presenze/risultati).' },
+      { type: 'fix', text: 'Robustezza: export CSV protetto dalla formula injection, ricalcolo Power Index a prova di rose numerose (commit a blocchi), e tutte le sottoscrizioni real-time ora gestiscono gli errori senza interrompersi in silenzio. Copertura di test ampliata a ~190 test.' },
+    ],
+  },
+  {
     version: '3.12.2',
     date: 'Maggio 2026',
     entries: [
