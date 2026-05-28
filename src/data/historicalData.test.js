@@ -155,4 +155,19 @@ describe('integrità dati storici (regression guard)', () => {
       expect(s.players.length).toBeGreaterThan(0);
     }
   });
+
+  it('totalPlayers coincide con il numero di giocatori in elenco', () => {
+    for (const s of HISTORICAL_SEASONS) {
+      expect(s.players.length, `stagione ${s.id}`).toBe(s.totalPlayers);
+    }
+  });
+
+  it('per ogni giocatore vinte + nulle + perse === presenze', () => {
+    for (const s of HISTORICAL_SEASONS) {
+      for (const p of s.players) {
+        const sum = (p.vinte || 0) + (p.nulle || 0) + (p.perse || 0);
+        expect(sum, `${s.id}/${p.name}`).toBe(p.presenze || 0);
+      }
+    }
+  });
 });
