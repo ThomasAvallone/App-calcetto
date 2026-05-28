@@ -940,7 +940,7 @@ export default function MatchDetailPage() {
 
       {/* Rating section */}
       {isAdmin && match.status === 'finished' && user && (
-        <RatingSection match={match} userId={user.uid} userName={user?.displayName || user?.email || ''} onRated={setMatch} />
+        <RatingSection match={match} userId={user.uid} userName={reactionDisplayName} onRated={setMatch} />
       )}
 
       {/* Bestie award – admin only */}

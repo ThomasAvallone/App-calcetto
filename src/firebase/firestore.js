@@ -141,6 +141,7 @@ export function subscribeToMatchReactions(matchId, callback) {
 export async function upsertMatchReaction(matchId, userId, data) {
   await setDoc(doc(db, 'matches', matchId, 'reactions', userId), {
     ...data,
+    ...(data?.playerName !== undefined ? { playerName: sanitizePublicName(data.playerName) } : {}),
     updatedAt: serverTimestamp(),
   });
 }
@@ -281,10 +282,19 @@ export async function recalculatePlayerStats(playerIds, { cachedMatches, cachedP
 
 // ─── RATINGS & RECENT FORM ───────────────────────────────────────────────────
 
+// Difesa in profondità: i nomi pubblici (raterName, reaction playerName) finiscono
+// in documenti leggibili da ogni utente autenticato. L'email non deve MAI comparirvi
+// (vincolo privacy: mail visibile solo agli admin). Se un chiamante futuro passasse
+// per errore un'email come display name, qui la scartiamo (un nome non contiene '@').
+export function sanitizePublicName(name) {
+  if (typeof name !== 'string') return null;
+  return name.includes('@') ? null : name;
+}
+
 export async function rateMatch(matchId, userId, scores, raterName) {
   // scores: { [playerId]: number (1-10) }
   await updateDoc(doc(db, 'matches', matchId), {
-    [`ratings.${userId}`]: { scores, ratedAt: serverTimestamp(), raterName: raterName || null },
+    [`ratings.${userId}`]: { scores, ratedAt: serverTimestamp(), raterName: sanitizePublicName(raterName) },
     updatedAt: serverTimestamp(),
   });
 }
