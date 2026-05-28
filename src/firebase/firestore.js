@@ -175,8 +175,13 @@ export async function recalculatePlayerStats(playerIds, { cachedMatches, cachedP
   const cfg = { ...DEFAULT_PI_CONFIG, ...piConfigData };
   // Map playerId → player doc (for historicalNames, powerHistory, etc.)
   const playerMap = new Map(allPlayers.map(p => [p.id, p]));
-  const batch = writeBatch(db);
   const now = Date.now();
+  // Firestore limita ogni writeBatch a 500 operazioni: con una rosa numerosa
+  // (ricalcolo "tutti i giocatori") un singolo batch abortirebbe. Accumuliamo gli
+  // update e li committiamo a blocchi (≤450). Per ≤450 player → un solo batch,
+  // identico al comportamento precedente.
+  const BATCH_LIMIT = 450;
+  const pendingUpdates = [];
 
   // Pre-build Map<pid, finishedMatches sorted newest-first> to avoid O(n×m) filtering
   const finishedSorted = allMatches
@@ -266,18 +271,26 @@ export async function recalculatePlayerStats(playerIds, { cachedMatches, cachedP
       ? [...existingHistory.slice(0, -1), { d: today, pi: finalPI }]
       : [...existingHistory, { d: today, pi: finalPI }].slice(-30);
 
-    batch.update(doc(db, 'players', pid), {
-      stats,
-      historicalStats: historicalStats ?? null,
-      powerIndex: finalPI,
-      powerHistory,
-      recentForm: recentForm ?? null,
-      streak: streak ?? null,
-      updatedAt: serverTimestamp(),
+    pendingUpdates.push({
+      ref: doc(db, 'players', pid),
+      data: {
+        stats,
+        historicalStats: historicalStats ?? null,
+        powerIndex: finalPI,
+        powerHistory,
+        recentForm: recentForm ?? null,
+        streak: streak ?? null,
+        updatedAt: serverTimestamp(),
+      },
     });
   }
 
-  await batch.commit();
+  // Commit a blocchi di BATCH_LIMIT operazioni (sequenziale: evita race su Firestore).
+  for (let i = 0; i < pendingUpdates.length; i += BATCH_LIMIT) {
+    const batch = writeBatch(db);
+    for (const u of pendingUpdates.slice(i, i + BATCH_LIMIT)) batch.update(u.ref, u.data);
+    await batch.commit();
+  }
 }
 
 // ─── RATINGS & RECENT FORM ───────────────────────────────────────────────────
