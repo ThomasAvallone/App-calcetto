@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeStandings, computeDuoStats, getSeasonStartMs, computeH2HStats, computeSquadreStats } from './leaderboards';
+import { computeStandings, computeDuoStats, getSeasonStartMs, computeH2HStats, computeSquadreStats, rankGoalkeepers } from './leaderboards';
 
 const players = [
   { id: 'a', name: 'A' },
@@ -142,6 +142,42 @@ describe('computeH2HStats', () => {
     const nuova   = M({ id: 'n', redTeam: team(['a']), blueTeam: team(['b']), date: '2026-01-02T00:00:00Z' });
     const r = computeH2HStats([vecchia, nuova], 'a', 'b', pl);
     expect(r.againstMatchList.map(x => x.date)).toEqual(['2026-01-02T00:00:00Z', '2025-12-31T00:00:00Z']);
+  });
+});
+
+describe('rankGoalkeepers', () => {
+  const gk = (id, conceded, turns, cs = 0) => ({ id, name: id, gkGoalsConceded: conceded, gkMatches: turns, cleanSheets: cs });
+
+  it('ordina per media gol/turno crescente (più basso = migliore)', () => {
+    const list = rankGoalkeepers([
+      gk('peggiore', 30, 10), // 3.0
+      gk('migliore', 6, 10),  // 0.6
+      gk('medio', 15, 10),    // 1.5
+    ], 6);
+    expect(list.map(p => p.id)).toEqual(['migliore', 'medio', 'peggiore']);
+  });
+
+  it('esclude chi è sotto la soglia minima di turni', () => {
+    const list = rankGoalkeepers([gk('poco', 0, 4), gk('ok', 10, 6)], 6);
+    expect(list.map(p => p.id)).toEqual(['ok']);
+  });
+
+  it('a parità di media, vince chi ha più clean sheet', () => {
+    const list = rankGoalkeepers([
+      gk('a', 10, 10, 2),
+      gk('b', 10, 10, 5),
+    ], 6);
+    expect(list[0].id).toBe('b');
+  });
+
+  it('media 0 (mai subito gol) è in cima', () => {
+    const list = rankGoalkeepers([gk('imbattuto', 0, 8, 4), gk('altro', 8, 8)], 6);
+    expect(list[0].id).toBe('imbattuto');
+  });
+
+  it('lista vuota / null → []', () => {
+    expect(rankGoalkeepers([], 6)).toEqual([]);
+    expect(rankGoalkeepers(null, 6)).toEqual([]);
   });
 });
 

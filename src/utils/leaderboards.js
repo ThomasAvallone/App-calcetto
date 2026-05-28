@@ -150,6 +150,19 @@ export function computeSquadreStats(finishedMatches, squadreA, squadreB) {
   return { aWins, bWins, draws, total: aWins + bWins + draws, matches: matchResults.slice(0, 20) };
 }
 
+// Classifica "miglior portiere": media gol subiti per turno crescente (più basso =
+// meglio), min `minTurns` turni in porta. Tie-break: più clean sheet, poi più turni.
+// Riceve i giocatori già con le stats di periodo (gkGoalsConceded, gkMatches, cleanSheets).
+export function rankGoalkeepers(playersWithStats, minTurns = 6, topN = 10) {
+  return (playersWithStats || [])
+    .filter(p => (p.gkMatches || 0) >= minTurns)
+    .sort((a, b) =>
+      (a.gkGoalsConceded / a.gkMatches) - (b.gkGoalsConceded / b.gkMatches)
+      || (b.cleanSheets ?? 0) - (a.cleanSheets ?? 0)
+      || b.gkMatches - a.gkMatches)
+    .slice(0, topN);
+}
+
 // Statistiche di coppia: per ogni coppia di compagni di squadra, W/D/L cumulativi.
 // Ordina per win-rate (pareggio = mezzo punto), min `minMatches` partite insieme.
 export function computeDuoStats(finishedMatches, minMatches = 10, topN = 10) {

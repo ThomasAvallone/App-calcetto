@@ -11,7 +11,7 @@ import ReportAITab from '../components/stats/ReportAITab';
 import HallTab from '../components/stats/HallTab';
 import TrendTab from '../components/stats/TrendTab';
 import { computeWeatherStats } from '../utils/weatherStats';
-import { getSeasonStartMs, computeStandings, computeDuoStats, computeH2HStats, computeSquadreStats } from '../utils/leaderboards';
+import { getSeasonStartMs, computeStandings, computeDuoStats, computeH2HStats, computeSquadreStats, rankGoalkeepers } from '../utils/leaderboards';
 
 const LEADERBOARD_TABS = [
   { key: 'goals',   label: '⚽ Gol' },
@@ -35,6 +35,9 @@ const PERIODS = [
   { key: 'season', label: 'Stagione' },
   { key: '30d',    label: '30gg' },
 ];
+
+// Soglia minima di turni in porta per la classifica GK (2 turni/partita → 3 partite).
+const MIN_GK_TURNS = 6;
 
 
 function Avatar({ name, size = 32 }) {
@@ -198,6 +201,15 @@ export default function StatsPage() {
 
   const finishedMatches = useMemo(() => allMatches.filter(m => m.status === 'finished'), [allMatches]);
 
+  // "Adesso" per le finestre temporali (30gg): aggiornato quando la pagina torna
+  // visibile, così se resta aperta a cavallo di un cambio giorno la finestra scorre.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const onVisible = () => { if (document.visibilityState === 'visible') setNow(Date.now()); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, []);
+
   const weatherStats = useMemo(() => computeWeatherStats(finishedMatches), [finishedMatches]);
 
   // ID dell'ultima partita conclusa — usato per rilevare staleness delle cache AI
@@ -228,9 +240,9 @@ export default function StatsPage() {
   }, [finishedMatches]);
 
   const thirtyDayFilteredMatches = useMemo(() => {
-    const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const cutoff = now - 30 * 24 * 60 * 60 * 1000;
     return finishedMatches.filter(m => getMs(m.date) >= cutoff);
-  }, [finishedMatches]);
+  }, [finishedMatches, now]);
 
   // Pre-compute stats per period (avoids recomputing on period tab switch)
   // All three periods use the same live computation from matches — no stale p.stats.
@@ -248,8 +260,8 @@ export default function StatsPage() {
   // For all-time: excludes isHistorical match docs (those come from p.historicalStats)
   // to be consistent with p.stats.* which uses recalculatePlayerStats logic.
   const standingsStats = useMemo(
-    () => computeStandings(players, finishedMatches, period),
-    [players, finishedMatches, period],
+    () => computeStandings(players, finishedMatches, period, now),
+    [players, finishedMatches, period, now],
   );
 
   // Duo stats – always all finished matches
@@ -309,11 +321,8 @@ export default function StatsPage() {
       p => p.totalMatches >= 3
     ),
     matches: getRanked(withStats, (a, b) => b.totalMatches - a.totalMatches, p => p.totalMatches > 0),
-    gk: getRanked(
-      withStats,
-      (a, b) => b.gkGoalsConceded - a.gkGoalsConceded,
-      p => p.gkGoalsConceded > 0
-    ),
+    // Miglior portiere: media gol subiti per turno crescente, min MIN_GK_TURNS turni.
+    gk: rankGoalkeepers(withStats, MIN_GK_TURNS),
     autogoals: getRanked(
       withStats,
       (a, b) => b.totalAutogoals - a.totalAutogoals,
@@ -326,7 +335,7 @@ export default function StatsPage() {
     assists: { accent: '#63B3ED', getVal: p => p.totalAssists, getLabel: () => 'assist', getSub: p => `${p.totalMatches} partite` },
     winrate: { accent: CLR_DRAW, getVal: p => `${Math.round((p.totalWins + p.totalDraws * 0.5) / p.totalMatches * 100)}`, getLabel: () => '%', getSub: p => `${p.totalWins}V · ${p.totalDraws}P · ${p.totalMatches - p.totalWins - p.totalDraws}S su ${p.totalMatches} partite` },
     matches: { accent: '#A0AEC0', getVal: p => p.totalMatches, getLabel: () => 'pt', getSub: p => `${p.totalWins}V · ${p.totalDraws}P · ${p.totalMatches - p.totalWins - p.totalDraws}S` },
-    gk:        { accent: CLR_WIN, getVal: p => p.gkGoalsConceded, getLabel: () => 'gs', getSub: p => p.gkMatches > 0 ? `${p.gkMatches} turni · ${(p.gkGoalsConceded / p.gkMatches).toFixed(2)} gs/turno · 🧹 ${p.cleanSheets ?? 0} clean sheet` : `${p.gkGoalsConceded} gol subiti` },
+    gk:        { accent: CLR_WIN, getVal: p => (p.gkGoalsConceded / p.gkMatches).toFixed(2), getLabel: () => 'gs/turno', getSub: p => `${p.gkMatches} turni · ${p.gkGoalsConceded} gol subiti · 🧹 ${p.cleanSheets ?? 0} clean sheet` },
     autogoals: { accent: CLR_LOSS, getVal: p => p.totalAutogoals, getLabel: () => 'ag', getSub: p => `${p.totalMatches} partite · ${(p.totalAutogoals / Math.max(1, p.totalMatches) * 100).toFixed(1)}% delle partite` },
   };
 
@@ -392,7 +401,7 @@ export default function StatsPage() {
             <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>📭</div>
             <p>Nessun dato sufficiente</p>
             {tab === 'winrate' && <p className="text-xs" style={{ marginTop: '0.5rem' }}>Minimo 3 partite richieste</p>}
-            {tab === 'gk' && <p className="text-xs" style={{ marginTop: '0.5rem' }}>Nessun gol subito registrato come portiere</p>}
+            {tab === 'gk' && <p className="text-xs" style={{ marginTop: '0.5rem' }}>Minimo {MIN_GK_TURNS} turni in porta richiesti</p>}
           </div>
         ) : (
           <div className="card">
@@ -588,7 +597,7 @@ export default function StatsPage() {
 
               {/* Gol */}
               <div className="card">
-                <h3 className="mb-3" style={{ fontSize: '0.9rem' }}>⚽ Gol segnati (in tutte le partite insieme)</h3>
+                <h3 className="mb-3" style={{ fontSize: '0.9rem' }}>⚽ Gol segnati (in tutte le partite in cui erano entrambi in campo)</h3>
                 <div className="flex items-center gap-2">
                   <div style={{ flex: 1, textAlign: 'center' }}>
                     <div style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: '0.25rem' }}>{h2hStats.p1name}</div>
@@ -680,7 +689,7 @@ export default function StatsPage() {
               const total = w.redWins + w.blueWins + w.draws || 1;
               const redPct  = Math.round((w.redWins  / total) * 100);
               const bluePct = Math.round((w.blueWins / total) * 100);
-              const drawPct = 100 - redPct - bluePct;
+              const drawPct = Math.max(0, 100 - redPct - bluePct);
               return (
                 <div key={w.key} className="card mb-3" style={{ border: `1px solid ${w.color}33` }}>
                   {/* Header */}
