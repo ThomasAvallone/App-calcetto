@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { computeBadges } from '../../utils/badges';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -156,7 +156,12 @@ export function PlayerRecords({ playerMatches: rawPlayerMatches, player }) {
 }
 
 export function PlayerBadges({ player, seasonStats, allMatches }) {
-  const badges = computeBadges(player, seasonStats, allMatches);
+  // Memoizzato: computeBadges è O(badge × partite × eventi) e gira ~40 check su
+  // tutte le partite. Senza memo si ricalcola a ogni render del dettaglio player.
+  const badges = useMemo(
+    () => computeBadges(player, seasonStats, allMatches),
+    [player, seasonStats, allMatches],
+  );
   if (badges.length === 0) return null;
   return (
     <div className="card mb-4">

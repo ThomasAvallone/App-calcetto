@@ -604,6 +604,17 @@ export const BADGE_DEFS = [
 // player:      full player object (for powerIndex, streak, all-time stats)
 // allMatches:  all Firestore matches (for match-level badge checks — optional)
 export function computeBadges(player, seasonStats, allMatches) {
+  if (!player) return [];
   const s = seasonStats || player.stats || {};
-  return BADGE_DEFS.filter(b => b.check(s, player, allMatches));
+  // Error isolation per-badge: i check girano su dati Firestore arbitrari (eventi
+  // malformati, team mancanti, date come Timestamp). Un singolo check che lancia
+  // non deve azzerare tutti i badge né far crashare il render di PlayerBadges.
+  return BADGE_DEFS.filter(b => {
+    try {
+      return b.check(s, player, allMatches);
+    } catch (e) {
+      if (import.meta.env?.DEV) console.warn(`[badges] check "${b.id}" failed:`, e);
+      return false;
+    }
+  });
 }
