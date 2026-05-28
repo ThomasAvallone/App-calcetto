@@ -121,9 +121,10 @@ export function generateMatchReport(match, players) {
     if (ev.type === 'autogoal' && sid) playerScores[sid] = (playerScores[sid] || 0) - 2;
   }
 
+  // MVP solo con punteggio positivo: una partita decisa da un solo autogol darebbe
+  // mvpEntry = [autogolista, -2] e finiremmo per incoronare MVP chi ha fatto autogol.
   const mvpEntry = Object.entries(playerScores).sort((a, b) => b[1] - a[1])[0];
-  // Usa playerById (event-stored names) invece di players.find() per robustezza
-  const mvpName = mvpEntry ? (playerById[mvpEntry[0]] || '?') : null;
+  const mvpName = mvpEntry && mvpEntry[1] > 0 ? (playerById[mvpEntry[0]] || '?') : null;
 
   // GK stats — legge gkConcededName dall'evento, fallback a playerById
   const gkGoals = {};
@@ -236,14 +237,4 @@ ${tinAwards.length > 0 ? tinAwards.join('\n') : 'Stasera tutti promossi. Miracol
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Powered by Calcetto Analytics`;
-}
-
-function getRoleIcon(role) {
-  const icons = {
-    'Portiere': '🧤',
-    'Difensore': '🛡️',
-    'Centrocampista': '⚙️',
-    'Attaccante': '⚡',
-  };
-  return icons[role] || '⚽';
 }
