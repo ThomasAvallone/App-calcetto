@@ -9,6 +9,7 @@ import { exportMatchToSheets } from '../services/sheetsService';
 import { recalculatePlayerStats, updateMatch } from '../firebase/firestore';
 import { fetchWeatherForDate } from '../services/weatherService';
 import { waitUndo } from '../utils/waitUndo';
+import { scoreFromEvents, withProgressiveScore } from '../utils/matchScore';
 import { parseVoiceGoal } from '../utils/voiceParser';
 import { parseVoiceGoalWithAI } from '../services/geminiService';
 import toast from 'react-hot-toast';
@@ -413,19 +414,29 @@ export default function MatchPage() {
       return;
     }
     try {
+      // Snapshot captured AFTER the undo countdown so it includes any events
+      // that arrived from the Firestore subscription during the 5s window.
+      const liveMatch = useMatchStore.getState().match || match;
+      const snapshotEvents = liveMatch.events || [];
+      const { redScore, blueScore } = scoreFromEvents(snapshotEvents);
       const snapshot = {
-        redScore: match.redScore || 0,
-        blueScore: match.blueScore || 0,
-        redTeam: match.redTeam || [],
-        blueTeam: match.blueTeam || [],
-        events: match.events || [],
+        redScore,
+        blueScore,
+        redTeam: liveMatch.redTeam || [],
+        blueTeam: liveMatch.blueTeam || [],
+        events: snapshotEvents,
       };
       await endMatch();
       const allIds = [...snapshot.redTeam.map(p => p.id), ...snapshot.blueTeam.map(p => p.id)];
-      await recalculatePlayerStats(allIds);
-      // Read fresh match from store: dopo gli await (waitUndo, endMatch, recalculate)
-      // il match del closure può essere stale rispetto agli ultimi eventi/meteo.
-      const freshMatch = useMatchStore.getState().match || match;
+      // Stats recalculation is non-critical: a failure here must not hide the
+      // end-match report. Warn with a toast and continue.
+      await recalculatePlayerStats(allIds).catch(e => {
+        console.warn('[endMatch] recalculate failed', e);
+        toast.error('Ricalcolo statistiche fallito (riprova da Admin)');
+      });
+      // Read fresh match from store: dopo gli await il match del closure può
+      // essere stale rispetto agli ultimi aggiornamenti Firestore.
+      const freshMatch = useMatchStore.getState().match || liveMatch;
       await exportMatchToSheets(freshMatch, players).catch(() => {
         toast.error('Export Google Sheets fallito');
       });
@@ -438,7 +449,7 @@ export default function MatchPage() {
       if (activeMatchId) await updateMatch(activeMatchId, extraFields);
       setReportText(report);
       setMatchSummary(snapshot);
-      const confettiWinner = snapshot.redScore > snapshot.blueScore ? 'red' : snapshot.blueScore > snapshot.redScore ? 'blue' : null;
+      const confettiWinner = redScore > blueScore ? 'red' : blueScore > redScore ? 'blue' : null;
       if (confettiWinner) setShowConfetti(confettiWinner);
       reportTimeoutRef.current = setTimeout(() => { setShowConfetti(null); setReportModal(true); }, 2200);
     } catch (e) {
@@ -926,14 +937,7 @@ export default function MatchPage() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
             {(() => {
-              // Calcola parziale progressivo per ogni evento
-              const events = match.events || [];
-              let r = 0, b = 0;
-              const withScore = events.map(ev => {
-                if (ev.type === 'goal') { if (ev.team === 'red') r++; else b++; }
-                else if (ev.type === 'autogoal') { if (ev.team === 'red') b++; else r++; }
-                return { ...ev, partialRed: r, partialBlue: b };
-              });
+              const withScore = withProgressiveScore(match.events || []);
               return [...withScore].reverse().map(ev => (
                 <div key={ev.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem 0', borderBottom: '1px solid #2D3748' }}>
                   <span style={{ fontSize: '0.8rem', color: '#718096', minWidth: '28px' }}>{ev.minute}'</span>

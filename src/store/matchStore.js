@@ -217,11 +217,14 @@ const useMatchStore = create(
       },
 
       async endMatch() {
-        const { activeMatchId, match, timerState } = get();
-        if (!activeMatchId || !match) return;
+        const { activeMatchId, timerState } = get();
+        if (!activeMatchId || !get().match) return;
         if (timerState.isRunning) get().pauseTimer();
         await updateMatch(activeMatchId, { status: 'finished', endedAt: Date.now() });
-        set({ match: { ...match, status: 'finished' } });
+        // Re-read match from store (not closure) to avoid overwriting events that
+        // arrived from the Firestore subscription during the await above.
+        const cur = get().match;
+        if (cur) set({ match: { ...cur, status: 'finished' } });
       },
 
       async createNewMatch(matchData) {
