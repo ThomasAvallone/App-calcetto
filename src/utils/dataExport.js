@@ -36,14 +36,27 @@ export function exportJSON({ players, matches }) {
   triggerDownload(blob, `calcetto-backup-${todayStamp()}.json`);
 }
 
-// ─── CSV: partite conclusive ─────────────────────────────────────────────────
-function escapeCsv(val) {
+// ─── CSV: helpers ────────────────────────────────────────────────────────────
+// Trigger di formula CSV: un campo che inizia con questi caratteri viene
+// interpretato come formula da Excel/Google Sheets (CSV injection). I nomi
+// giocatore sono controllati dagli admin → li neutralizziamo con un apice.
+const CSV_FORMULA_TRIGGER = /^[=+\-@\t\r]/;
+
+export function escapeCsv(val) {
   if (val == null) return '';
-  const s = String(val);
-  return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  let s = String(val);
+  if (CSV_FORMULA_TRIGGER.test(s)) s = `'${s}`;
+  // Quota se contiene separatori o terminatori di riga (incluso \r, RFC 4180).
+  return /[",\n\r;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-export function exportMatchesCSV(matches) {
+function toCsv(rows) {
+  return rows.map(r => r.map(escapeCsv).join(',')).join('\n');
+}
+
+// ─── CSV: partite conclusive ─────────────────────────────────────────────────
+// buildMatchesCSV è puro (ritorna la stringa) → testabile senza DOM.
+export function buildMatchesCSV(matches) {
   const finished = (matches || []).filter(m => m.status === 'finished');
   finished.sort((a, b) => getMs(a.date) - getMs(b.date));
 
@@ -60,13 +73,18 @@ export function exportMatchesCSV(matches) {
     const outcome = rs > bs ? 'Rossa' : bs > rs ? 'Blu' : 'Pareggio';
     rows.push([dateStr, red, blue, rs, bs, outcome, m.isHistorical ? 'sì' : 'no']);
   }
-  const csv = rows.map(r => r.map(escapeCsv).join(',')).join('\n');
-  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
+  return toCsv(rows);
+}
+
+export function exportMatchesCSV(matches) {
+  const blob = new Blob(['\uFEFF' + buildMatchesCSV(matches)], { type: 'text/csv;charset=utf-8' });
   triggerDownload(blob, `calcetto-partite-${todayStamp()}.csv`);
 }
 
 // ─── CSV: giocatori con stats principali ─────────────────────────────────────
-export function exportPlayersCSV(players) {
+// V/P/S = Vittorie / Pareggi / Sconfitte (ordine: wins, draws, losses).
+// buildPlayersCSV è puro (ritorna la stringa) → testabile senza DOM.
+export function buildPlayersCSV(players) {
   const rows = [
     ['Nome', 'Ruolo', 'Power Index', 'Partite', 'V', 'P', 'S', 'Gol', 'Assist', 'Autogol', 'Gol subiti (GK)', 'Turni GK'],
   ];
@@ -88,7 +106,10 @@ export function exportPlayersCSV(players) {
       s.gkMatches ?? 0,
     ]);
   }
-  const csv = rows.map(r => r.map(escapeCsv).join(',')).join('\n');
-  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
+  return toCsv(rows);
+}
+
+export function exportPlayersCSV(players) {
+  const blob = new Blob(['\uFEFF' + buildPlayersCSV(players)], { type: 'text/csv;charset=utf-8' });
   triggerDownload(blob, `calcetto-giocatori-${todayStamp()}.csv`);
 }
