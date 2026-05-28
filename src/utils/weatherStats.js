@@ -81,6 +81,12 @@ export function computePlayerWeatherStats(playerMatches, playerId) {
   for (const m of playerMatches) {
     const cond = m.weather?.condition;
     if (!cond) continue;
+    // Militanza effettiva: se il giocatore non è in nessuna delle due squadre la
+    // partita va ignorata. Senza questo check, !inRed verrebbe trattato come "blu"
+    // e una partita non giocata potrebbe contare come vittoria/sconfitta fantasma.
+    const inRed  = (m.redTeam  || []).some(p => p.id === playerId);
+    const inBlue = (m.blueTeam || []).some(p => p.id === playerId);
+    if (!inRed && !inBlue) continue;
     if (!conds[cond]) {
       conds[cond] = {
         key: cond,
@@ -91,11 +97,10 @@ export function computePlayerWeatherStats(playerMatches, playerId) {
     }
     const c = conds[cond];
     c.matches++;
-    const inRed  = (m.redTeam  || []).some(p => p.id === playerId);
     const redWon = (m.redScore || 0) > (m.blueScore || 0);
     const blueWon = (m.blueScore || 0) > (m.redScore || 0);
     if (redWon === blueWon) c.draws++;
-    else if ((inRed && redWon) || (!inRed && blueWon)) c.wins++;
+    else if ((inRed && redWon) || (inBlue && blueWon)) c.wins++;
     else c.losses++;
     for (const ev of (m.events || [])) {
       if (ev.type === 'goal' && ev.scorerId === playerId) c.goals++;
