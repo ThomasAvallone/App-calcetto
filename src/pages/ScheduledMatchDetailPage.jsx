@@ -220,9 +220,13 @@ export default function ScheduledMatchDetailPage() {
 
   const buildFreshPreview = async () => {
     const date = matchDate ? new Date(matchDate) : new Date();
-    const fw = await fetchWeatherForDate(date);
-    const w = fw || weather;
-    if (fw) setWeather(fw);
+    // Auto-fetch del meteo solo se non è già impostato (caricato dalla partita o
+    // editato a mano): copiare/condividere la preview non deve sovrascriverlo.
+    let w = weather;
+    if (!weather.temp) {
+      const fw = await fetchWeatherForDate(date).catch(() => null);
+      if (fw) { w = fw; setWeather(fw); }
+    }
     const text = generateMatchPreview({ redTeam: teams.red, blueTeam: teams.blue, weather: w, date });
     setPreview(text);
     return text;
