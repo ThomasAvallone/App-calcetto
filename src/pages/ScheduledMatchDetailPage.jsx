@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { getMatch, updateMatch, deleteMatch } from '../firebase/firestore';
 import usePlayersStore from '../store/playersStore';
 import useMatchStore from '../store/matchStore';
+import useAuthStore, { selectIsAdmin } from '../store/authStore';
 import { useMatchesSubscription } from '../hooks/useMatchesSubscription';
 import { generateMatchPreview } from '../services/reportService';
 import { fetchWeatherForDate } from '../services/weatherService';
@@ -29,6 +30,7 @@ export default function ScheduledMatchDetailPage() {
   const navigate = useNavigate();
   const { players, balanceTeams } = usePlayersStore();
   const { loadMatch } = useMatchStore();
+  const isAdmin = useAuthStore(selectIsAdmin);
   const allMatches = useMatchesSubscription();
 
   // Giocatori "suggeriti" = presenti nelle ultime 3 partite finite (escludendo questa)
@@ -269,17 +271,19 @@ export default function ScheduledMatchDetailPage() {
             </p>
           )}
         </div>
-        <button
-          onClick={() => setShowDeleteConfirm(v => !v)}
-          style={{
-            background: 'none', border: '1px solid rgba(252,129,129,0.35)',
-            borderRadius: '8px', padding: '6px 12px', cursor: 'pointer',
-            color: '#FC8181', fontSize: '1rem', lineHeight: 1,
-          }}
-          title="Elimina partita"
-        >
-          🗑️
-        </button>
+        {isAdmin && (
+          <button
+            onClick={() => setShowDeleteConfirm(v => !v)}
+            style={{
+              background: 'none', border: '1px solid rgba(252,129,129,0.35)',
+              borderRadius: '8px', padding: '6px 12px', cursor: 'pointer',
+              color: '#FC8181', fontSize: '1rem', lineHeight: 1,
+            }}
+            title="Elimina partita"
+          >
+            🗑️
+          </button>
+        )}
       </div>
 
       {/* Delete confirm */}
@@ -435,8 +439,8 @@ export default function ScheduledMatchDetailPage() {
         </>
       )}
 
-      {/* Add player picker */}
-      {(() => {
+      {/* Add player picker — admin only (i viewer hanno una vista in sola lettura) */}
+      {isAdmin && (() => {
         const usedIds = new Set([
           ...teams.red.map(p => p.id),
           ...teams.blue.map(p => p.id),
@@ -552,25 +556,27 @@ export default function ScheduledMatchDetailPage() {
         </pre>
       </div>}
 
-      {/* Actions */}
-      <div className="flex gap-3 mb-2">
-        <button
-          className="btn btn-ghost btn-lg"
-          style={{ flex: 1 }}
-          onClick={handleSave}
-          disabled={saving}
-        >
-          {saving ? '⏳' : '💾 Salva'}
-        </button>
-        <button
-          className="btn btn-teal btn-lg"
-          style={{ flex: 2, fontWeight: 700 }}
-          onClick={handleStart}
-          disabled={saving}
-        >
-          🚀 Inizia Partita
-        </button>
-      </div>
+      {/* Actions — admin only (le scritture sono comunque bloccate dalle rules) */}
+      {isAdmin && (
+        <div className="flex gap-3 mb-2">
+          <button
+            className="btn btn-ghost btn-lg"
+            style={{ flex: 1 }}
+            onClick={handleSave}
+            disabled={saving}
+          >
+            {saving ? '⏳' : '💾 Salva'}
+          </button>
+          <button
+            className="btn btn-teal btn-lg"
+            style={{ flex: 2, fontWeight: 700 }}
+            onClick={handleStart}
+            disabled={saving}
+          >
+            🚀 Inizia Partita
+          </button>
+        </div>
+      )}
       <button
         className="btn btn-ghost btn-full"
         style={{ fontSize: '0.85rem', color: '#A0AEC0' }}

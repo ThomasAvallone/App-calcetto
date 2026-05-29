@@ -74,7 +74,7 @@ export default function App() {
 
         <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
           <Route index element={<DashboardPage />} />
-          <Route path="match/setup" element={<MatchSetupPage />} />
+          <Route path="match/setup" element={<AdminRoute><MatchSetupPage /></AdminRoute>} />
           <Route path="match/:id" element={<MatchPage />} />
           <Route path="history" element={<HistoryPage />} />
           <Route path="history/scheduled/:id" element={<ScheduledMatchDetailPage />} />
