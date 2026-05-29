@@ -88,7 +88,12 @@ export default function PlayerAchievements({ player, allMatches = [] }) {
     const stats = player?.stats || {};
     const finished = (allMatches || []).filter(m => m.status === 'finished');
     return ACHIEVEMENTS.map(a => {
-      const current = Math.min(a.getValue(stats, finished, player.id) || 0, a.target);
+      // Error-isolation per traguardo (come computeBadges): un singolo getValue
+      // che esplode su una partita/evento malformato non deve azzerare l'intera card.
+      let raw = 0;
+      try { raw = a.getValue(stats, finished, player.id) || 0; }
+      catch { raw = 0; }
+      const current = Math.min(raw, a.target);
       const unlocked = current >= a.target;
       return { ...a, current, unlocked };
     });

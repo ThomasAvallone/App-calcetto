@@ -1,5 +1,4 @@
 import React, { useMemo, useState } from 'react';
-import { getMs } from '../../utils/dateUtils';
 import { CLR_WIN, CLR_LOSS, CLR_MUTED } from '../../constants/colors';
 
 // Calcola win-rate quando insieme e quando avversari, per ogni altro giocatore.
