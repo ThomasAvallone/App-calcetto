@@ -653,8 +653,11 @@ export default function PlayersPage() {
             { label: 'Gol Subiti (GK)', value: displaySt.gkGoalsConceded || 0, icon: '🧤' },
             {
               label: 'Media Gol/Turno GK',
-              value: (displaySt.matches || 0) > 0
-                ? ((displaySt.gkGoalsConceded || 0) / ((displaySt.matches || 1) * 2)).toFixed(2)
+              // Denominatore = gkMatches (2 turni/partita, storiche escluse), coerente
+              // con rankGoalkeepers e i badge GK. Usare matches*2 gonfierebbe i turni
+              // per chi ha partite storiche (dove gkMatches non viene incrementato).
+              value: (displaySt.gkMatches || 0) > 0
+                ? ((displaySt.gkGoalsConceded || 0) / (displaySt.gkMatches || 1)).toFixed(2)
                 : '—',
               icon: '🚀',
             },
