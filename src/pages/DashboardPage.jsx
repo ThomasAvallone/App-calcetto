@@ -12,7 +12,8 @@ import WhatIfModal from '../components/WhatIfModal';
 import { safeDate, getMs } from '../utils/dateUtils';
 import { CLR_WIN, CLR_LOSS, CLR_MUTED } from '../constants/colors';
 import { fetchWeatherForDate } from '../services/weatherService';
-import { SEASON_PLAYER_MAP, getSeasonId } from '../utils/playerStats';
+import { aggregatePlayerMatchStats } from '../utils/playerStats';
+import { getSeasonStartMs } from '../utils/leaderboards';
 import { getNextBadgeHint } from '../utils/nextBadge';
 import MyStatsCard from '../components/dashboard/MyStatsCard';
 import CoppaDiLattaCard from '../components/dashboard/CoppaDiLattaCard';
@@ -98,11 +99,7 @@ export default function DashboardPage() {
     return () => { cancelled = true; };
   }, [nearestScheduled?.id, getMs(nearestScheduled?.date)]);
 
-  const seasonStartMs = useMemo(() => {
-    const n = new Date();
-    const year = n.getMonth() >= 8 ? n.getFullYear() : n.getFullYear() - 1;
-    return new Date(year, 8, 1).getTime();
-  }, []);
+  const seasonStartMs = useMemo(() => getSeasonStartMs(), []);
   const seasonMatchesPerPlayer = useMemo(() => {
     const s = new Set();
     finishedMatches.forEach(m => {
@@ -137,46 +134,14 @@ export default function DashboardPage() {
       const their = inRed ? (m.blueScore ?? 0) : (m.redScore ?? 0);
       return my > their ? 'W' : my < their ? 'L' : 'D';
     });
-    // Stats stagione corrente (stessa logica di playerSeasonStats in PlayersPage:
-    // ogni partita con date >= seasonStartMs in cui il player è in un team).
-    let sMatches = 0, sGoals = 0, sAssists = 0, sAutogoals = 0, sWins = 0, sDraws = 0, sLosses = 0;
-    const histBySeason = {};
-    for (const m of playerMatches) {
-      if (getMs(m.date) < seasonStartMs) continue;
-      sMatches++;
-      const inRed = (m.redTeam || []).some(p => p.id === pid);
-      const my = inRed ? (m.redScore ?? 0) : (m.blueScore ?? 0);
-      const their = inRed ? (m.blueScore ?? 0) : (m.redScore ?? 0);
-      if (my > their) sWins++; else if (my < their) sLosses++; else sDraws++;
-      for (const ev of (m.events || [])) {
-        if (ev.type === 'goal') {
-          if (ev.scorerId === pid) sGoals++;
-          // Gli assist storici vengono prorati sotto da historicalData.js: contarli
-          // anche qui dagli eventi (se editati a mano) li conterebbe due volte.
-          if (!m.isHistorical && ev.assistId === pid) sAssists++;
-        }
-        if (ev.type === 'autogoal' && ev.scorerId === pid) sAutogoals++;
-      }
-      if (m.isHistorical) {
-        const sid = getSeasonId(m.date);
-        histBySeason[sid] = (histBySeason[sid] || 0) + 1;
-      }
-    }
-    // Prorate assists for historical matches in the current season (same logic as PlayersPage)
-    const histNames = (myPlayer.historicalNames || []).map(n => n.toUpperCase());
-    for (const [sid, countInPeriod] of Object.entries(histBySeason)) {
-      const seasonData = SEASON_PLAYER_MAP[sid];
-      if (!seasonData) continue;
-      let pData = null;
-      for (const name of histNames) {
-        if (seasonData[name]) { pData = seasonData[name]; break; }
-      }
-      if (!pData || !pData.presenze || !pData.assist) continue;
-      // Cap del rapporto a 1: se Firestore ha più partite storiche delle presenze
-      // dichiarate (import duplicato, partite aggiunte), evita di superare il totale.
-      sAssists += Math.round(pData.assist * Math.min(1, countInPeriod / pData.presenze));
-    }
-    const season = { matches: sMatches, goals: sGoals, assists: sAssists, autogoals: sAutogoals, wins: sWins, draws: sDraws, losses: sLosses };
+    // Stats stagione corrente — aggregazione delegata a aggregatePlayerMatchStats
+    // (source of truth condivisa con PlayersPage), filtrando alle partite di stagione.
+    const seasonMatches = playerMatches.filter(m => getMs(m.date) >= seasonStartMs);
+    const agg = aggregatePlayerMatchStats(myPlayer, seasonMatches);
+    const season = {
+      matches: agg.matches, goals: agg.goals, assists: agg.assists, autogoals: agg.autogoals,
+      wins: agg.wins, draws: agg.draws, losses: agg.losses,
+    };
     const seasonWinRate = season.matches > 0 ? Math.round((season.wins / season.matches) * 100) : 0;
     // Stats all-time: usa myPlayer.stats (stesso valore della scheda giocatore "totale").
     // Questo include assist storici prorati da historicalData.js, esattamente come PlayersPage.

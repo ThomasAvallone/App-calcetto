@@ -6,7 +6,8 @@ import { getAllUsers, findUserByEmail, setUserLinkedPlayer, findUsersByLinkedPla
 import { useMatchesSubscription } from '../hooks/useMatchesSubscription';
 import { usePIConfig } from '../hooks/usePIConfig';
 import { HISTORICAL_SEASONS, suggestHistoricalNames, computeCumulativeStats, getUnlinkedNames } from '../data/historicalData';
-import { SEASON_PLAYER_MAP, getSeasonId } from '../utils/playerStats';
+import { aggregatePlayerMatchStats } from '../utils/playerStats';
+import { getSeasonStartMs } from '../utils/leaderboards';
 import toast from 'react-hot-toast';
 import { getMs } from '../utils/dateUtils';
 import { RESULT_COLORS, CLR_WIN, CLR_DRAW, CLR_LOSS, CLR_MUTED, MEDAL_COLORS } from '../constants/colors';
@@ -179,67 +180,14 @@ export default function PlayersPage() {
   }, [finishedMatches]);
 
   // Current season start: September 1st of the current football season
-  const seasonStartMs = useMemo(() => {
-    const now = new Date();
-    const year = now.getMonth() >= 8 ? now.getFullYear() : now.getFullYear() - 1;
-    return new Date(year, 8, 1).getTime();
-  }, []);
+  const seasonStartMs = useMemo(() => getSeasonStartMs(), []);
 
-  // Season stats per player (goals/assists/etc. from current-season matches only)
+  // Season stats per player (goals/assists/etc. from current-season matches only).
+  // Aggregazione delegata a aggregatePlayerMatchStats (source of truth condivisa).
   const playerSeasonStats = useMemo(() => {
     const seasonMatches = finishedMatches.filter(m => getMs(m.date) >= seasonStartMs);
     const stats = {};
-    for (const p of players) {
-      const s = { goals: 0, assists: 0, autogoals: 0, matches: 0, wins: 0, draws: 0, losses: 0, gkMatches: 0, gkGoalsConceded: 0, cleanSheets: 0 };
-      const histBySeason = {};
-      for (const m of seasonMatches) {
-        const inRed = (m.redTeam || []).some(pl => pl.id === p.id);
-        const inBlue = (m.blueTeam || []).some(pl => pl.id === p.id);
-        if (!inRed && !inBlue) continue;
-        s.matches++;
-        const my = inRed ? (m.redScore ?? 0) : (m.blueScore ?? 0);
-        const their = inRed ? (m.blueScore ?? 0) : (m.redScore ?? 0);
-        if (my > their) s.wins++;
-        else if (my < their) s.losses++;
-        else s.draws++;
-        // Tutti ruotano in porta: 2 turni per partita (convenzione, vedi CLAUDE.md).
-        // Le storiche non hanno dati GK individuali → escluse.
-        if (!m.isHistorical) s.gkMatches += 2;
-        let gkConcededThisMatch = 0;
-        for (const ev of m.events || []) {
-          if (ev.type === 'goal') {
-            if (ev.scorerId === p.id) s.goals++;
-            // Gli assist storici vengono prorati sotto da historicalData.js: contarli
-            // anche qui dagli eventi (se editati a mano) li conterebbe due volte.
-            if (!m.isHistorical && ev.assistId === p.id) s.assists++;
-          }
-          if (ev.type === 'autogoal' && ev.scorerId === p.id) s.autogoals++;
-          if (ev.gkConcededId === p.id) { s.gkGoalsConceded++; gkConcededThisMatch++; }
-        }
-        // Clean sheet individuale: il portiere non ha subito gol personalmente (escluse partite storiche senza dati GK individuali)
-        if (!m.isHistorical && gkConcededThisMatch === 0) s.cleanSheets++;
-        // Track historical matches by season for assist proration
-        if (m.isHistorical) {
-          const sid = getSeasonId(m.date);
-          histBySeason[sid] = (histBySeason[sid] || 0) + 1;
-        }
-      }
-      // Prorate historical assists (historical events lack assistId)
-      const histNames = (p.historicalNames || []).map(n => n.toUpperCase());
-      for (const [sid, countInPeriod] of Object.entries(histBySeason)) {
-        const seasonData = SEASON_PLAYER_MAP[sid];
-        if (!seasonData) continue;
-        let pData = null;
-        for (const name of histNames) {
-          if (seasonData[name]) { pData = seasonData[name]; break; }
-        }
-        if (!pData || !pData.presenze || !pData.assist) continue;
-        // Cap del rapporto a 1: se Firestore ha più partite storiche delle presenze
-        // dichiarate (import duplicato, partite aggiunte), evita di superare il totale.
-        s.assists += Math.round(pData.assist * Math.min(1, countInPeriod / pData.presenze));
-      }
-      stats[p.id] = s;
-    }
+    for (const p of players) stats[p.id] = aggregatePlayerMatchStats(p, seasonMatches);
     return stats;
   }, [players, finishedMatches, seasonStartMs]);
 

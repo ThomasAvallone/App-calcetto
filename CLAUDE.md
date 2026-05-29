@@ -54,6 +54,7 @@ src/
 │   ├── voiceParser.js / voiceParser.test.js
 │   ├── dataExport.js / dataExport.test.js     # Export CSV/JSON (anti CSV-injection)
 │   ├── matchScore.js / matchScore.test.js     # scoreFromEvents/withProgressiveScore (source of truth punteggio)
+│   ├── teamBalance.js / teamBalance.test.js   # balanceTeams (snake) + balanceWithLocks (lock + greedy PI)
 │   ├── dateUtils.js          # getMs(), safeDate()
 │   └── waitUndo.js           # Toast con countdown per operazioni annullabili
 ├── constants/
@@ -126,7 +127,8 @@ src/
 - **Logica portiere (GK)**: il portiere NON è fisso — tutti i giocatori ruotano in porta. Ogni giocatore fa **2 turni in porta per partita** (uno per tempo). Di conseguenza `gkMatches` si incrementa di **2** per ogni partita giocata (`s.gkMatches += 2`). Tutti i calcoli GK (Power Index, badge Muro/Colabrodo/Gufo) usano questa unità: `gkGoalsConceded / gkMatches` = media gol subiti per turno. Non correggere questo comportamento: è intenzionale.
 - **Tipi di evento**: `goal`, `autogoal` (incidono su punteggio e statistiche), `save` e `injury` (solo cronaca, non incidono su punteggio/PI). I campi differiscono: goal/autogoal usano `scorerId/scorerName`; save/injury usano `playerId/playerName`. Gli **infortuni** si registrano sia post-partita (MatchDetailPage) sia **live** durante la partita (`matchStore.recordInjury`, bottone 🩹 in MatchPage) — l'evento `injury` include `team` (serve a `InjuryHistory`). `deleteGoalEvent` decrementa il punteggio solo per goal/autogoal. `generateMatchCommentary` include save/injury nel prompt AI sotto "ALTRI EVENTI".
 - **Reazioni partita**: subcollection `matches/{matchId}/reactions/{userId}`. Ogni documento ha `{ emoji, playerName, updatedAt }`. Il `playerName` viene calcolato a runtime da `linkedPlayerId→player.name || user.displayName` (mai l'email). Gestite da `subscribeToMatchReactions`, `upsertMatchReaction`, `deleteMatchReaction` in `firestore.js`. `deleteMatch` pulisce la subcollection (best-effort).
-- **Formazione parziale**: `balanceWithLocks(selectedIds, lockedTeams)` in `playersStore` — i giocatori con lock restano fissi, i liberi sono distribuiti con greedy PI-minimization. Ritorna `null` se i lock eccedono la capienza di una squadra. `generateAIBalancedTeams(players, constraints)` accetta `constraints = { slotsRed, slotsBlue, lockedRedNames, lockedBlueNames }` per vincolare il numero di giocatori liberi per squadra.
+- **Formazione parziale**: `balanceWithLocks(selectedIds, lockedTeams)` in `playersStore` (delega a `utils/teamBalance.js`) — i giocatori con lock restano fissi, i liberi sono distribuiti con greedy PI-minimization. Ritorna `null` se i lock eccedono la capienza di una squadra. `balanceTeams` (snake draft su PI) sta anch'esso in `teamBalance.js`. Lo store risolve solo `selectedIds → pool` e delega l'algoritmo (puro, testato).
+- **Stats di stagione/periodo**: `aggregatePlayerMatchStats(player, matches)` in `playerStats.js` è la **source of truth unica** per aggregare le stats di un giocatore su una lista di partite (usata da `computeStatsFromMatches`, `PlayersPage.playerSeasonStats`, `DashboardPage.myStats`). Include la proration degli assist storici col cap a 1. Non re-implementarla inline nelle pagine. `generateAIBalancedTeams(players, constraints)` accetta `constraints = { slotsRed, slotsBlue, lockedRedNames, lockedBlueNames }` per vincolare il numero di giocatori liberi per squadra.
 
 ## Comandi
 
@@ -157,6 +159,8 @@ ogni nuova funzione di calcolo va messa lì (non inline nei componenti) e testat
 | `historicalData.js` | `computeCumulativeStats` ecc. + integrità dati |
 | `reportService.js` | preview/verdetto post-partita + `computeMatchMVP` |
 | `matchScore.js` | `scoreFromEvents`, `withProgressiveScore` (punteggio derivato dagli eventi) |
+| `teamBalance.js` | `balanceTeams` (snake draft), `balanceWithLocks` (lock + greedy PI, `null` su overflow) |
+| `playerStats.js` (+) | `aggregatePlayerMatchStats` (stats di un player su una lista di partite; proration assist storici cap a 1) |
 | `firestore.js` | solo `sanitizePublicName` (resto non testato: richiede Firebase) |
 
 ⚠️ `geminiService.js` e `firestore.js` **non** sono importabili nei test in blocco

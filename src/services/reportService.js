@@ -1,5 +1,7 @@
 // ─── Report Generator: Match Preview & Post-Match Verdict ─────────────────────
 
+import { withProgressiveScore } from '../utils/matchScore';
+
 const CARESSA_INTROS = [
   "Signori e signore, benvenuti al tempio del calcio a cinque.",
   "Questa non è solo una partita. È un'epopea che si scrive sotto le luci al neon.",
@@ -201,16 +203,10 @@ export function generateMatchReport(match, players) {
   if (worstGkEntry) tinAwards.push(`🚪 Porta Girevole: ${worstGkName} (${worstGkEntry[1]} gol subiti)`);
   if (topAutogoalEntry) tinAwards.push(`🤦 Amico degli Avversari: ${topAutogoalName} (${topAutogoalEntry[1]} autogol)`);
 
-  // Scorers timeline (le partite storiche non hanno minute, le mettiamo in coda)
+  // Scorers timeline (le partite storiche non hanno minute, le mettiamo in coda).
+  // Parziale progressivo dalla source of truth condivisa (withProgressiveScore).
   const timeline = [...goals, ...autogoals].sort((a, b) => (a.minute ?? 999) - (b.minute ?? 999));
-
-  // Pre-calcola parziale progressivo per la cronaca
-  let _r = 0, _b = 0;
-  const timelineWithPartial = timeline.map(ev => {
-    if (ev.type === 'goal') { if (ev.team === 'red') _r++; else _b++; }
-    else if (ev.type === 'autogoal') { if (ev.team === 'red') _b++; else _r++; }
-    return { ...ev, pr: _r, pb: _b };
-  });
+  const timelineWithPartial = withProgressiveScore(timeline);
 
   const dateStr = match.date
     ? new Date(match.date?.toDate ? match.date.toDate() : match.date)
@@ -231,7 +227,7 @@ ${winner}
 ${timelineWithPartial.length === 0 ? '  Nessun gol (un capolavoro di inutilità)' : timelineWithPartial.map(ev => {
     const min = ev.minute != null ? `${String(ev.minute).padStart(2, '0')}'` : '  ';
     const team = ev.team === 'red' ? '🔴' : '🔵';
-    const partial = `[${ev.pr}–${ev.pb}]`;
+    const partial = `[${ev.partialRed}–${ev.partialBlue}]`;
     if (ev.type === 'goal') {
       const assist = ev.assistName && ev.assistName !== 'Nessuno' ? ` (assist: ${ev.assistName})` : '';
       return `  ${min} ${team} ⚽ ${resolveName(ev)}${assist} ${partial}`;
