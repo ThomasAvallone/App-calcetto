@@ -192,44 +192,6 @@ export function PlayerBadges({ player, seasonStats, allMatches }) {
   );
 }
 
-export function PowerIndexChart({ history }) {
-  if (!history || history.length < 2) return null;
-  const W = 280, H = 72, PAD = 8;
-  const vals = history.map(h => h.pi);
-  const minV = Math.min(...vals);
-  const maxV = Math.max(...vals);
-  const range = maxV - minV || 1;
-  const xs = vals.map((_, i) => PAD + (i / (vals.length - 1)) * (W - PAD * 2));
-  const ys = vals.map(v => PAD + (1 - (v - minV) / range) * (H - PAD * 2));
-  const line = xs.map((x, i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${ys[i].toFixed(1)}`).join(' ');
-  const fill = line + ` L${xs[xs.length - 1].toFixed(1)},${H} L${xs[0].toFixed(1)},${H} Z`;
-  const last = vals[vals.length - 1];
-  const prev = vals[vals.length - 2];
-  const trend = last > prev ? '↑' : last < prev ? '↓' : '→';
-  const trendColor = last > prev ? '#68D391' : last < prev ? '#FC8181' : '#A0AEC0';
-  return (
-    <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid #2D3748' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
-        <span style={{ fontSize: '0.6rem', color: '#718096', letterSpacing: '0.06em' }}>ANDAMENTO POWER INDEX (ultimi {vals.length} aggiornamenti)</span>
-        <span style={{ fontSize: '0.75rem', fontWeight: 700, color: trendColor }}>{trend} {last.toFixed(1)}</span>
-      </div>
-      <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ overflow: 'visible' }}>
-        <defs>
-          <linearGradient id="piGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#4FD1C5" stopOpacity="0.25" />
-            <stop offset="100%" stopColor="#4FD1C5" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        <path d={fill} fill="url(#piGrad)" />
-        <path d={line} fill="none" stroke="#4FD1C5" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
-        <circle cx={xs[xs.length - 1].toFixed(1)} cy={ys[ys.length - 1].toFixed(1)} r="3.5" fill="#4FD1C5" />
-        <text x={xs[0].toFixed(1)} y={H - 1} fill="#718096" fontSize="8" textAnchor="middle">{history[0].d?.slice(5)}</text>
-        <text x={xs[xs.length - 1].toFixed(1)} y={H - 1} fill="#718096" fontSize="8" textAnchor="middle">{history[history.length - 1].d?.slice(5)}</text>
-      </svg>
-    </div>
-  );
-}
-
 export function StreakBadge({ streak }) {
   if (!streak || streak.count < 2) return null;
   const isWin = streak.type === 'win';

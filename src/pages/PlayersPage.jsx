@@ -16,7 +16,7 @@ import HistoricalLinkSection from '../components/players/HistoricalLinkSection';
 import PiTrendChart from '../components/players/PiTrendChart';
 import AiTrendCard from '../components/players/AiTrendCard';
 import AiNicknameCard from '../components/players/AiNicknameCard';
-import { PiArc, getRoleIcon, PlayerAvatar, PlayerMatchHistory, PlayerRecords, PlayerBadges, PowerIndexChart, StreakBadge } from '../components/players/PlayerDetailComponents';
+import { PiArc, getRoleIcon, PlayerAvatar, PlayerMatchHistory, PlayerRecords, PlayerBadges, StreakBadge } from '../components/players/PlayerDetailComponents';
 import DuoCompatibility from '../components/players/DuoCompatibility';
 import PlayerAchievements from '../components/players/PlayerAchievements';
 import PlayerWeatherStats from '../components/players/PlayerWeatherStats';
