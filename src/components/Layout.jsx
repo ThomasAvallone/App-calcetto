@@ -1,7 +1,8 @@
 import React from 'react';
-import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import useAuthStore, { selectIsAdmin, selectIsSuperAdmin } from '../store/authStore';
 import useMatchStore from '../store/matchStore';
+import ErrorBoundary from './ErrorBoundary';
 
 const IconHome = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
@@ -61,11 +62,16 @@ export default function Layout() {
   const showAdmin = isAdmin || isSuperAdmin;
   const { activeMatchId } = useMatchStore();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       <main style={{ flex: 1 }}>
-        <Outlet />
+        {/* Boundary per-route: un crash di pagina resta contenuto (la bottom-nav
+            sopravvive) e si resetta cambiando route (key={pathname} → remount). */}
+        <ErrorBoundary key={pathname} inline>
+          <Outlet />
+        </ErrorBoundary>
       </main>
 
       <nav className="nav-bar">
