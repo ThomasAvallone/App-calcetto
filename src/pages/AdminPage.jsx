@@ -20,6 +20,7 @@ const CHANGELOG = [
       { type: 'fix', text: 'Statistiche di stagione: la funzione aggregatePlayerMatchStats è ora la source of truth unica per aggregare le stats di un giocatore su una lista di partite (gol, assist, presenze, GK, autogol, proration assist storici con cap a 1). PlayersPage e DashboardPage usano questa funzione invece di ricalcolare inline, eliminando tre copie del loop con rischio di divergenza.' },
       { type: 'fix', text: 'Punteggio progressivo unificato: eliminata l\'ultima copia inline del loop di scoring in HistoryPage (card autogol con parziale) e in reportService (timeline). Tutti i parziali progressivi si calcolano ora con withProgressiveScore() da utils/matchScore.js, che è già testata.' },
       { type: 'fix', text: 'Copertura test: 223 test, 13 file. Aggiunti test per aggregatePlayerMatchStats (6 casi) e teamBalance (10 casi).' },
+      { type: 'fix', text: 'Dettaglio partita: la card "Condividi Risultato" mostrava l\'MVP con un conteggio gol diverso dal verdetto ufficiale. Ora usa lo stesso calcolo pesato (gol +3, assist +2, autogol -2) del resto dell\'app, così MVP della card, del verdetto e della partita live coincidono sempre.' },
     ],
   },
   {

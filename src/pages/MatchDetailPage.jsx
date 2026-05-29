@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { getMatch, getMatches, updateMatch, deleteMatch, recalculatePlayerStats, rateMatch, recalculateRecentFormForPlayers, subscribeToMatchReactions, upsertMatchReaction, deleteMatchReaction } from '../firebase/firestore';
 import useAuthStore, { selectIsAdmin } from '../store/authStore';
 import usePlayersStore from '../store/playersStore';
-import { generateMatchReport } from '../services/reportService';
+import { generateMatchReport, computeMatchMVP } from '../services/reportService';
 import { generateMatchCommentary } from '../services/geminiService';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -372,25 +372,6 @@ export default function MatchDetailPage() {
     }
   };
 
-  const handleEditScorer = async (evId, field, value) => {
-    const newEvents = events.map(e => e.id === evId ? { ...e, [field]: value } : e);
-    setMatch(m => ({ ...m, events: newEvents }));
-    setSaving(true);
-    try {
-      const reportSave = match.status === 'finished'
-        ? { report: generateMatchReport({ ...match, events: newEvents }, players) }
-        : {};
-      await updateMatch(id, { events: newEvents, ...reportSave });
-      const allIds = [...(match.redTeam || []), ...(match.blueTeam || [])].map(p => p.id);
-      await recalcStats(allIds, { ...match, events: newEvents });
-      toast.success('Evento aggiornato');
-    } catch (e) {
-      toast.error(e.message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const handleAddEvent = async () => {
     const isSimple = addForm.type === 'save' || addForm.type === 'injury';
     if (!addForm.scorerId) return toast.error(isSimple ? 'Seleziona il giocatore' : 'Seleziona il marcatore');
@@ -635,16 +616,7 @@ export default function MatchDetailPage() {
       .filter(e => e.type === 'goal' || e.type === 'autogoal')
       .sort((a, b) => (a.minute ?? 999) - (b.minute ?? 999));
     const winner = match.redScore > match.blueScore ? 'red' : match.blueScore > match.redScore ? 'blue' : null;
-    const mvpEntry = (() => {
-      const cnt = {};
-      (match.events || []).forEach(e => {
-        if (e.type === 'goal' && e.scorerId) {
-          if (!cnt[e.scorerId]) cnt[e.scorerId] = { name: e.scorerName, n: 0 };
-          cnt[e.scorerId].n++;
-        }
-      });
-      return Object.values(cnt).sort((a, b) => b.n - a.n)[0] || null;
-    })();
+    const mvp = computeMatchMVP(match.events || []);
     const shareText = [
       `⚽ *Calcetto — Risultato*`,
       `🔴 Rosso ${match.redScore} – ${match.blueScore} Blu 🔵`,
@@ -699,9 +671,9 @@ export default function MatchDetailPage() {
                 ))}
               </div>
             )}
-            {mvpEntry && mvpEntry.n >= 2 && (
+            {mvp && (
               <div style={{ marginTop: '0.6rem', paddingTop: '0.6rem', borderTop: '1px solid rgba(255,255,255,0.06)', textAlign: 'center', fontSize: '0.75rem', color: '#F6E05E' }}>
-                ⭐ MVP: <strong>{mvpEntry.name}</strong> ({mvpEntry.n} gol)
+                ⭐ MVP: <strong>{mvp.name || playerById[mvp.id] || '?'}</strong> ({mvp.points} pt)
               </div>
             )}
           </div>
