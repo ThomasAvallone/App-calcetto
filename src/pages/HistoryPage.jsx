@@ -7,6 +7,7 @@ import { generateMatchReport } from '../services/reportService';
 import toast from 'react-hot-toast';
 import { safeDate } from '../utils/dateUtils';
 import { downloadICS } from '../utils/calendarUtils';
+import { withProgressiveScore } from '../utils/matchScore';
 
 const HISTORY_SS_KEY = 'history-page-state';
 const readSS = () => { try { return JSON.parse(sessionStorage.getItem(HISTORY_SS_KEY)) || {}; } catch { return {}; } };
@@ -583,7 +584,6 @@ function CalendarView({ matches, onNavigate, year, month, selectedDay, onYearCha
 function MatchCard({ match: m, onClick }) {
   const d = safeDate(m.date);
   const goals = (m.events || []).filter(e => e.type === 'goal');
-  const autogoals = (m.events || []).filter(e => e.type === 'autogoal');
   const matchBadges = m.status === 'finished' ? getMatchBadges(m) : [];
 
   // Lookup nome giocatore per le partite storiche (che hanno solo scorerId, non scorerName)
@@ -604,14 +604,7 @@ function MatchCard({ match: m, onClick }) {
     .map(([n, c]) => c > 1 ? `${n} x${c}` : n).join(', ');
 
   // Autogol con parziale progressivo
-  const allGoalEvents = (m.events || []).filter(e => e.type === 'goal' || e.type === 'autogoal');
-  let rr = 0, bb = 0;
-  const eventsWithPartial = allGoalEvents.map(ev => {
-    if (ev.type === 'goal') { if (ev.team === 'red') rr++; else bb++; }
-    else if (ev.type === 'autogoal') { if (ev.team === 'red') bb++; else rr++; }
-    return { ...ev, partialRed: rr, partialBlue: bb };
-  });
-  const autogoalEvents = eventsWithPartial.filter(e => e.type === 'autogoal');
+  const autogoalEvents = withProgressiveScore(m.events || []).filter(e => e.type === 'autogoal');
 
   const handleShare = (e) => {
     e.stopPropagation();

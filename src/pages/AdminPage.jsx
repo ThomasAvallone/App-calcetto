@@ -13,6 +13,16 @@ import toast from 'react-hot-toast';
 
 const CHANGELOG = [
   {
+    version: '3.15.0',
+    date: 'Maggio 2026',
+    entries: [
+      { type: 'fix', text: 'Bilanciamento squadre estratto in modulo puro testato: la logica snake-draft (balanceTeams) e il bilanciamento con giocatori bloccati (balanceWithLocks) vivono ora in utils/teamBalance.js, separati dallo store. Coperti da 10 test che verificano draft order, split dispari, rispetto dei lock, overflow → null e disgiunzione squadre.' },
+      { type: 'fix', text: 'Statistiche di stagione: la funzione aggregatePlayerMatchStats è ora la source of truth unica per aggregare le stats di un giocatore su una lista di partite (gol, assist, presenze, GK, autogol, proration assist storici con cap a 1). PlayersPage e DashboardPage usano questa funzione invece di ricalcolare inline, eliminando tre copie del loop con rischio di divergenza.' },
+      { type: 'fix', text: 'Punteggio progressivo unificato: eliminata l\'ultima copia inline del loop di scoring in HistoryPage (card autogol con parziale) e in reportService (timeline). Tutti i parziali progressivi si calcolano ora con withProgressiveScore() da utils/matchScore.js, che è già testata.' },
+      { type: 'fix', text: 'Copertura test: 223 test, 13 file. Aggiunti test per aggregatePlayerMatchStats (6 casi) e teamBalance (10 casi).' },
+    ],
+  },
+  {
     version: '3.14.0',
     date: 'Maggio 2026',
     entries: [
