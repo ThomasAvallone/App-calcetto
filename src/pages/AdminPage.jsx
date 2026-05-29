@@ -5,7 +5,7 @@ import { syncAllHistoryToSheets } from '../services/sheetsService';
 import { doc, getDocs, collection, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { HISTORICAL_SEASONS, getCurrentRosterPlayers, computeCumulativeStats } from '../data/historicalData';
-import useAuthStore, { selectIsAdmin } from '../store/authStore';
+import useAuthStore, { selectIsAdmin, selectIsSuperAdmin } from '../store/authStore';
 import { getAICallCount, onAICallCountChange, resetAICallCount } from '../services/geminiService';
 import { exportJSON, exportMatchesCSV, exportPlayersCSV } from '../utils/dataExport';
 import { DEFAULT_PI_CONFIG } from '../utils/playerStats';
@@ -21,6 +21,7 @@ const CHANGELOG = [
       { type: 'fix', text: 'Punteggio progressivo unificato: eliminata l\'ultima copia inline del loop di scoring in HistoryPage (card autogol con parziale) e in reportService (timeline). Tutti i parziali progressivi si calcolano ora con withProgressiveScore() da utils/matchScore.js, che è già testata.' },
       { type: 'fix', text: 'Copertura test: 223 test, 13 file. Aggiunti test per aggregatePlayerMatchStats (6 casi) e teamBalance (10 casi).' },
       { type: 'fix', text: 'Dettaglio partita: la card "Condividi Risultato" mostrava l\'MVP con un conteggio gol diverso dal verdetto ufficiale. Ora usa lo stesso calcolo pesato (gol +3, assist +2, autogol -2) del resto dell\'app, così MVP della card, del verdetto e della partita live coincidono sempre.' },
+      { type: 'fix', text: 'Gestione Utenti (Admin): l\'interfaccia ora rispecchia ciò che le regole di sicurezza consentono davvero. Un admin normale può modificare solo i viewer; i superadmin e gli admin appaiono come etichette di sola lettura invece che con un menu a tendina che avrebbe comunque fallito. La propria riga mostra il ruolo reale (non più "Super Admin" fisso).' },
     ],
   },
   {
@@ -428,6 +429,7 @@ function PIField({ label, desc, value, min, max, step, onChange, unit = '' }) {
 export default function AdminPage() {
   const navigate = useNavigate();
   const currentIsAdmin = useAuthStore(selectIsAdmin);
+  const currentIsSuperAdmin = useAuthStore(selectIsSuperAdmin);
   const currentUser = useAuthStore(s => s.user);
   const [players, setPlayers] = useState([]);
   const [matches, setMatches] = useState([]);
@@ -975,7 +977,15 @@ export default function AdminPage() {
           {users.length === 0 ? (
             <p className="text-sm text-muted">Nessun utente registrato</p>
           ) : users.map(u => {
-            const isMe = u.email === currentUser?.email;
+            const isMe = u.id === currentUser?.uid || u.email === currentUser?.email;
+            const role = u.role || 'viewer';
+            // Cosa è realmente modificabile via UI (allineato a firestore.rules):
+            // - il superadmin può modificare admin/viewer (non i superadmin, peer);
+            // - un admin normale può modificare solo i viewer;
+            // - mai sé stessi (evita auto-lockout) né i superadmin.
+            const canEdit = !isMe && role !== 'superadmin' &&
+              (currentIsSuperAdmin || (currentIsAdmin && role === 'viewer'));
+            const roleLabel = role === 'superadmin' ? 'Super Admin' : role === 'admin' ? 'Admin' : 'Viewer';
             return (
               <div key={u.id} style={{
                 display: 'flex', alignItems: 'center', gap: '0.75rem',
@@ -987,25 +997,25 @@ export default function AdminPage() {
                   </div>
                   <div className="text-xs text-muted">{u.email}</div>
                 </div>
-                {isMe ? (
+                {canEdit ? (
+                  <select
+                    className="input"
+                    style={{ width: 'auto', padding: '0.3rem 0.5rem', minHeight: 'auto', fontSize: '0.8rem' }}
+                    value={role}
+                    onChange={e => handleSetRole(u.id, e.target.value)}
+                  >
+                    <option value="viewer">Viewer</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                ) : (
                   <span style={{
                     padding: '0.2rem 0.6rem', borderRadius: '0.4rem',
                     fontSize: '0.78rem', fontWeight: 600,
                     background: 'rgba(246,173,85,0.15)', color: '#F6AD55',
                     border: '1px solid rgba(246,173,85,0.35)', userSelect: 'none',
                   }}>
-                    Super Admin
+                    {roleLabel}
                   </span>
-                ) : (
-                  <select
-                    className="input"
-                    style={{ width: 'auto', padding: '0.3rem 0.5rem', minHeight: 'auto', fontSize: '0.8rem' }}
-                    value={u.role || 'viewer'}
-                    onChange={e => handleSetRole(u.id, e.target.value)}
-                  >
-                    <option value="viewer">Viewer</option>
-                    <option value="admin">Admin</option>
-                  </select>
                 )}
               </div>
             );
