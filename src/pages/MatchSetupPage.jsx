@@ -231,9 +231,14 @@ export default function MatchSetupPage() {
 
   const buildFreshPreview = async () => {
     const date = matchDate ? new Date(matchDate) : new Date();
-    const fw = await fetchWeatherForDate(date).catch(() => null);
-    const w = fw || weather;
-    if (fw) setWeather(fw);
+    // Auto-fetch del meteo solo se l'utente non l'ha inserito a mano (stesso guard
+    // di handleStartMatch): copiare/condividere la preview non deve sovrascrivere
+    // silenziosamente la condizione/temperatura scelta manualmente.
+    let w = weather;
+    if (!weather.temp) {
+      const fw = await fetchWeatherForDate(date).catch(() => null);
+      if (fw) { w = fw; setWeather(fw); }
+    }
     const text = generateMatchPreview({ redTeam: teams.red, blueTeam: teams.blue, weather: w, date });
     setPreview(text);
     return text;
@@ -274,6 +279,16 @@ export default function MatchSetupPage() {
     const newBlue = teams.blue.map(p => p.id === blueId ? redPlayer : p);
     const newTeams = { red: newRed, blue: newBlue };
     setTeams(newTeams);
+    // Lo swap manuale è un override: il lock dei due giocatori scambiati non
+    // riflette più la squadra reale, quindi lo rimuoviamo (evita il 🔒 fuorviante).
+    if (lockedTeams[redId] || lockedTeams[blueId]) {
+      setLockedTeams(prev => {
+        const next = { ...prev };
+        delete next[redId];
+        delete next[blueId];
+        return next;
+      });
+    }
     setSwapPick(null);
     setPreview(generateMatchPreview({ redTeam: newTeams.red, blueTeam: newTeams.blue, weather, date: matchDate ? new Date(matchDate) : new Date() }));
     toast.success('Giocatori scambiati');

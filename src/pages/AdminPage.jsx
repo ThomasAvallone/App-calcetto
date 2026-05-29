@@ -23,6 +23,7 @@ const CHANGELOG = [
       { type: 'fix', text: 'Dettaglio partita: la card "Condividi Risultato" mostrava l\'MVP con un conteggio gol diverso dal verdetto ufficiale. Ora usa lo stesso calcolo pesato (gol +3, assist +2, autogol -2) del resto dell\'app, così MVP della card, del verdetto e della partita live coincidono sempre.' },
       { type: 'fix', text: 'Gestione Utenti (Admin): l\'interfaccia ora rispecchia ciò che le regole di sicurezza consentono davvero. Un admin normale può modificare solo i viewer; i superadmin e gli admin appaiono come etichette di sola lettura invece che con un menu a tendina che avrebbe comunque fallito. La propria riga mostra il ruolo reale (non più "Super Admin" fisso).' },
       { type: 'fix', text: 'Scheda giocatore: "Media Gol/Turno GK" nella vista All-time ora usa i turni effettivi in porta (gkMatches) invece di "partite × 2". Per i giocatori con partite storiche (che non hanno dati GK individuali) il vecchio calcolo gonfiava i turni e abbassava artificialmente la media. Ora è coerente con la classifica portieri e i badge GK.' },
+      { type: 'fix', text: 'Nuova partita: copiare o condividere la preview non sovrascrive più il meteo inserito a mano (prima un click su "Copia"/"WhatsApp" sostituiva silenziosamente condizione e temperatura con quelle scaricate, che poi finivano nella partita salvata). Inoltre lo scambio manuale di due giocatori tra le squadre rimuove ora il loro "lucchetto" di blocco, evitando l\'icona 🔒 fuorviante sulla squadra sbagliata.' },
     ],
   },
   {
