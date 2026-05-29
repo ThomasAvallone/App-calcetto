@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateMatchReport, generateMatchPreview } from './reportService';
+import { generateMatchReport, generateMatchPreview, computeMatchMVP } from './reportService';
 
 const players = [
   { id: 'p1', name: 'Marco' },
@@ -106,6 +106,56 @@ describe('generateMatchReport — premi di latta e cronaca', () => {
     };
     const r = generateMatchReport(match, players);
     expect(r).toContain('Gianni');
+  });
+});
+
+describe('computeMatchMVP — source of truth unica (card + verdetto)', () => {
+  it('lista vuota / null → null', () => {
+    expect(computeMatchMVP([])).toBeNull();
+    expect(computeMatchMVP(null)).toBeNull();
+  });
+
+  it('un gol → MVP con 3 pt e 1 gol', () => {
+    const mvp = computeMatchMVP([goal({ team: 'red', scorerId: 'p1', scorerName: 'Marco' })]);
+    expect(mvp).toMatchObject({ id: 'p1', name: 'Marco', points: 3, goals: 1, assists: 0 });
+  });
+
+  it('pesa gol(+3), assist(+2), autogol(-2)', () => {
+    // Marco: 1 gol (+3); Luca: 1 assist (+2)
+    const events = [goal({ team: 'red', scorerId: 'p1', scorerName: 'Marco', assistId: 'p2', assistName: 'Luca' })];
+    const mvp = computeMatchMVP(events);
+    expect(mvp).toMatchObject({ id: 'p1', points: 3, goals: 1 });
+    // Luca ha 2 pt < Marco 3 pt
+  });
+
+  it('assist-man può essere MVP se totalizza più punti', () => {
+    // Luca: 3 assist = +6 ; Marco: 1 gol = +3
+    const events = [
+      goal({ team: 'red', scorerId: 'p1', scorerName: 'Marco', assistId: 'p2', assistName: 'Luca' }),
+      goal({ team: 'red', scorerId: 'p3', scorerName: 'Gianni', assistId: 'p2', assistName: 'Luca' }),
+      goal({ team: 'red', scorerId: 'p4', scorerName: 'Dani', assistId: 'p2', assistName: 'Luca' }),
+    ];
+    const mvp = computeMatchMVP(events);
+    expect(mvp).toMatchObject({ id: 'p2', name: 'Luca', points: 6, goals: 0, assists: 3 });
+  });
+
+  it('saldo non positivo → null (solo autogol)', () => {
+    expect(computeMatchMVP([autogoal({ team: 'blue', scorerId: 'p2', scorerName: 'Luca' })])).toBeNull();
+  });
+
+  it('ignora assistName "Nessuno" come nome', () => {
+    const mvp = computeMatchMVP([goal({ team: 'red', scorerId: 'p1', scorerName: 'Marco', assistId: 'p1', assistName: 'Nessuno' })]);
+    expect(mvp.name).toBe('Marco');
+  });
+
+  it('coerente col verdetto testuale (stesso MVP nel report)', () => {
+    const events = [
+      goal({ team: 'red', scorerId: 'p1', scorerName: 'Marco' }),
+      goal({ team: 'red', scorerId: 'p1', scorerName: 'Marco' }),
+    ];
+    const mvp = computeMatchMVP(events);
+    const r = generateMatchReport({ redScore: 2, blueScore: 0, events }, players);
+    expect(r).toContain(`⭐ ${mvp.name} (${mvp.points} pt)`);
   });
 });
 

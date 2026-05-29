@@ -98,6 +98,35 @@ Preparate i fazzoletti. O i cori. Dipende da che parte state.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
 }
 
+// MVP "tecnico" della partita dagli eventi (logica pura, source of truth unica).
+// Punteggio pesato: gol=+3, assist=+2, autogol=-2. Ritorna null se nessun
+// giocatore ha punteggio positivo (così una partita decisa da un solo autogol
+// non incorona MVP l'autogolista). `name` viene dagli eventi (live), i caller
+// possono fare fallback su un lookup per id (partite storiche senza scorerName).
+export function computeMatchMVP(events) {
+  const scores = {};
+  const names = {};
+  for (const ev of (events || [])) {
+    const sid = ev.scorerId;
+    if (ev.type === 'goal') {
+      if (sid) { scores[sid] = (scores[sid] || 0) + 3; if (ev.scorerName) names[sid] = ev.scorerName; }
+      if (ev.assistId) {
+        scores[ev.assistId] = (scores[ev.assistId] || 0) + 2;
+        if (ev.assistName && ev.assistName !== 'Nessuno') names[ev.assistId] = ev.assistName;
+      }
+    } else if (ev.type === 'autogoal' && sid) {
+      scores[sid] = (scores[sid] || 0) - 2;
+      if (ev.scorerName) names[sid] = ev.scorerName;
+    }
+  }
+  const entry = Object.entries(scores).sort((a, b) => b[1] - a[1])[0];
+  if (!entry || entry[1] <= 0) return null;
+  const [id, points] = entry;
+  const goals = (events || []).filter(e => e.type === 'goal' && e.scorerId === id).length;
+  const assists = (events || []).filter(e => e.type === 'goal' && e.assistId === id).length;
+  return { id, name: names[id] || null, points, goals, assists };
+}
+
 export function generateMatchReport(match, players) {
   // Lookup by id per le partite storiche (che hanno solo scorerId, non scorerName)
   const playerById = Object.fromEntries(players.filter(p => p.id).map(p => [p.id, p.name]));
@@ -110,21 +139,9 @@ export function generateMatchReport(match, players) {
   const draw = match.redScore === match.blueScore;
   const winner = draw ? 'PAREGGIO' : redWon ? '🔴 VITTORIA ROSSI' : '🔵 VITTORIA BLU';
 
-  // MVP: player with best score (goal=3, assist=2, autogoal=-2)
-  const playerScores = {};
-  for (const ev of (match.events || [])) {
-    const sid = ev.scorerId;
-    if (ev.type === 'goal') {
-      if (sid) playerScores[sid] = (playerScores[sid] || 0) + 3;
-      if (ev.assistId) playerScores[ev.assistId] = (playerScores[ev.assistId] || 0) + 2;
-    }
-    if (ev.type === 'autogoal' && sid) playerScores[sid] = (playerScores[sid] || 0) - 2;
-  }
-
-  // MVP solo con punteggio positivo: una partita decisa da un solo autogol darebbe
-  // mvpEntry = [autogolista, -2] e finiremmo per incoronare MVP chi ha fatto autogol.
-  const mvpEntry = Object.entries(playerScores).sort((a, b) => b[1] - a[1])[0];
-  const mvpName = mvpEntry && mvpEntry[1] > 0 ? (playerById[mvpEntry[0]] || '?') : null;
+  // MVP "tecnico" — stessa logica usata dalla card del Report Modal (computeMatchMVP)
+  const mvp = computeMatchMVP(match.events);
+  const mvpName = mvp ? (mvp.name || playerById[mvp.id] || '?') : null;
 
   // GK stats — legge gkConcededName dall'evento, fallback a playerById
   const gkGoals = {};
@@ -229,7 +246,7 @@ ${timelineWithPartial.length === 0 ? '  Nessun gol (un capolavoro di inutilità)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🏆 MVP TECNICO
-${mvpName ? `⭐ ${mvpName} (${mvpEntry[1]} pt)` : 'Nessun meritevole trovato'}
+${mvpName ? `⭐ ${mvpName} (${mvp.points} pt)` : 'Nessun meritevole trovato'}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🥫 PREMI DI LATTA

@@ -53,6 +53,7 @@ src/
 │   ├── aiResolve.js / aiResolve.test.js       # Risolve output JSON Gemini → player objects
 │   ├── voiceParser.js / voiceParser.test.js
 │   ├── dataExport.js / dataExport.test.js     # Export CSV/JSON (anti CSV-injection)
+│   ├── matchScore.js / matchScore.test.js     # scoreFromEvents/withProgressiveScore (source of truth punteggio)
 │   ├── dateUtils.js          # getMs(), safeDate()
 │   └── waitUndo.js           # Toast con countdown per operazioni annullabili
 ├── constants/
@@ -154,7 +155,8 @@ ogni nuova funzione di calcolo va messa lì (non inline nei componenti) e testat
 | `voiceParser.js` | parser vocale rule-based |
 | `dataExport.js` | `escapeCsv`, `buildMatchesCSV`, `buildPlayersCSV` |
 | `historicalData.js` | `computeCumulativeStats` ecc. + integrità dati |
-| `reportService.js` | preview/verdetto post-partita |
+| `reportService.js` | preview/verdetto post-partita + `computeMatchMVP` |
+| `matchScore.js` | `scoreFromEvents`, `withProgressiveScore` (punteggio derivato dagli eventi) |
 | `firestore.js` | solo `sanitizePublicName` (resto non testato: richiede Firebase) |
 
 ⚠️ `geminiService.js` e `firestore.js` **non** sono importabili nei test in blocco
@@ -170,7 +172,9 @@ Aree già revisionate a fondo (bug + hardening + test). **Non rifare questi chec
 - **Dati storici** (`historicalData.js`): invarianti garantiti da test → `players.length === totalPlayers` e `vinte+nulle+perse === presenze` per ogni giocatore. La classifica all-time ci si appoggia.
 - **Subscription** (`firestore.js`): tutte le `onSnapshot` hanno error callback (`_subError`); le liste preservano l'ultimo dato (no-wipe), le settings resettano a null.
 - **Gemini**: `resolveBalancedTeams` garantisce squadre **disgiunte** (nome duplicato da Gemini non finisce in entrambe); `resolveVoiceGoal` scarta gli ID inventati e deduce il team dallo scorer.
-- **reportService**: l'MVP del verdetto è nominato solo con punteggio **> 0** (niente MVP a chi ha solo autogol).
+- **reportService / MVP**: l'MVP è calcolato da `computeMatchMVP(events)` (gol +3, assist +2, autogol -2; `null` se saldo ≤ 0 → niente MVP a chi ha solo autogol). **Source of truth unica**: la usano sia il verdetto testuale (`generateMatchReport`) sia la card del Report Modal in `MatchPage`. Non re-implementare il calcolo inline.
+- **Punteggio partita** 🎯: si **deriva sempre** dagli eventi via `scoreFromEvents()` (goal→squadra marcatore, autogoal→avversaria, save/injury neutri), mai incrementato a mano. `matchStore._appendEvent` fa optimistic update + **rollback uniforme** per gol/autogol/infortuni; `deleteEvent` ri-deriva il punteggio. `withProgressiveScore()` annota il parziale per le cronache (MatchPage log, MatchReplay, reportService).
+- **Fine partita** (`MatchPage.handleEndMatch` + `matchStore.endMatch`): lo snapshot (score+tabellino) si cattura **dopo** i 5s di `waitUndo` leggendo `useMatchStore.getState().match` (no stale closure) e con `scoreFromEvents`. `recalculatePlayerStats` è non-critico (try/catch isolato: un suo errore non nasconde il verdetto). `endMatch` rilegge il match dallo store dopo l'await per non sovrascrivere eventi arrivati dalla subscription.
 - **StatsPage**: classifica GK = `rankGoalkeepers` (media gol/turno **crescente**, min 6 turni — più basso = migliore; diverso dai badge GK). Cronologie ordinate per data reale (`getMs`/`dateMs`), mai per stringa `GG/MM/AA`. Finestra 30gg legata allo stato `now` (refresh su visibilitychange).
 - **Infortuni live**: registrabili durante la partita (`matchStore.recordInjury` → evento `injury` con `team`, optimistic + rollback). Lo storico infortuni (`InjuryHistory`) usa `ev.team`.
 - **Flusso match (MatchPage/MatchSetupPage)** — comportamenti da non disfare: (A4) conferma prima di lasciare/ricaricare una partita `active` con eventi (`useBlocker` + `beforeunload`); (D2) MatchSetupPage avvisa con toast al superamento dei 10 giocatori e chiede conferma su "Pianifica senza giocatori"; (D3) i timer di animazione (goalFlash/scoreShake/scoreBounce) usano ref dedicate e guard `isMountedRef` nei `setTimeout` per evitare set su componente smontato e collisioni su gol ravvicinati.
@@ -197,6 +201,7 @@ che Firestore rules** (`--only hosting,firestore:rules`). Le rules sono in
 
 Le regole di sicurezza in `firestore.rules` definiscono:
 - `users/{userId}`: read auth users (self) + admin; gerarchia superadmin > admin > viewer per gli update.
+  - 🔒 **Self-create vincolato al role**: `allow create` impone `role == 'viewer'` (unica eccezione: l'owner via `isOwnerEmail()`, per il bootstrap del primo superadmin coerente con `auth.js`). Senza questo vincolo un auth user senza doc potrebbe crearsi un profilo `superadmin` via chiamata Firestore diretta → escalation. **Non rilassare questo vincolo.** L'email in `isOwnerEmail()` deve restare allineata a `VITE_ADMIN_EMAIL` (le rules non leggono le env Vite, quindi è hardcoded).
 - `players`, `matches`, `matchStates`, `historicalSeasons`: read per ogni auth user, write solo admin.
 - `matches/{matchId}/reactions/{userId}`: read per ogni auth user; create/update solo owner (`request.auth.uid == userId`); delete owner o admin.
 - `settings/{settingId}`: read per ogni auth user; write solo admin **eccetto** documenti `aiCache_*` (cache effimere) scrivibili da qualunque auth user.

@@ -22,11 +22,27 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'superadmin'];
     }
 
+    // Helper: owner email (deve restare allineato a VITE_ADMIN_EMAIL).
+    // Serve SOLO per il bootstrap del primo superadmin in self-create (vedi
+    // auth.js: alla prima login l'owner crea il proprio doc con role 'superadmin').
+    // Le rules non possono leggere le env Vite, quindi l'email è hardcoded qui.
+    function isOwnerEmail() {
+      return isAuth() && request.auth.token.email == 'thomasavallone45@gmail.com';
+    }
+
     // Users: authenticated users can read their own doc; admins can read all
     // Gerarchia aggiornamenti: superadmin > admin > viewer
     match /users/{userId} {
       allow read: if isAuth() && (request.auth.uid == userId || isAdmin());
-      allow create: if isAuth() && request.auth.uid == userId;
+
+      // Self-create: un utente può creare SOLO il proprio doc e SOLO come 'viewer'.
+      // Senza questo vincolo sul role un qualunque utente autenticato senza doc
+      // potrebbe creare users/{proprio-uid} con role 'superadmin' via chiamata
+      // Firestore diretta → escalation di privilegi. Unica eccezione: l'owner
+      // (per il bootstrap del primo superadmin, coerente con auth.js).
+      allow create: if isAuth() && request.auth.uid == userId &&
+                       (request.resource.data.role == 'viewer' ||
+                        (isOwnerEmail() && request.resource.data.role == 'superadmin'));
 
       // Il superadmin può modificare qualsiasi utente.
       // Un admin può auto-promuoversi a superadmin solo sul proprio documento

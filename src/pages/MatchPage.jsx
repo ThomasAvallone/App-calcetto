@@ -4,7 +4,7 @@ import useMatchStore from '../store/matchStore';
 import usePlayersStore from '../store/playersStore';
 import useAuthStore, { selectIsAdmin } from '../store/authStore';
 import Confetti from '../components/Confetti';
-import { generateMatchReport } from '../services/reportService';
+import { generateMatchReport, computeMatchMVP } from '../services/reportService';
 import { exportMatchToSheets } from '../services/sheetsService';
 import { recalculatePlayerStats, updateMatch } from '../firebase/firestore';
 import { fetchWeatherForDate } from '../services/weatherService';
@@ -644,16 +644,7 @@ export default function MatchPage() {
     const ms = matchSummary;
     const goals = ms ? ms.events.filter(e => e.type === 'goal' || e.type === 'autogoal') : [];
     const winner = ms ? (ms.redScore > ms.blueScore ? 'red' : ms.blueScore > ms.redScore ? 'blue' : null) : null;
-    const mvpEntry = ms ? (() => {
-      const cnt = {};
-      ms.events.forEach(e => {
-        if (e.type === 'goal' && e.scorerId) {
-          if (!cnt[e.scorerId]) cnt[e.scorerId] = { name: e.scorerName, n: 0 };
-          cnt[e.scorerId].n++;
-        }
-      });
-      return Object.values(cnt).sort((a, b) => b.n - a.n)[0] || null;
-    })() : null;
+    const mvp = ms ? computeMatchMVP(ms.events) : null;
 
     const shareText = reportText;
     const handleShare = () => {
@@ -727,10 +718,10 @@ export default function MatchPage() {
                   })()}
                 </div>
               )}
-              {/* MVP */}
-              {mvpEntry && mvpEntry.n >= 2 && (
+              {/* MVP — stessa logica del verdetto testuale (computeMatchMVP) */}
+              {mvp && (
                 <div style={{ marginTop: '0.6rem', paddingTop: '0.6rem', borderTop: '1px solid rgba(255,255,255,0.06)', textAlign: 'center', fontSize: '0.75rem', color: '#F6E05E' }}>
-                  ⭐ MVP: <strong>{mvpEntry.name}</strong> ({mvpEntry.n} gol)
+                  ⭐ MVP: <strong>{mvp.name}</strong> ({mvp.points} pt)
                 </div>
               )}
             </div>

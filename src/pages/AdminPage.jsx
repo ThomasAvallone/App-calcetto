@@ -13,6 +13,16 @@ import toast from 'react-hot-toast';
 
 const CHANGELOG = [
   {
+    version: '3.14.0',
+    date: 'Maggio 2026',
+    entries: [
+      { type: 'fix', text: 'Sicurezza: chiusa una falla di escalation privilegi. In precedenza un utente autenticato senza profilo poteva, con una chiamata diretta al database, crearsi un profilo da superadmin. Ora le regole impongono che ogni utente possa auto-crearsi solo come "viewer" (l\'owner resta l\'unica eccezione per il primo avvio).' },
+      { type: 'fix', text: 'Fine partita più robusta: il risultato finale e il tabellino vengono "fotografati" DOPO i 5 secondi di annullamento, così eventuali gol aggiunti all\'ultimo secondo finiscono comunque nel verdetto. Inoltre un eventuale errore nel ricalcolo statistiche non nasconde più il verdetto finale.' },
+      { type: 'fix', text: 'MVP coerente ovunque: la card del verdetto e il verdetto testuale ora usano lo stesso identico calcolo (gol +3, assist +2, autogol -2). Prima la card contava solo i gol e poteva indicare un MVP diverso dal report.' },
+      { type: 'fix', text: 'Registrazione gol/eventi durante la partita: in caso di errore di rete la modifica ottimistica viene annullata correttamente (rollback uniforme per gol, autogol, infortuni ed eliminazioni). Il punteggio è sempre derivato dagli eventi, quindi non può divergere dalla cronaca.' },
+    ],
+  },
+  {
     version: '3.13.0',
     date: 'Maggio 2026',
     entries: [

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { scoreFromEvents } from '../utils/matchScore';
 
 const STEP_MS = 1200;
 
@@ -42,17 +43,9 @@ export default function MatchReplay({ match, onClose }) {
 
   const visibleEvents = events.slice(0, visibleCount);
 
-  const liveScore = visibleEvents.reduce(
-    (acc, ev) => {
-      const isAutogoal = ev.type === 'autogoal';
-      if (ev.team === 'red') {
-        return isAutogoal ? { ...acc, blue: acc.blue + 1 } : { ...acc, red: acc.red + 1 };
-      } else {
-        return isAutogoal ? { ...acc, red: acc.red + 1 } : { ...acc, blue: acc.blue + 1 };
-      }
-    },
-    { red: 0, blue: 0 }
-  );
+  // Punteggio progressivo derivato dagli eventi visibili — stessa source of truth
+  // del resto dell'app (scoreFromEvents), niente loop duplicato.
+  const { redScore: liveRed, blueScore: liveBlue } = scoreFromEvents(visibleEvents);
 
   return (
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
@@ -67,12 +60,12 @@ export default function MatchReplay({ match, onClose }) {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem' }}>
             <div>
               <div style={{ fontSize: '0.65rem', color: '#FC8181', fontWeight: 700, letterSpacing: '0.08em', marginBottom: '0.15rem' }}>🔴 ROSSI</div>
-              <div style={{ fontSize: '2.8rem', fontWeight: 900, color: '#FC8181', lineHeight: 1 }}>{liveScore.red}</div>
+              <div style={{ fontSize: '2.8rem', fontWeight: 900, color: '#FC8181', lineHeight: 1 }}>{liveRed}</div>
             </div>
             <div style={{ fontSize: '1.3rem', color: '#4A5568', fontWeight: 300 }}>–</div>
             <div>
               <div style={{ fontSize: '0.65rem', color: '#63B3ED', fontWeight: 700, letterSpacing: '0.08em', marginBottom: '0.15rem' }}>🔵 BLU</div>
-              <div style={{ fontSize: '2.8rem', fontWeight: 900, color: '#63B3ED', lineHeight: 1 }}>{liveScore.blue}</div>
+              <div style={{ fontSize: '2.8rem', fontWeight: 900, color: '#63B3ED', lineHeight: 1 }}>{liveBlue}</div>
             </div>
           </div>
         </div>
