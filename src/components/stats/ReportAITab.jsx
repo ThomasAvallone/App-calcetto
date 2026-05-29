@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { generatePeriodReport } from '../../services/geminiService';
 import { getAICache, setAICache } from '../../firebase/firestore';
 import { getMs } from '../../utils/dateUtils';
+import { getSeasonStartMs } from '../../utils/leaderboards';
 import { computeStatsFromMatches } from '../../utils/playerStats';
 import toast from 'react-hot-toast';
 
@@ -33,7 +34,7 @@ export default function ReportAITab({ finishedMatches, players, reportText, setR
     const cutoff = period === '30d'
       ? now - 30 * 24 * 60 * 60 * 1000
       : period === 'season'
-        ? (() => { const n = new Date(); const y = n.getMonth() >= 8 ? n.getFullYear() : n.getFullYear() - 1; return new Date(y, 8, 1).getTime(); })()
+        ? getSeasonStartMs()
         : 0;
     const filtered = cutoff === 0 ? finishedMatches : finishedMatches.filter(m => getMs(m.date) >= cutoff);
     const matchCount = filtered.length;

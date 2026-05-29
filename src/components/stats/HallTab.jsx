@@ -8,12 +8,15 @@ export default function HallTab({ finishedMatches, players, hallText, setHallTex
   const [hallStale, setHallStale] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
     getAICache('hall').then(data => {
+      if (cancelled) return;
       if (data?.text) {
         setHallText(data.text);
         setHallStale(!!lastMatchId && data.lastMatchId !== lastMatchId);
       }
     }).catch(() => {});
+    return () => { cancelled = true; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const buildHallStats = () => {
