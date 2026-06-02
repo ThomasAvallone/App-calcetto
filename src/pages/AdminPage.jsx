@@ -13,6 +13,13 @@ import toast from 'react-hot-toast';
 
 const CHANGELOG = [
   {
+    version: '3.15.1',
+    date: 'Giugno 2026',
+    entries: [
+      { type: 'fix', text: 'CRITICO — La pagina della partita live andava in crash all\'apertura ("Qualcosa è andato storto / Errore inatteso"), rendendo impossibile tracciare la partita in corso. Causa: la protezione anti-uscita usava un hook (useBlocker) che richiede un tipo di router diverso da quello dell\'app; nella build di produzione lanciava un errore senza messaggio che bloccava l\'intera schermata. Rimosso l\'hook incompatibile. La protezione contro refresh/chiusura scheda resta attiva; uscendo dalla partita con la navigazione interna non si perde nulla (la partita resta in corso e si riapre dal tasto "Partita").' },
+    ],
+  },
+  {
     version: '3.15.0',
     date: 'Maggio 2026',
     entries: [

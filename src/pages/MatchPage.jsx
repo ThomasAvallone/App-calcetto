@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useParams, useNavigate, useBlocker } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import useMatchStore from '../store/matchStore';
 import usePlayersStore from '../store/playersStore';
 import useAuthStore, { selectIsAdmin } from '../store/authStore';
@@ -67,12 +67,12 @@ export default function MatchPage() {
   const timerRef = useRef(null);
   const reportTimeoutRef = useRef(null);
 
-  // Block in-app navigation when there are unsaved events in an active match
-  const blocker = useBlocker(({ currentLocation, nextLocation }) =>
-    match?.status === 'active' &&
-    (match?.events || []).length > 0 &&
-    currentLocation.pathname !== nextLocation.pathname
-  );
+  // NOTA: la protezione anti-uscita usa SOLO `beforeunload` (sotto), che funziona
+  // con <BrowserRouter>. NON usare useBlocker qui: richiede un data router
+  // (createBrowserRouter) e con BrowserRouter lancia invariant(false) → in build
+  // di produzione è un Error senza messaggio che fa crashare l'intera MatchPage
+  // ("Errore inatteso"). La navigazione in-app non perde la partita: resta active
+  // su Firestore e si riapre dal tasto "Partita".
 
   // Bounce/shake when scores change — skip the initial load to avoid false bounce on refresh
   useEffect(() => {
@@ -461,23 +461,6 @@ export default function MatchPage() {
 
   const teamPlayers = goalTeam === 'red' ? redTeam : blueTeam;
   const scorerLabel = autogoalMode ? 'Chi ha fatto autogol?' : `Gol ${goalTeam === 'red' ? '🔴 Rosso' : '🔵 Blu'} — Chi ha segnato?`;
-
-  // ── Leave Confirm Modal (A4) ─────────────────────────────────────────────────
-  if (blocker.state === 'blocked') {
-    return (
-      <div className="modal-overlay">
-        <div className="modal animate-slide-up" style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '3rem', marginBottom: '0.5rem' }}>⚠️</div>
-          <h2 className="modal-title">Abbandonare la partita?</h2>
-          <p className="text-secondary mb-4">Ci sono eventi registrati. Uscendo perderai il tracciamento live.</p>
-          <div className="flex gap-3">
-            <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => blocker.reset()}>Rimani</button>
-            <button className="btn btn-danger" style={{ flex: 1 }} onClick={() => blocker.proceed()}>Esci lo stesso</button>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   // ── Scorer Selection Modal ──────────────────────────────────────────────────
   if (goalScorerModal) {
