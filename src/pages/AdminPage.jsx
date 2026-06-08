@@ -17,6 +17,7 @@ const CHANGELOG = [
     date: 'Giugno 2026',
     entries: [
       { type: 'fix', text: 'CRITICO — La pagina della partita live andava in crash all\'apertura ("Qualcosa è andato storto / Errore inatteso"), rendendo impossibile tracciare la partita in corso. Causa: la protezione anti-uscita usava un hook (useBlocker) che richiede un tipo di router diverso da quello dell\'app; nella build di produzione lanciava un errore senza messaggio che bloccava l\'intera schermata. Rimosso l\'hook incompatibile. La protezione contro refresh/chiusura scheda resta attiva; uscendo dalla partita con la navigazione interna non si perde nulla (la partita resta in corso e si riapre dal tasto "Partita").' },
+      { type: 'fix', text: 'Fine partita: il modale verdetto ora appare sempre, anche in caso di errore di rete momentaneo. Prima, se Firestore non riusciva a salvare il testo del report (un\'operazione non critica), l\'intera sequenza si bloccava e l\'utente non vedeva mai il tabellino finale. Il salvataggio del report e del meteo su Firestore avviene ora in background (fire-and-forget): la partita è già archiviata come "finita", il resto è solo comodità. Fix anche su "Copia": mostra toast di errore se il browser nega l\'accesso agli appunti (es. blocco permessi su alcuni Android).' },
     ],
   },
   {

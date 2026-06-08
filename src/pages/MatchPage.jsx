@@ -441,17 +441,29 @@ export default function MatchPage() {
         toast.error('Export Google Sheets fallito');
       });
       const report = generateMatchReport(freshMatch, players);
-      const extraFields = { report };
-      if (!freshMatch?.weather?.temp) {
-        const w = await fetchWeatherForDate(new Date()).catch(() => null);
-        if (w) extraFields.weather = w;
-      }
-      if (activeMatchId) await updateMatch(activeMatchId, extraFields);
+
+      // Mostra il verdetto SUBITO, indipendentemente dal salvataggio su Firestore.
+      // La partita è già archiviata come 'finished' — il testo report e il meteo
+      // sono solo comodità per la card di condivisione in MatchDetailPage.
       setReportText(report);
       setMatchSummary(snapshot);
       const confettiWinner = redScore > blueScore ? 'red' : blueScore > redScore ? 'blue' : null;
       if (confettiWinner) setShowConfetti(confettiWinner);
       reportTimeoutRef.current = setTimeout(() => { setShowConfetti(null); setReportModal(true); }, 2200);
+
+      // Salva report+meteo su Firestore in background (fire-and-forget).
+      // Un eventuale errore di rete qui non deve nascondere il verdetto all'utente.
+      if (activeMatchId) {
+        const mid = activeMatchId;
+        (async () => {
+          const extraFields = { report };
+          if (!freshMatch?.weather?.temp) {
+            const w = await fetchWeatherForDate(new Date()).catch(() => null);
+            if (w) extraFields.weather = w;
+          }
+          updateMatch(mid, extraFields).catch(() => {});
+        })();
+      }
     } catch (e) {
       toast.error('Errore: ' + e.message);
     } finally {
@@ -717,7 +729,7 @@ export default function MatchPage() {
               {canShare ? '📤 Condividi' : '💬 WhatsApp'}
             </button>
             <button className="btn btn-teal" style={{ flex: 1 }}
-              onClick={() => navigator.clipboard.writeText(reportText).then(() => toast.success('Copiato!'))}>
+              onClick={() => navigator.clipboard.writeText(reportText).then(() => toast.success('Copiato!')).catch(() => toast.error('Copia non riuscita'))}>
               📋 Copia
             </button>
           </div>
@@ -835,7 +847,7 @@ export default function MatchPage() {
             <button className="btn btn-teal" style={{ flex: 1 }}
               onClick={() => {
                 const text = match.report || generateMatchReport(match, players);
-                navigator.clipboard.writeText(text).then(() => toast.success('Copiato!'));
+                navigator.clipboard.writeText(text).then(() => toast.success('Copiato!')).catch(() => toast.error('Copia non riuscita'));
               }}>
               📋 Copia
             </button>
