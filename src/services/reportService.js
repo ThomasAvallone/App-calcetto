@@ -33,16 +33,23 @@ function getCaressaIntro() {
   return getRandomElement(CARESSA_INTROS);
 }
 
+const WEATHER_EMOJI = {
+  sunny: '☀️', cloudy: '☁️', rainy: '🌧️', cold: '🥶', hot: '🥵', wind: '💨',
+};
+
 export function generateMatchPreview({ redTeam, blueTeam, weather, date }) {
-  const dateStr = date
+  const rawDate = date
     ? new Date(date).toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
     : new Date().toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const dateStr = rawDate.charAt(0).toUpperCase() + rawDate.slice(1); // "lunedì" → "Lunedì"
 
   const redPI = redTeam.reduce((s, p) => s + (p.powerIndex || 50), 0) / (redTeam.length || 1);
   const bluePI = blueTeam.reduce((s, p) => s + (p.powerIndex || 50), 0) / (blueTeam.length || 1);
-
-  const favorite = redPI > bluePI + 5 ? '🔴 Rossi favoriti' : bluePI > redPI + 5 ? '🔵 Blu favoriti' : '⚖️ Equilibrio perfetto';
   const diff = Math.abs(redPI - bluePI).toFixed(1);
+
+  const favorite = redPI > bluePI + 5 ? `🔴 Rossi favoriti _(+${diff} PI)_`
+    : bluePI > redPI + 5 ? `🔵 Blu favoriti _(+${diff} PI)_`
+    : '⚖️ Equilibrio perfetto';
 
   const redGoalkeepers = redTeam.filter(p => p.primaryRole === 'Portiere' || p.secondaryRole === 'Portiere');
   const blueGoalkeepers = blueTeam.filter(p => p.primaryRole === 'Portiere' || p.secondaryRole === 'Portiere');
@@ -69,35 +76,47 @@ export function generateMatchPreview({ redTeam, blueTeam, weather, date }) {
     if (p.streak?.type === 'win' && p.streak.count >= 3) objectives.push(`🔥 ${p.name}: ${p.streak.count} vittorie di fila`);
   }
 
-  const objectivesBlock = objectives.length > 0
-    ? objectives.join('\n')
-    : 'Nessun traguardo imminente — si scrive la storia oggi!';
+  // Sezioni costruite come blocchi e unite con riga vuota singola: niente righe
+  // bianche spurie (i campi assenti vengono semplicemente saltati) e niente
+  // righe-separatore lunghe che su WhatsApp andrebbero a capo impaginando male.
+  const sections = [];
 
-  return `⚽ CALCETTO ANALYTICS — MATCH PREVIEW
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📅 ${dateStr}
+  sections.push(`⚽ *MATCH PREVIEW*\n📅 ${dateStr}`);
 
-🌤️ METEO
-${getWeatherComment(weather?.condition)}
-${weather?.temp ? `🌡️ ${weather.temp}°C — ${weather.description || ''}` : ''}
+  const weatherBlock = ['🌤️ *Meteo*'];
+  if (weather?.temp) {
+    const emoji = WEATHER_EMOJI[weather?.condition] || '🌡️';
+    weatherBlock.push(`${emoji} ${weather.temp}°C${weather.description ? ` · ${weather.description}` : ''}`);
+  }
+  weatherBlock.push(`_${getWeatherComment(weather?.condition)}_`);
+  sections.push(weatherBlock.join('\n'));
 
-🎯 OBIETTIVI DEL MATCH
-${objectivesBlock}
+  if (objectives.length > 0) {
+    // Cap a 8 per non trasformare la sezione in un muro di testo su WhatsApp
+    // (con due rose piene di traguardi imminenti si arriverebbe a 12-15 righe).
+    const shown = objectives.slice(0, 8);
+    const extra = objectives.length - shown.length;
+    const objLines = extra > 0 ? [...shown, `_…e altri ${extra} traguardi in palio_`] : shown;
+    sections.push(`🎯 *Obiettivi del match*\n${objLines.join('\n')}`);
+  }
 
-▬▬▬▬▬ 🔴 SQUADRA ROSSA ▬▬▬▬▬
-${redTeam.map(p => `  ${p.name}`).join('\n')}
-${redGoalkeepers.length ? `🧤 GK: ${redGoalkeepers.map(p => p.name).join(', ')}` : ''}
-▬▬▬▬▬ 🔵 SQUADRA BLU ▬▬▬▬▬▬
-${blueTeam.map(p => `  ${p.name}`).join('\n')}
-${blueGoalkeepers.length ? `🧤 GK: ${blueGoalkeepers.map(p => p.name).join(', ')}` : ''}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📊 PRONOSTICO
-${favorite}
-⭐ Uomo da tenere d'occhio (Rossi): ${redTopPlayer?.name || '-'}
-⭐ Uomo da tenere d'occhio (Blu): ${blueTopPlayer?.name || '-'}
+  const redBlock = ['🔴 *Squadra Rossa*', ...redTeam.map(p => `• ${p.name}`)];
+  if (redGoalkeepers.length) redBlock.push(`🧤 _${redGoalkeepers.map(p => p.name).join(', ')}_`);
+  sections.push(redBlock.join('\n'));
 
-Preparate i fazzoletti. O i cori. Dipende da che parte state.
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+  const blueBlock = ['🔵 *Squadra Blu*', ...blueTeam.map(p => `• ${p.name}`)];
+  if (blueGoalkeepers.length) blueBlock.push(`🧤 _${blueGoalkeepers.map(p => p.name).join(', ')}_`);
+  sections.push(blueBlock.join('\n'));
+
+  const pronosticoBlock = [`📊 *Pronostico*`, favorite];
+  if (redTopPlayer || blueTopPlayer) {
+    pronosticoBlock.push(`⭐ Occhio a: ${redTopPlayer?.name || '–'} 🔴 · ${blueTopPlayer?.name || '–'} 🔵`);
+  }
+  sections.push(pronosticoBlock.join('\n'));
+
+  sections.push('_Preparate i fazzoletti. O i cori. Dipende da che parte state._');
+
+  return sections.join('\n\n');
 }
 
 // MVP "tecnico" della partita dagli eventi (logica pura, source of truth unica).
