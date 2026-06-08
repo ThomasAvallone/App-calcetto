@@ -38,7 +38,12 @@ export function resetAICallCount() { _aiCallCount = 0; localStorage.setItem(_AI_
 export function onAICallCountChange(fn) { _aiCallListeners.add(fn); return () => _aiCallListeners.delete(fn); }
 
 // tier: 'fast' (default) | 'pro' (task di ragionamento/qualità)
-async function callGemini(prompt, { temperature = 0.85, maxTokens = 600, tier = 'fast' } = {}) {
+// timeoutMs: deadline per singolo tentativo di fetch. Senza di esso una rete
+// mobile "stallata" (tipica di una partita all'aperto) lascerebbe la fetch
+// appesa a lungo — nel flusso vocale ciò bloccherebbe i pulsanti gol perché
+// `voiceProcessing` resta true. Default generoso per non troncare i modelli
+// thinking; i caller latency-sensitive (voce) passano un valore più basso.
+async function callGemini(prompt, { temperature = 0.85, maxTokens = 600, tier = 'fast', timeoutMs = 45000 } = {}) {
   if (!API_KEY) throw new Error('Chiave Gemini non configurata (VITE_GEMINI_API_KEY)');
 
   const models = MODELS[tier];
@@ -58,14 +63,32 @@ async function callGemini(prompt, { temperature = 0.85, maxTokens = 600, tier = 
         ? Math.max(maxTokens * 4, 2000)
         : maxTokens;
 
-      const res = await fetch(`${url}?key=${API_KEY}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature, maxOutputTokens: effectiveMaxTokens },
-        }),
-      });
+      let res;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        res = await fetch(`${url}?key=${API_KEY}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature, maxOutputTokens: effectiveMaxTokens },
+          }),
+          signal: controller.signal,
+        });
+      } catch (e) {
+        // Timeout (abort): la rete è stallata, ritentare non aiuta a breve →
+        // fail-fast con messaggio chiaro così il chiamante riabilita la UI.
+        if (e?.name === 'AbortError') {
+          throw new Error('Timeout richiesta AI (rete lenta o assente)');
+        }
+        // Altri errori di rete (fetch reject): prima fallivano subito senza
+        // retry; ora trattati come transienti e ritentati sui modelli/attempt.
+        lastError = new Error(e?.message || 'Errore di rete verso Gemini');
+        continue;
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       // Retry sullo stesso modello su 503/429
       if (res.status === 503 || res.status === 429) {
@@ -438,7 +461,7 @@ Se non sei sicuro di un campo, ritorna null per quel campo (non inventare).
 Rispondi ESCLUSIVAMENTE con JSON valido (niente testo prima o dopo):
 {"isAutogoal":false,"scorerId":"...","assistId":null,"gkId":null,"team":"red"}`;
 
-  const raw = await callGemini(prompt, { temperature: 0.15, maxTokens: 200, tier: 'fast' });
+  const raw = await callGemini(prompt, { temperature: 0.15, maxTokens: 200, tier: 'fast', timeoutMs: 15000 });
   const jsonMatch = raw.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error('Risposta AI non valida');
   let parsed;
