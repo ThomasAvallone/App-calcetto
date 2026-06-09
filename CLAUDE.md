@@ -58,13 +58,15 @@ src/
 │   ├── teamBalance.js / teamBalance.test.js   # balanceTeams (snake) + balanceWithLocks (lock + greedy PI)
 │   ├── dateUtils.js          # getMs(), safeDate()
 │   ├── roleIcons.js          # getRoleIcon(role) — emoji ruolo, condiviso setup/scheduled
+│   ├── matchSyncState.js / matchSyncState.test.js  # stato indicatore sync live (puro)
 │   └── waitUndo.js           # Toast con countdown per operazioni annullabili
 ├── constants/
 │   └── colors.js             # Costanti colori (CLR_WIN, CLR_LOSS, ecc.)
 └── hooks/
     ├── useMatchesSubscription.js  # Real-time subscription alla collezione matches
     ├── usePIConfig.js              # Real-time subscription a settings/piConfig (dedup JSON key)
-    └── useMatchPreview.js          # buildFreshPreview/copyPreview/shareWhatsApp (setup + scheduled)
+    ├── useMatchPreview.js          # buildFreshPreview/copyPreview/shareWhatsApp (setup + scheduled)
+    └── useMatchSyncStatus.js       # isOnline + hasPendingWrites per l'indicatore sync live
 ```
 
 ## Route
@@ -119,6 +121,7 @@ src/
 - `RatingSection.jsx` — Voti 1–10 per giocatore (admin); `rateMatch` + `recalculateRecentFormForPlayers`. Idempotente: un utente vota una volta.
 - `BestieSection.jsx` — Premio "Bestie" (admin); toggle con ri-click, ricalcola PI del vecchio e nuovo holder.
 - `MatchPreviewCard.jsx` — Card "Match Preview" condivisa (titolo + Copia/WhatsApp + `<pre>`), usata da MatchSetupPage e ScheduledMatchDetailPage. La logica copia/condivisione sta in `hooks/useMatchPreview.js`.
+- `MatchSyncChip.jsx` — Chip stato sincronizzazione partita live (offline 🔴 / salvataggio 🟡 / sincronizzato 🟢). Stato/visibilità puri in `utils/matchSyncState.js`; segnali da `hooks/useMatchSyncStatus.js`.
 
 ## Convenzioni
 
@@ -142,7 +145,7 @@ src/
 npm run dev        # Dev server
 npm run build      # Build produzione
 npm run preview    # Preview build
-npm test           # Run Vitest (headless) — ~190 test, 11 file
+npm test           # Run Vitest (headless) — ~228 test, 14 file
 npm run test:watch # Vitest watch mode
 ```
 
@@ -166,6 +169,7 @@ ogni nuova funzione di calcolo va messa lì (non inline nei componenti) e testat
 | `reportService.js` | preview/verdetto post-partita + `computeMatchMVP` |
 | `matchScore.js` | `scoreFromEvents`, `withProgressiveScore` (punteggio derivato dagli eventi) |
 | `teamBalance.js` | `balanceTeams` (snake draft), `balanceWithLocks` (lock + greedy PI, `null` su overflow) |
+| `matchSyncState.js` | `matchSyncState` (offline>syncing>synced) + `shouldShowSyncChip` (nasconde synced ai viewer) |
 | `playerStats.js` (+) | `aggregatePlayerMatchStats` (stats di un player su una lista di partite; proration assist storici cap a 1) |
 | `firestore.js` | solo `sanitizePublicName` (resto non testato: richiede Firebase) |
 
@@ -188,6 +192,7 @@ Aree già revisionate a fondo (bug + hardening + test). **Non rifare questi chec
 - **Editor eventi (MatchDetailPage)** `handleAddEvent`/`handleDeleteEvent`/`handleSaveEvent`: due fasi nette. (1) **Persistenza** (`updateMatch`) critica → se fallisce, rollback dell'optimistic update e `return`. (2) **Ricalcolo** (`recalcStats`) non-critico e **isolato** in un try/catch separato. Invariante: un errore del ricalcolo NON deve far sparire dalla UI un evento già salvato su Firestore (era il bug: il `catch` unico faceva `setMatch(match)` anche quando l'evento era persistito). I sub-componenti (`RatingSection`/`BestieSection`/`ReactionsSection`) sono in `components/match/`.
 - **StatsPage**: classifica GK = `rankGoalkeepers` (media gol/turno **crescente**, min 6 turni — più basso = migliore; diverso dai badge GK). Cronologie ordinate per data reale (`getMs`/`dateMs`), mai per stringa `GG/MM/AA`. Finestra 30gg legata allo stato `now` (refresh su visibilitychange).
 - **Infortuni live**: registrabili durante la partita (`matchStore.recordInjury` → evento `injury` con `team`, optimistic + rollback). Lo storico infortuni (`InjuryHistory`) usa `ev.team`.
+- **Indicatore sync live** (`MatchSyncChip` + `useMatchSyncStatus`): la persistenza IndexedDB è **attiva** (`config.js` → `enableIndexedDbPersistence`), quindi le scritture offline restano in coda e si sincronizzano da sole — i messaggi del chip lo riflettono (niente "i dati potrebbero non sincronizzarsi"). `hasPendingWrites` arriva da `subscribeToMatchSync`, un listener **metadata-aware separato** (`includeMetadataChanges:true`) sul doc `matches/{id}`, SOLO-LETTURA: ⚠️ **non** aggiungere `includeMetadataChanges` a `subscribeToMatch` (lo store) — provocherebbe render spuri e callback extra sull'optimistic-update. Il chip è nascosto a partita `finished`; per i viewer lo stato `synced` non si mostra. Precedenza stati: offline > syncing > synced.
 - **Flusso match (MatchPage/MatchSetupPage)** — comportamenti da non disfare: (A4) protezione anti-uscita su partita `active` con eventi tramite **`beforeunload`** (refresh/chiusura scheda). ⚠️ **NON usare `useBlocker`/hook da data-router** (`useNavigation`, `useLoaderData`, ecc.): l'app monta `<BrowserRouter>` (vedi `main.jsx`), non un data router. Con `BrowserRouter` quegli hook chiamano `invariant(false)` che **in build di produzione è un `Error` senza messaggio** → crash dell'intera pagina ("Errore inatteso"). È esattamente il bug che ha bloccato la MatchPage live. Se serve il blocco di navigazione in-app, migrare prima a `createBrowserRouter` + `RouterProvider`. (D2) MatchSetupPage avvisa con toast al superamento dei 10 giocatori e chiede conferma su "Pianifica senza giocatori"; (D3) i timer di animazione (goalFlash/scoreShake/scoreBounce) usano ref dedicate e guard `isMountedRef` nei `setTimeout` per evitare set su componente smontato e collisioni su gol ravvicinati.
 
 ## Gemini (modelli)

@@ -13,6 +13,13 @@ import toast from 'react-hot-toast';
 
 const CHANGELOG = [
   {
+    version: '3.15.3',
+    date: 'Giugno 2026',
+    entries: [
+      { type: 'new', text: 'Partita live: nuovo indicatore di sincronizzazione sempre visibile. Mostra "✅ Tutto sincronizzato" quando gli eventi sono salvati sul server, "🟡 Salvataggio in corso…" mentre un gol viene inviato, e "📡 Offline" quando manca la rete. Importante: anche da offline gli eventi NON si perdono — restano salvati sul dispositivo e si sincronizzano da soli appena torna la connessione (prima il messaggio diceva, erroneamente, che i dati potevano non sincronizzarsi). Per chi guarda in diretta, l\'etichetta "LIVE" viene nascosta quando è offline, così non è fuorviante.' },
+    ],
+  },
+  {
     version: '3.15.2',
     date: 'Giugno 2026',
     entries: [

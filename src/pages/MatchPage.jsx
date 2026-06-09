@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import useMatchStore from '../store/matchStore';
 import usePlayersStore from '../store/playersStore';
 import useAuthStore, { selectIsAdmin } from '../store/authStore';
+import { useMatchSyncStatus } from '../hooks/useMatchSyncStatus';
+import MatchSyncChip from '../components/match/MatchSyncChip';
 import Confetti from '../components/Confetti';
 import { generateMatchReport, computeMatchMVP } from '../services/reportService';
 import { exportMatchToSheets } from '../services/sheetsService';
@@ -51,7 +53,9 @@ export default function MatchPage() {
   const [scoreShake, setScoreShake] = useState(null);   // 'red' | 'blue' | null
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [injuryModal, setInjuryModal] = useState(false);
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  // Stato di sincronizzazione (offline / scritture in attesa) per la partita live.
+  // Hook isolato e read-only: non interferisce con la registrazione degli eventi.
+  const { isOnline, hasPendingWrites } = useMatchSyncStatus(id);
   const [voiceListening, setVoiceListening] = useState(false);
   const [voiceProcessing, setVoiceProcessing] = useState(false);
   const [voiceTranscript, setVoiceTranscript] = useState('');
@@ -91,15 +95,6 @@ export default function MatchPage() {
     prevRedScore.current  = red;
     prevBlueScore.current = blue;
   }, [match?.redScore, match?.blueScore]);
-
-  // Online/offline indicator
-  useEffect(() => {
-    const onOnline  = () => setIsOnline(true);
-    const onOffline = () => setIsOnline(false);
-    window.addEventListener('online',  onOnline);
-    window.addEventListener('offline', onOffline);
-    return () => { window.removeEventListener('online', onOnline); window.removeEventListener('offline', onOffline); };
-  }, []);
 
   // Cleanup report modal timeout on unmount
   useEffect(() => () => { if (reportTimeoutRef.current) clearTimeout(reportTimeoutRef.current); }, []);
@@ -758,11 +753,9 @@ export default function MatchPage() {
 
       {showConfetti && <Confetti winner={showConfetti} />}
 
-      {/* Offline indicator */}
-      {!isOnline && !isFinished && (
-        <div style={{ textAlign: 'center', marginBottom: '0.5rem', padding: '0.35rem 0.75rem', borderRadius: '8px', background: 'rgba(252,129,129,0.12)', border: '1px solid rgba(252,129,129,0.35)', fontSize: '0.78rem', color: '#FC8181' }}>
-          ⚠️ Connessione assente — i dati potrebbero non sincronizzarsi
-        </div>
+      {/* Sync status indicator (offline / salvataggio / sincronizzato) */}
+      {!isFinished && (
+        <MatchSyncChip isOnline={isOnline} hasPendingWrites={hasPendingWrites} isAdmin={isAdmin} />
       )}
 
       {/* Goal flash overlay */}
@@ -774,8 +767,8 @@ export default function MatchPage() {
         }} />
       )}
 
-      {/* Viewer LIVE indicator */}
-      {!isAdmin && !isFinished && (
+      {/* Viewer LIVE indicator — nascosto se offline (lo dice già il chip di sync) */}
+      {!isAdmin && !isFinished && isOnline && (
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
           marginBottom: '0.75rem', padding: '0.4rem 0.75rem', borderRadius: '999px',

@@ -165,6 +165,24 @@ export function subscribeToMatch(id, callback) {
   }, _subError('match'));
 }
 
+// Listener metadata-aware sul doc partita, SOLO per l'indicatore di sincronizzazione
+// della partita live: riporta se ci sono scritture locali non ancora confermate dal
+// server (`hasPendingWrites`) e se il dato viene dalla cache offline (`fromCache`).
+// È DELIBERATAMENTE separato da `subscribeToMatch` (che NON usa includeMetadataChanges):
+// così l'indicatore non altera il flusso dati né l'optimistic-update dello store, e
+// un metadata-change non provoca render spuri sui dati della partita. Read-only.
+export function subscribeToMatchSync(id, callback) {
+  return onSnapshot(
+    doc(db, 'matches', id),
+    { includeMetadataChanges: true },
+    snap => callback({
+      hasPendingWrites: snap.metadata.hasPendingWrites,
+      fromCache: snap.metadata.fromCache,
+    }),
+    _subError('matchSync'),
+  );
+}
+
 export function subscribeToMatches(callback) {
   return onSnapshot(query(collection(db, 'matches'), orderBy('date', 'desc')), snap => {
     callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
