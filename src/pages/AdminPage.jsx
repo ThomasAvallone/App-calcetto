@@ -13,6 +13,13 @@ import toast from 'react-hot-toast';
 
 const CHANGELOG = [
   {
+    version: '3.15.4',
+    date: 'Giugno 2026',
+    entries: [
+      { type: 'fix', text: 'Gestione Utenti: il proprietario dell\'app (superadmin) appariva come "Admin" nella propria riga della lista utenti invece di "Super Admin". Causa: il controllo del ruolo nella lista usava il valore grezzo Firestore, che per retrocompatibilità può essere "admin" anziché "superadmin", mentre il resto dell\'app usa già il fallback sull\'email per riconoscere il ruolo corretto. Ora i due controlli sono allineati.' },
+    ],
+  },
+  {
     version: '3.15.3',
     date: 'Giugno 2026',
     entries: [
@@ -1013,7 +1020,7 @@ export default function AdminPage() {
             // - mai sé stessi (evita auto-lockout) né i superadmin.
             const canEdit = !isMe && role !== 'superadmin' &&
               (currentIsSuperAdmin || (currentIsAdmin && role === 'viewer'));
-            const roleLabel = role === 'superadmin' ? 'Super Admin' : role === 'admin' ? 'Admin' : 'Viewer';
+            const roleLabel = (role === 'superadmin' || (isMe && currentIsSuperAdmin)) ? 'Super Admin' : role === 'admin' ? 'Admin' : 'Viewer';
             return (
               <div key={u.id} style={{
                 display: 'flex', alignItems: 'center', gap: '0.75rem',
