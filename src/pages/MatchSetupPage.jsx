@@ -5,6 +5,9 @@ import useMatchStore from '../store/matchStore';
 import { generateMatchPreview } from '../services/reportService';
 import { fetchWeatherForDate } from '../services/weatherService';
 import { generateAIBalancedTeams, generateMatchPrediction } from '../services/geminiService';
+import { useMatchPreview } from '../hooks/useMatchPreview';
+import { getRoleIcon } from '../utils/roleIcons';
+import MatchPreviewCard from '../components/match/MatchPreviewCard';
 import toast from 'react-hot-toast';
 
 const ROLES = ['Portiere', 'Difensore', 'Centrocampista', 'Attaccante'];
@@ -28,6 +31,8 @@ export default function MatchSetupPage() {
   const [aiReasoning, setAiReasoning] = useState('');
   const [prediction, setPrediction] = useState('');
   const [predictionLoading, setPredictionLoading] = useState(false);
+
+  const { copyPreview, shareWhatsApp } = useMatchPreview({ teams, weather, matchDate, setWeather, setPreview });
 
   const togglePlayer = (id) => {
     const isSelected = selectedIds.includes(id);
@@ -229,31 +234,6 @@ export default function MatchSetupPage() {
     }
   };
 
-  const buildFreshPreview = async () => {
-    const date = matchDate ? new Date(matchDate) : new Date();
-    // Auto-fetch del meteo solo se l'utente non l'ha inserito a mano (stesso guard
-    // di handleStartMatch): copiare/condividere la preview non deve sovrascrivere
-    // silenziosamente la condizione/temperatura scelta manualmente.
-    let w = weather;
-    if (!weather.temp) {
-      const fw = await fetchWeatherForDate(date).catch(() => null);
-      if (fw) { w = fw; setWeather(fw); }
-    }
-    const text = generateMatchPreview({ redTeam: teams.red, blueTeam: teams.blue, weather: w, date });
-    setPreview(text);
-    return text;
-  };
-
-  const copyPreview = async () => {
-    const text = await buildFreshPreview();
-    navigator.clipboard.writeText(text).then(() => toast.success('Preview copiata!')).catch(() => toast.error('Copia non riuscita'));
-  };
-
-  const shareWhatsApp = async () => {
-    const text = await buildFreshPreview();
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
-  };
-
   const handlePlayerTap = (playerId, team) => {
     if (!swapPick) {
       // First tap: select this player
@@ -402,25 +382,7 @@ export default function MatchSetupPage() {
         )}
 
         {/* Preview text */}
-        <div className="card mb-4">
-          <div className="flex items-center justify-between mb-3">
-            <h3>🎙️ Match Preview</h3>
-            <div className="flex gap-2">
-              <button className="btn btn-ghost text-sm" style={{ padding: '0.3rem 0.75rem', minHeight: 'auto' }} onClick={copyPreview}>
-                📋 Copia
-              </button>
-              <button className="btn btn-ghost text-sm" style={{ padding: '0.3rem 0.75rem', minHeight: 'auto', color: '#25D366' }} onClick={shareWhatsApp}>
-                💬 WhatsApp
-              </button>
-            </div>
-          </div>
-          <pre style={{
-            fontFamily: 'Inter, monospace', fontSize: '0.78rem',
-            color: '#A0AEC0', whiteSpace: 'pre-wrap', lineHeight: 1.6,
-          }}>
-            {preview}
-          </pre>
-        </div>
+        <MatchPreviewCard preview={preview} onCopy={copyPreview} onShare={shareWhatsApp} title="🎙️ Match Preview" />
 
         <div className="flex gap-3">
           <button
@@ -630,9 +592,4 @@ export default function MatchSetupPage() {
       </button>
     </div>
   );
-}
-
-function getRoleIcon(role) {
-  const icons = { 'Portiere': '🧤', 'Difensore': '🛡️', 'Centrocampista': '⚙️', 'Attaccante': '⚡' };
-  return icons[role] || '⚽';
 }

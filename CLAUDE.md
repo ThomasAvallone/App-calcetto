@@ -32,7 +32,8 @@ src/
 │   ├── Spinner.jsx           # Indicatore di loading
 │   ├── WhatIfModal.jsx       # Simulatore "What-if" (Dashboard)
 │   ├── players/              # Sub-componenti di PlayersPage
-│   └── stats/                # Sub-componenti di StatsPage
+│   ├── stats/                # Sub-componenti di StatsPage
+│   └── match/                # Sub-componenti di MatchDetailPage + card preview condivisa
 ├── store/                    # Zustand stores
 ├── firebase/
 │   ├── firestore.js          # Tutte le operazioni Firestore
@@ -56,12 +57,14 @@ src/
 │   ├── matchScore.js / matchScore.test.js     # scoreFromEvents/withProgressiveScore (source of truth punteggio)
 │   ├── teamBalance.js / teamBalance.test.js   # balanceTeams (snake) + balanceWithLocks (lock + greedy PI)
 │   ├── dateUtils.js          # getMs(), safeDate()
+│   ├── roleIcons.js          # getRoleIcon(role) — emoji ruolo, condiviso setup/scheduled
 │   └── waitUndo.js           # Toast con countdown per operazioni annullabili
 ├── constants/
 │   └── colors.js             # Costanti colori (CLR_WIN, CLR_LOSS, ecc.)
 └── hooks/
     ├── useMatchesSubscription.js  # Real-time subscription alla collezione matches
-    └── usePIConfig.js              # Real-time subscription a settings/piConfig (dedup JSON key)
+    ├── usePIConfig.js              # Real-time subscription a settings/piConfig (dedup JSON key)
+    └── useMatchPreview.js          # buildFreshPreview/copyPreview/shareWhatsApp (setup + scheduled)
 ```
 
 ## Route
@@ -85,7 +88,7 @@ src/
 | File | Righe | Note |
 |------|-------|------|
 | `pages/StatsPage.jsx` | ~1000 | Classifiche + stats; tab AI in `components/stats/`, aggregazioni pure in `utils/leaderboards.js` |
-| `pages/MatchDetailPage.jsx` | ~987 | Dettaglio partita storica |
+| `pages/MatchDetailPage.jsx` | ~840 | Dettaglio partita storica; sub-componenti estratti in `components/match/` |
 | `pages/AdminPage.jsx` | ~901 | Gestione admin (include CHANGELOG + Editor PI) |
 | `pages/PlayersPage.jsx` | ~872 | Scheda giocatore + lista; sub-componenti estratti in `components/players/` |
 | `pages/DashboardPage.jsx` | ~785 | Dashboard principale (banner avvio partita imminente) |
@@ -111,8 +114,11 @@ src/
 - `HallTab.jsx` — Hall of Fame/Shame AI (Gemini)
 - `TrendTab.jsx` — Grafico SVG a linee (gol/assist/vittorie cumulativi nel tempo); top 6 per metrica; partite storiche escluse
 
-### Componenti inline (non estratti)
-- `ReactionsSection` — in `MatchDetailPage.jsx`; subscribe a `matches/{matchId}/reactions/{userId}`, emoji picker a 6 reazioni, aggregazione live
+### `src/components/match/`
+- `ReactionsSection.jsx` — Reazioni partita; subscribe a `matches/{matchId}/reactions/{userId}`, emoji picker a 6 reazioni, aggregazione live. Include `REACTION_EMOJIS`. `playerName` = nome pubblico (mai email).
+- `RatingSection.jsx` — Voti 1–10 per giocatore (admin); `rateMatch` + `recalculateRecentFormForPlayers`. Idempotente: un utente vota una volta.
+- `BestieSection.jsx` — Premio "Bestie" (admin); toggle con ri-click, ricalcola PI del vecchio e nuovo holder.
+- `MatchPreviewCard.jsx` — Card "Match Preview" condivisa (titolo + Copia/WhatsApp + `<pre>`), usata da MatchSetupPage e ScheduledMatchDetailPage. La logica copia/condivisione sta in `hooks/useMatchPreview.js`.
 
 ## Convenzioni
 
@@ -179,6 +185,7 @@ Aree già revisionate a fondo (bug + hardening + test). **Non rifare questi chec
 - **reportService / MVP**: l'MVP è calcolato da `computeMatchMVP(events)` (gol +3, assist +2, autogol -2; `null` se saldo ≤ 0 → niente MVP a chi ha solo autogol). **Source of truth unica**: la usano sia il verdetto testuale (`generateMatchReport`) sia la card del Report Modal in `MatchPage`. Non re-implementare il calcolo inline.
 - **Punteggio partita** 🎯: si **deriva sempre** dagli eventi via `scoreFromEvents()` (goal→squadra marcatore, autogoal→avversaria, save/injury neutri), mai incrementato a mano. `matchStore._appendEvent` fa optimistic update + **rollback uniforme** per gol/autogol/infortuni; `deleteEvent` ri-deriva il punteggio. `withProgressiveScore()` annota il parziale per le cronache (MatchPage log, MatchReplay, reportService).
 - **Fine partita** (`MatchPage.handleEndMatch` + `matchStore.endMatch`): lo snapshot (score+tabellino) si cattura **dopo** i 5s di `waitUndo` leggendo `useMatchStore.getState().match` (no stale closure) e con `scoreFromEvents`. `recalculatePlayerStats` è non-critico (try/catch isolato: un suo errore non nasconde il verdetto). `endMatch` rilegge il match dallo store dopo l'await per non sovrascrivere eventi arrivati dalla subscription.
+- **Editor eventi (MatchDetailPage)** `handleAddEvent`/`handleDeleteEvent`/`handleSaveEvent`: due fasi nette. (1) **Persistenza** (`updateMatch`) critica → se fallisce, rollback dell'optimistic update e `return`. (2) **Ricalcolo** (`recalcStats`) non-critico e **isolato** in un try/catch separato. Invariante: un errore del ricalcolo NON deve far sparire dalla UI un evento già salvato su Firestore (era il bug: il `catch` unico faceva `setMatch(match)` anche quando l'evento era persistito). I sub-componenti (`RatingSection`/`BestieSection`/`ReactionsSection`) sono in `components/match/`.
 - **StatsPage**: classifica GK = `rankGoalkeepers` (media gol/turno **crescente**, min 6 turni — più basso = migliore; diverso dai badge GK). Cronologie ordinate per data reale (`getMs`/`dateMs`), mai per stringa `GG/MM/AA`. Finestra 30gg legata allo stato `now` (refresh su visibilitychange).
 - **Infortuni live**: registrabili durante la partita (`matchStore.recordInjury` → evento `injury` con `team`, optimistic + rollback). Lo storico infortuni (`InjuryHistory`) usa `ev.team`.
 - **Flusso match (MatchPage/MatchSetupPage)** — comportamenti da non disfare: (A4) protezione anti-uscita su partita `active` con eventi tramite **`beforeunload`** (refresh/chiusura scheda). ⚠️ **NON usare `useBlocker`/hook da data-router** (`useNavigation`, `useLoaderData`, ecc.): l'app monta `<BrowserRouter>` (vedi `main.jsx`), non un data router. Con `BrowserRouter` quegli hook chiamano `invariant(false)` che **in build di produzione è un `Error` senza messaggio** → crash dell'intera pagina ("Errore inatteso"). È esattamente il bug che ha bloccato la MatchPage live. Se serve il blocco di navigazione in-app, migrare prima a `createBrowserRouter` + `RouterProvider`. (D2) MatchSetupPage avvisa con toast al superamento dei 10 giocatori e chiede conferma su "Pianifica senza giocatori"; (D3) i timer di animazione (goalFlash/scoreShake/scoreBounce) usano ref dedicate e guard `isMountedRef` nei `setTimeout` per evitare set su componente smontato e collisioni su gol ravvicinati.

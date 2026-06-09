@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getMatch, getMatches, updateMatch, deleteMatch, recalculatePlayerStats, rateMatch, recalculateRecentFormForPlayers, subscribeToMatchReactions, upsertMatchReaction, deleteMatchReaction } from '../firebase/firestore';
+import { getMatch, getMatches, updateMatch, deleteMatch, recalculatePlayerStats } from '../firebase/firestore';
 import useAuthStore, { selectIsAdmin } from '../store/authStore';
 import usePlayersStore from '../store/playersStore';
 import { generateMatchReport, computeMatchMVP } from '../services/reportService';
@@ -11,148 +11,9 @@ import toast from 'react-hot-toast';
 import { safeDate } from '../utils/dateUtils';
 import { scoreFromEvents } from '../utils/matchScore';
 import MatchReplay from '../components/MatchReplay';
-
-function BestieSection({ match, onUpdate }) {
-  const allPlayers = [...(match.redTeam || []), ...(match.blueTeam || [])];
-  const [saving, setSaving] = useState(false);
-  const current = match.bestieId || '';
-
-  const assign = async (playerId, playerName) => {
-    setSaving(true);
-    try {
-      const isClear = playerId === current;
-      const newId = isClear ? null : playerId;
-      const newName = isClear ? null : playerName;
-      await updateMatch(match.id, { bestieId: newId, bestiePlayerName: newName });
-      // recalc old and new bestie holder
-      const toRecalc = [...new Set([match.bestieId, newId].filter(Boolean))];
-      if (toRecalc.length) await recalculatePlayerStats(toRecalc);
-      onUpdate({ ...match, bestieId: newId, bestiePlayerName: newName });
-      toast.success(newId ? `🙏 Bestie assegnato a ${newName}` : '🙏 Bestie rimosso');
-    } catch (e) {
-      toast.error('Errore: ' + e.message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="card mb-4" style={{ border: '1px solid rgba(252,129,129,0.25)', background: 'rgba(252,129,129,0.03)' }}>
-      <h3 className="mb-1" style={{ fontSize: '0.95rem' }}>🙏 Premio Bestie</h3>
-      <p className="text-xs text-muted mb-3" style={{ lineHeight: 1.5 }}>
-        La "Madonna" più sincera e sentita della partita. Seleziona il giocatore, ri-clicca per rimuovere.
-      </p>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-        {allPlayers.map(p => {
-          const isSelected = current === p.id;
-          return (
-            <button
-              key={p.id}
-              disabled={saving}
-              onClick={() => assign(p.id, p.name)}
-              style={{
-                padding: '0.4rem 0.9rem', borderRadius: '999px', fontSize: '0.82rem', fontWeight: 600,
-                cursor: 'pointer', border: `1px solid ${isSelected ? '#FC8181' : '#4A5568'}`,
-                background: isSelected ? 'rgba(252,129,129,0.18)' : 'rgba(74,85,104,0.25)',
-                color: isSelected ? '#FC8181' : '#A0AEC0',
-                transition: 'all 0.15s',
-              }}
-            >
-              {isSelected ? '🙏 ' : ''}{p.name}
-            </button>
-          );
-        })}
-      </div>
-      {current && (
-        <p className="text-xs mt-2" style={{ color: '#FC8181' }}>
-          Assegnato a <strong>{match.bestiePlayerName}</strong>
-        </p>
-      )}
-    </div>
-  );
-}
-
-function RatingSection({ match, userId, userName, onRated }) {
-  const allPlayers = [...(match.redTeam || []), ...(match.blueTeam || [])];
-  const hasVoted = !!(match.ratings?.[userId]);
-  const [scores, setScores] = React.useState(() =>
-    Object.fromEntries(allPlayers.map(p => [p.id, 6]))
-  );
-  const [submitting, setSubmitting] = React.useState(false);
-
-  const bump = (pid, delta) =>
-    setScores(s => ({ ...s, [pid]: Math.max(1, Math.min(10, (s[pid] ?? 6) + delta)) }));
-
-  const handleSubmit = async () => {
-    setSubmitting(true);
-    try {
-      await rateMatch(match.id, userId, scores, userName);
-      await recalculateRecentFormForPlayers(allPlayers.map(p => p.id));
-      const updated = await getMatch(match.id);
-      onRated(updated);
-      toast.success('Voti salvati!');
-    } catch (e) {
-      toast.error('Errore: ' + e.message);
-      setSubmitting(false);
-    }
-  };
-
-  if (hasVoted) {
-    const myRating = match.ratings[userId];
-    return (
-      <div className="card mb-4" style={{ border: '1px solid rgba(246,224,94,0.25)', background: 'rgba(246,224,94,0.03)' }}>
-        <h3 className="mb-3" style={{ fontSize: '0.95rem' }}>⭐ Il tuo voto</h3>
-        {allPlayers.map(p => {
-          const s = myRating.scores?.[p.id];
-          if (s == null) return null;
-          const c = s >= 7 ? '#68D391' : s >= 5 ? '#F6E05E' : '#FC8181';
-          return (
-            <div key={p.id} className="flex items-center justify-between"
-              style={{ padding: '0.35rem 0', borderBottom: '1px solid #2D3748' }}>
-              <span style={{ fontSize: '0.9rem' }}>{p.name}</span>
-              <span style={{ fontWeight: 700, color: c }}>{s}/10</span>
-            </div>
-          );
-        })}
-        <p className="text-xs text-muted mt-2 text-center">Hai già votato per questa partita</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="card mb-4" style={{ border: '1px solid rgba(79,209,197,0.3)' }}>
-      <h3 className="mb-1" style={{ fontSize: '0.95rem' }}>⭐ Valuta i Giocatori</h3>
-      <p className="text-xs text-muted mb-3">Dai un voto 1–10 a ogni giocatore</p>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginBottom: '1rem' }}>
-        {allPlayers.map(p => {
-          const s = scores[p.id] ?? 6;
-          const c = s >= 7 ? '#68D391' : s >= 5 ? '#F6E05E' : '#FC8181';
-          const isRed = (match.redTeam || []).some(r => r.id === p.id);
-          return (
-            <div key={p.id} className="flex items-center gap-2">
-              <span style={{ fontSize: '0.7rem', minWidth: '18px' }}>{isRed ? '🔴' : '🔵'}</span>
-              <span style={{ flex: 1, fontSize: '0.88rem' }}>{p.name}</span>
-              <div className="flex items-center gap-2">
-                <button onClick={() => bump(p.id, -1)}
-                  style={{ background: '#2D3748', border: 'none', borderRadius: '6px', width: 30, height: 30, cursor: 'pointer', color: '#A0AEC0', fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  −
-                </button>
-                <span style={{ minWidth: '20px', textAlign: 'center', fontWeight: 700, color: c, fontSize: '1rem' }}>{s}</span>
-                <button onClick={() => bump(p.id, +1)}
-                  style={{ background: '#2D3748', border: 'none', borderRadius: '6px', width: 30, height: 30, cursor: 'pointer', color: '#A0AEC0', fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  +
-                </button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      <button className="btn btn-teal btn-full" onClick={handleSubmit} disabled={submitting}>
-        {submitting ? '⏳ Salvataggio...' : '✅ Salva Voti'}
-      </button>
-    </div>
-  );
-}
+import BestieSection from '../components/match/BestieSection';
+import RatingSection from '../components/match/RatingSection';
+import ReactionsSection from '../components/match/ReactionsSection';
 
 function weatherIcon(condition) {
   const icons = { sunny: '☀️', cloudy: '☁️', rainy: '🌧️', cold: '🥶', hot: '🔥', wind: '💨' };
@@ -179,103 +40,6 @@ const EVENT_TYPE_META = {
   save:     { label: '🧤 Parata',     color: '#63B3ED', bg: 'rgba(99,179,237,0.15)' },
   injury:   { label: '🚑 Infortunio', color: '#FC8181', bg: 'rgba(252,129,129,0.15)' },
 };
-
-const REACTION_EMOJIS = [
-  { emoji: '👑', label: 'MVP' },
-  { emoji: '🔥', label: 'In fuoco' },
-  { emoji: '🎯', label: 'Precisione' },
-  { emoji: '🧤', label: 'Muro' },
-  { emoji: '🤦', label: 'Papera' },
-  { emoji: '🎉', label: 'Gran partita' },
-];
-
-function ReactionsSection({ matchId, userId, displayName }) {
-  const [reactions, setReactions] = useState([]);
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    if (!matchId) return;
-    return subscribeToMatchReactions(matchId, setReactions);
-  }, [matchId]);
-
-  const myReaction = reactions.find(r => r.id === userId);
-
-  const handlePick = async (emoji) => {
-    if (!userId) return;
-    setSaving(true);
-    try {
-      if (myReaction?.emoji === emoji) {
-        await deleteMatchReaction(matchId, userId);
-      } else {
-        await upsertMatchReaction(matchId, userId, { emoji, playerName: displayName });
-      }
-    } catch (e) {
-      toast.error('Errore: ' + e.message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="card mb-4" style={{ border: '1px solid rgba(79,209,197,0.18)' }}>
-      <h3 className="mb-3" style={{ fontSize: '0.92rem' }}>💬 Reazioni</h3>
-
-      {userId && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginBottom: reactions.length ? '0.85rem' : 0 }}>
-          {REACTION_EMOJIS.map(({ emoji, label }) => {
-            const isMine = myReaction?.emoji === emoji;
-            return (
-              <button
-                key={emoji}
-                onClick={() => handlePick(emoji)}
-                disabled={saving}
-                title={label}
-                style={{
-                  padding: '0.35rem 0.65rem',
-                  borderRadius: '999px',
-                  border: `1px solid ${isMine ? '#4FD1C5' : 'rgba(74,85,104,0.5)'}`,
-                  background: isMine ? 'rgba(79,209,197,0.2)' : 'rgba(74,85,104,0.15)',
-                  cursor: 'pointer',
-                  fontSize: '1.1rem',
-                  lineHeight: 1,
-                  outline: 'none',
-                  transition: 'all 0.12s',
-                }}
-              >
-                {emoji}
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {reactions.length > 0 ? (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem' }}>
-          {REACTION_EMOJIS.map(({ emoji }) => {
-            const group = reactions.filter(r => r.emoji === emoji);
-            if (!group.length) return null;
-            const names = group.map(r => r.playerName || 'Anonimo').join(', ');
-            return (
-              <div key={emoji} title={names}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: '0.3rem',
-                  padding: '0.2rem 0.55rem', borderRadius: '999px',
-                  background: 'rgba(74,85,104,0.25)', cursor: 'default',
-                }}>
-                <span style={{ fontSize: '1rem' }}>{emoji}</span>
-                <span style={{ fontWeight: 700, fontSize: '0.82rem', color: '#CBD5E0' }}>{group.length}</span>
-              </div>
-            );
-          })}
-        </div>
-      ) : userId ? (
-        <p className="text-xs text-muted">Sii il primo a reagire!</p>
-      ) : (
-        <p className="text-xs text-muted">Accedi per lasciare una reazione.</p>
-      )}
-    </div>
-  );
-}
 
 export default function MatchDetailPage() {
   const { id } = useParams();
@@ -357,16 +121,26 @@ export default function MatchDetailPage() {
     const updated = { ...match, events: newEvents, redScore, blueScore };
     setMatch(updated);
     setSaving(true);
+    // 1) Persistenza evento — critica: se fallisce, rollback dell'optimistic update.
     try {
       const reportDel = match.status === 'finished'
         ? { report: generateMatchReport({ ...match, events: newEvents, redScore, blueScore }, players) }
         : {};
       await updateMatch(id, { events: newEvents, redScore, blueScore, ...reportDel });
+    } catch (e) {
+      toast.error(e.message);
+      setMatch(match);
+      setSaving(false);
+      return;
+    }
+    // 2) Ricalcolo statistiche — non-critico e ISOLATO (come endMatch): un suo
+    //    errore non deve far sparire dalla UI un evento già salvato su Firestore.
+    try {
       const allIds = [...(match.redTeam || []), ...(match.blueTeam || [])].map(p => p.id);
       await recalcStats(allIds, updated);
       toast.success('Evento eliminato e statistiche ricalcolate');
-    } catch (e) {
-      toast.error(e.message);
+    } catch {
+      toast.error('Evento eliminato, ma statistiche non ricalcolate');
     } finally {
       setSaving(false);
     }
@@ -416,18 +190,27 @@ export default function MatchDetailPage() {
     const updated = { ...match, events: newEvents, redScore, blueScore };
     setMatch(updated);
     setSaving(true);
+    // 1) Persistenza evento — critica: se fallisce, rollback dell'optimistic update.
     try {
       const reportAdd = match.status === 'finished'
         ? { report: generateMatchReport({ ...match, events: newEvents, redScore, blueScore }, players) }
         : {};
       await updateMatch(id, { events: newEvents, redScore, blueScore, ...reportAdd });
-      const allIds = [...(match.redTeam || []), ...(match.blueTeam || [])].map(p => p.id);
-      await recalcStats(allIds, updated);
-      toast.success(isSimple ? 'Evento aggiunto alla cronaca' : 'Evento aggiunto e statistiche ricalcolate');
-      setAddForm({ type: 'goal', team: 'red', scorerId: '', assistId: '', gkId: '', minute: '' });
     } catch (e) {
       toast.error(e.message);
       setMatch(match);
+      setSaving(false);
+      return;
+    }
+    setAddForm({ type: 'goal', team: 'red', scorerId: '', assistId: '', gkId: '', minute: '' });
+    // 2) Ricalcolo statistiche — non-critico e ISOLATO: un suo errore non deve
+    //    far sparire dalla UI un evento già salvato su Firestore.
+    try {
+      const allIds = [...(match.redTeam || []), ...(match.blueTeam || [])].map(p => p.id);
+      await recalcStats(allIds, updated);
+      toast.success(isSimple ? 'Evento aggiunto alla cronaca' : 'Evento aggiunto e statistiche ricalcolate');
+    } catch {
+      toast.error('Evento aggiunto, ma statistiche non ricalcolate');
     } finally {
       setSaving(false);
     }
@@ -465,16 +248,26 @@ export default function MatchDetailPage() {
     setMatch(m => ({ ...m, events: newEvents }));
     setEditingEventId(null);
     setSaving(true);
+    // 1) Persistenza evento — critica: se fallisce, rollback dell'optimistic update.
     try {
       const reportEdit = match.status === 'finished'
         ? { report: generateMatchReport({ ...match, events: newEvents }, players) }
         : {};
       await updateMatch(id, { events: newEvents, ...reportEdit });
+    } catch (e) {
+      toast.error(e.message);
+      setMatch(match);
+      setSaving(false);
+      return;
+    }
+    // 2) Ricalcolo statistiche — non-critico e ISOLATO: un suo errore non deve
+    //    far sparire dalla UI un evento già salvato su Firestore.
+    try {
       const allIds = [...(match.redTeam || []), ...(match.blueTeam || [])].map(p => p.id);
       await recalcStats(allIds, { ...match, events: newEvents });
       toast.success('Evento aggiornato');
-    } catch (e) {
-      toast.error(e.message);
+    } catch {
+      toast.error('Evento aggiornato, ma statistiche non ricalcolate');
     } finally {
       setSaving(false);
     }

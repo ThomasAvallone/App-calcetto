@@ -13,6 +13,15 @@ import toast from 'react-hot-toast';
 
 const CHANGELOG = [
   {
+    version: '3.15.2',
+    date: 'Giugno 2026',
+    entries: [
+      { type: 'fix', text: 'Dettaglio partita: aggiungendo, modificando o eliminando un evento, se il ricalcolo statistiche falliva (es. rete instabile) l\'evento — pur essendo già salvato — spariva dalla schermata fino al ricaricamento. Ora salvataggio e ricalcolo sono separati: l\'evento resta visibile e un avviso segnala solo che le statistiche vanno ricalcolate.' },
+      { type: 'fix', text: 'Robustezza schermate pre e post partita: aggiunti messaggi d\'errore dove mancavano (copia preview/verdetto negata dal browser, partita programmata che non si carica per problemi di rete — prima restava bloccata su "Caricamento…" all\'infinito).' },
+      { type: 'fix', text: 'Riordino interno del codice (nessun cambiamento visibile): i riquadri Reazioni, Voti e Bestie del dettaglio partita e la card "Match Preview" condivisa tra nuova partita e partita programmata sono stati estratti in componenti riutilizzabili, riducendo le duplicazioni.' },
+    ],
+  },
+  {
     version: '3.15.1',
     date: 'Giugno 2026',
     entries: [

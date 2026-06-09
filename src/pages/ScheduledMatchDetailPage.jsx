@@ -6,7 +6,9 @@ import useMatchStore from '../store/matchStore';
 import useAuthStore, { selectIsAdmin } from '../store/authStore';
 import { useMatchesSubscription } from '../hooks/useMatchesSubscription';
 import { generateMatchPreview } from '../services/reportService';
-import { fetchWeatherForDate } from '../services/weatherService';
+import { useMatchPreview } from '../hooks/useMatchPreview';
+import { getRoleIcon } from '../utils/roleIcons';
+import MatchPreviewCard from '../components/match/MatchPreviewCard';
 import { downloadICS } from '../utils/calendarUtils';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -18,11 +20,6 @@ function toDatetimeLocal(val) {
   if (!d) return '';
   const pad = n => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function getRoleIcon(role) {
-  const icons = { 'Portiere': '🧤', 'Difensore': '🛡️', 'Centrocampista': '⚙️', 'Attaccante': '⚡' };
-  return icons[role] || '⚽';
 }
 
 export default function ScheduledMatchDetailPage() {
@@ -220,29 +217,7 @@ export default function ScheduledMatchDetailPage() {
     }
   };
 
-  const buildFreshPreview = async () => {
-    const date = matchDate ? new Date(matchDate) : new Date();
-    // Auto-fetch del meteo solo se non è già impostato (caricato dalla partita o
-    // editato a mano): copiare/condividere la preview non deve sovrascriverlo.
-    let w = weather;
-    if (!weather.temp) {
-      const fw = await fetchWeatherForDate(date).catch(() => null);
-      if (fw) { w = fw; setWeather(fw); }
-    }
-    const text = generateMatchPreview({ redTeam: teams.red, blueTeam: teams.blue, weather: w, date });
-    setPreview(text);
-    return text;
-  };
-
-  const copyPreview = async () => {
-    const text = await buildFreshPreview();
-    navigator.clipboard.writeText(text).then(() => toast.success('Preview copiata!')).catch(() => toast.error('Copia non riuscita'));
-  };
-
-  const shareWhatsApp = async () => {
-    const text = await buildFreshPreview();
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
-  };
+  const { copyPreview, shareWhatsApp } = useMatchPreview({ teams, weather, matchDate, setWeather, setPreview });
 
   if (loadingMatch) {
     return (
@@ -532,29 +507,9 @@ export default function ScheduledMatchDetailPage() {
       })()}
 
       {/* Match Preview — only when teams are set */}
-      {(teams.red.length > 0 || teams.blue.length > 0) && <div className="card mb-4">
-        <div className="flex items-center justify-between mb-3">
-          <h3>📋 Match Preview</h3>
-          <div className="flex gap-2">
-            <button className="btn btn-ghost text-sm"
-              style={{ padding: '0.3rem 0.75rem', minHeight: 'auto' }}
-              onClick={copyPreview}>
-              📋 Copia
-            </button>
-            <button className="btn btn-ghost text-sm"
-              style={{ padding: '0.3rem 0.75rem', minHeight: 'auto', color: '#25D366' }}
-              onClick={shareWhatsApp}>
-              💬 WhatsApp
-            </button>
-          </div>
-        </div>
-        <pre style={{
-          fontFamily: 'Inter, monospace', fontSize: '0.78rem',
-          color: '#A0AEC0', whiteSpace: 'pre-wrap', lineHeight: 1.6,
-        }}>
-          {preview}
-        </pre>
-      </div>}
+      {(teams.red.length > 0 || teams.blue.length > 0) && (
+        <MatchPreviewCard preview={preview} onCopy={copyPreview} onShare={shareWhatsApp} />
+      )}
 
       {/* Actions — admin only (le scritture sono comunque bloccate dalle rules) */}
       {isAdmin && (
