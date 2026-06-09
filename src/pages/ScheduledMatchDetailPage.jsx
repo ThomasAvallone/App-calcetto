@@ -89,7 +89,7 @@ export default function ScheduledMatchDetailPage() {
       setWeather(w);
       setPreview(generateMatchPreview({ redTeam: red, blueTeam: blue, weather: w, date: d }));
       setLoadingMatch(false);
-    });
+    }).catch(() => { setLoadingMatch(false); toast.error('Errore caricamento partita'); });
   }, [id, players]);
 
   const regen = (newTeams, newDate, newWeather) => {
@@ -236,7 +236,7 @@ export default function ScheduledMatchDetailPage() {
 
   const copyPreview = async () => {
     const text = await buildFreshPreview();
-    navigator.clipboard.writeText(text).then(() => toast.success('Preview copiata!'));
+    navigator.clipboard.writeText(text).then(() => toast.success('Preview copiata!')).catch(() => toast.error('Copia non riuscita'));
   };
 
   const shareWhatsApp = async () => {

@@ -246,7 +246,7 @@ export default function MatchSetupPage() {
 
   const copyPreview = async () => {
     const text = await buildFreshPreview();
-    navigator.clipboard.writeText(text).then(() => toast.success('Preview copiata!'));
+    navigator.clipboard.writeText(text).then(() => toast.success('Preview copiata!')).catch(() => toast.error('Copia non riuscita'));
   };
 
   const shareWhatsApp = async () => {

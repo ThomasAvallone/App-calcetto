@@ -598,7 +598,7 @@ export default function MatchDetailPage() {
         </div>
         <div className="flex gap-3">
           <button className="btn btn-teal" style={{ flex: 1 }}
-            onClick={() => navigator.clipboard.writeText(reportText).then(() => toast.success('Copiato!'))}>
+            onClick={() => navigator.clipboard.writeText(reportText).then(() => toast.success('Copiato!')).catch(() => toast.error('Copia non riuscita'))}>
             📋 Copia
           </button>
           <button className="btn" style={{ flex: 1, background: '#25D366', color: '#fff', border: 'none' }}
@@ -772,10 +772,10 @@ export default function MatchDetailPage() {
           <div className="flex items-center justify-between mb-3">
             <h3 style={{ fontSize: '0.95rem', margin: 0 }}>✨ Commento AI</h3>
             <button
-              onClick={async () => {
+              onClick={() => {
                 setMatch(m => ({ ...m, aiCommentary: null }));
                 setShowAiCommentary(false);
-                await updateMatch(id, { aiCommentary: null });
+                updateMatch(id, { aiCommentary: null }).catch(() => {});
               }}
               style={{ fontSize: '0.7rem', color: '#718096', background: 'none', border: 'none', cursor: 'pointer' }}>
               ↺ Rigenera
@@ -788,7 +788,7 @@ export default function MatchDetailPage() {
           </div>
           <div className="flex gap-2" style={{ marginTop: '1rem' }}>
             <button className="btn" style={{ flex: 1, fontSize: '0.8rem' }}
-              onClick={() => navigator.clipboard.writeText(match.aiCommentary).then(() => toast.success('Copiato!'))}>
+              onClick={() => navigator.clipboard.writeText(match.aiCommentary).then(() => toast.success('Copiato!')).catch(() => toast.error('Copia non riuscita'))}>
               📋 Copia
             </button>
             <button className="btn" style={{ flex: 1, fontSize: '0.8rem', background: '#25D366', color: '#fff', border: 'none' }}
