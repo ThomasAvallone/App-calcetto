@@ -1,7 +1,6 @@
 import { create } from 'zustand';
-import { subscribeToAuth, getUserDoc, loginWithGoogle, logout } from '../firebase/auth';
-
-const SUPER_ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL || '';
+import { subscribeToAuth, getUserDoc, loginWithGoogle, logout, promoteOwnerToSuperAdmin } from '../firebase/auth';
+import { isOwnerEmail } from '../constants/owner';
 
 const useAuthStore = create((set, get) => ({
   user: null,
@@ -19,9 +18,18 @@ const useAuthStore = create((set, get) => ({
       if (firebaseUser) {
         // Una sola read del doc utente per ricavare role + linkedPlayerId
         const userDoc = await getUserDoc(firebaseUser.uid).catch(() => null);
+        let role = userDoc?.role || null;
+        // Self-heal owner: la migrazione admin→superadmin in loginWithGoogle gira
+        // SOLO al login esplicito. Con una sessione persistita un owner rimasto
+        // 'admin' non verrebbe mai promosso. Promuovilo ora (le rules lo permettono);
+        // se la write fallisce (offline/permessi) non è critico.
+        if (role === 'admin' && isOwnerEmail(firebaseUser.email)) {
+          const ok = await promoteOwnerToSuperAdmin(firebaseUser.uid).catch(() => false);
+          if (ok) role = 'superadmin';
+        }
         newState = {
           user: firebaseUser,
-          role: userDoc?.role || null,
+          role,
           linkedPlayerId: userDoc?.linkedPlayerId || null,
           loading: false,
           error: null,
@@ -57,10 +65,12 @@ const useAuthStore = create((set, get) => ({
 
 // Selectors — funzionano sempre, perché leggono dallo state corrente
 export const selectIsAdmin = (s) => s.role === 'admin' || s.role === 'superadmin';
-// Usa il ruolo Firestore come fonte di verità, con fallback all'email env per la
-// migrazione iniziale (quando il documento utente non ha ancora role='superadmin').
+// Usa il ruolo Firestore come fonte di verità, con fallback all'email owner per la
+// migrazione iniziale (quando il documento utente non ha ancora role='superadmin',
+// es. self-heal non ancora completato o write offline in coda). `isOwnerEmail` è
+// robusto rispetto al secret VITE_ADMIN_EMAIL mancante (fallback hardcoded).
 export const selectIsSuperAdmin = (s) =>
   s.role === 'superadmin' ||
-  (SUPER_ADMIN_EMAIL !== '' && s.user?.email === SUPER_ADMIN_EMAIL && s.role === 'admin');
+  (s.role === 'admin' && isOwnerEmail(s.user?.email));
 
 export default useAuthStore;

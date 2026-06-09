@@ -16,7 +16,7 @@ const CHANGELOG = [
     version: '3.15.4',
     date: 'Giugno 2026',
     entries: [
-      { type: 'fix', text: 'Gestione Utenti: il proprietario dell\'app (superadmin) appariva come "Admin" nella propria riga della lista utenti invece di "Super Admin". Causa: il controllo del ruolo nella lista usava il valore grezzo Firestore, che per retrocompatibilità può essere "admin" anziché "superadmin", mentre il resto dell\'app usa già il fallback sull\'email per riconoscere il ruolo corretto. Ora i due controlli sono allineati.' },
+      { type: 'fix', text: 'Ruolo Super Admin del proprietario ripristinato. Il profilo dell\'owner era rimasto registrato come "Admin" e non veniva più promosso a "Super Admin": la migrazione automatica girava solo al login esplicito (non al ripristino della sessione già attiva) e dipendeva da un parametro di configurazione del build che poteva mancare. Ora l\'identità dell\'owner ha un riconoscimento robusto e indipendente da quel parametro, e la promozione a Super Admin viene applicata automaticamente alla riapertura dell\'app. Di conseguenza la lista Gestione Utenti mostra di nuovo "Super Admin" e tornano disponibili i poteri da superadmin (modifica degli altri admin).' },
     ],
   },
   {

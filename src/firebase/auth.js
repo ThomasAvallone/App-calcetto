@@ -1,6 +1,7 @@
 import { signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp, collection, getDocs, query, where } from 'firebase/firestore';
 import { auth, googleProvider, db } from './config';
+import { isOwnerEmail } from '../constants/owner';
 
 export async function loginWithGoogle() {
   const result = await signInWithPopup(auth, googleProvider);
@@ -9,9 +10,8 @@ export async function loginWithGoogle() {
   const userRef = doc(db, 'users', user.uid);
   const snap = await getDoc(userRef);
 
-  const SUPER_ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL || '';
   const emailLower = (user.email || '').toLowerCase();
-  const isSuperAdminEmail = emailLower === SUPER_ADMIN_EMAIL.toLowerCase();
+  const isSuperAdminEmail = isOwnerEmail(user.email);
 
   if (!snap.exists()) {
     await setDoc(userRef, {
@@ -33,6 +33,17 @@ export async function loginWithGoogle() {
   }
 
   return user;
+}
+
+// Promuove l'owner da 'admin' a 'superadmin'. Usata come self-heal al ripristino
+// di sessione (vedi authStore.init): la migrazione in loginWithGoogle gira SOLO al
+// login esplicito col popup, quindi un owner con sessione persistita e doc rimasto
+// 'admin' non veniva mai promosso. Le rules consentono questa auto-promozione (solo
+// il campo role, sul proprio doc). Ritorna true se la write va a buon fine.
+export async function promoteOwnerToSuperAdmin(uid) {
+  if (!uid) return false;
+  await updateDoc(doc(db, 'users', uid), { role: 'superadmin' });
+  return true;
 }
 
 export async function logout() {
