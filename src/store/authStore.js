@@ -21,11 +21,14 @@ const useAuthStore = create((set, get) => ({
         let role = userDoc?.role || null;
         // Self-heal owner: la migrazione admin→superadmin in loginWithGoogle gira
         // SOLO al login esplicito. Con una sessione persistita un owner rimasto
-        // 'admin' non verrebbe mai promosso. Promuovilo ora (le rules lo permettono);
-        // se la write fallisce (offline/permessi) non è critico.
+        // 'admin' non verrebbe mai promosso. Fire-and-forget, MAI await: offline la
+        // write resta in coda e la sua promise non risolverebbe mai → l'app si
+        // bloccherebbe sulla splash. Il role locale si promuove comunque: le rules
+        // permettono questa write e selectIsSuperAdmin riconosce l'owner anche
+        // con role='admin' (fallback email), quindi non c'è rischio di incoerenza.
         if (role === 'admin' && isOwnerEmail(firebaseUser.email)) {
-          const ok = await promoteOwnerToSuperAdmin(firebaseUser.uid).catch(() => false);
-          if (ok) role = 'superadmin';
+          promoteOwnerToSuperAdmin(firebaseUser.uid).catch(() => {});
+          role = 'superadmin';
         }
         newState = {
           user: firebaseUser,
