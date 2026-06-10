@@ -158,7 +158,7 @@ export function generateMatchReport(match, players) {
 
   const redWon = match.redScore > match.blueScore;
   const draw = match.redScore === match.blueScore;
-  const winner = draw ? 'PAREGGIO' : redWon ? '🔴 VITTORIA ROSSI' : '🔵 VITTORIA BLU';
+  const winner = draw ? '🤝 *PAREGGIO*' : redWon ? '🔴 *VITTORIA ROSSI*' : '🔵 *VITTORIA BLU*';
 
   // MVP "tecnico" — stessa logica usata dalla card del Report Modal (computeMatchMVP)
   const mvp = computeMatchMVP(match.events);
@@ -227,46 +227,45 @@ export function generateMatchReport(match, players) {
   const timeline = [...goals, ...autogoals].sort((a, b) => (a.minute ?? 999) - (b.minute ?? 999));
   const timelineWithPartial = withProgressiveScore(timeline);
 
-  const dateStr = match.date
+  const rawDate = match.date
     ? new Date(match.date?.toDate ? match.date.toDate() : match.date)
         .toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
     : '?';
+  const dateStr = rawDate.charAt(0).toUpperCase() + rawDate.slice(1);
 
-  return `⚽ CALCETTO ANALYTICS — VERDETTO FINALE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📅 ${dateStr}
-${winner}
+  // Stessa impaginazione WhatsApp-friendly della Match Preview: blocchi uniti da
+  // una sola riga vuota, grassetti/corsivi WhatsApp (*…* / _…_), niente
+  // righe-separatore lunghe (su WhatsApp andrebbero a capo impaginando male).
+  const sections = [];
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🏟️ TABELLINO
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🔴 Rossi ${match.redScore} — ${match.blueScore} Blu 🔵
+  sections.push(`🏆 *VERDETTO FINALE*\n📅 ${dateStr}`);
 
-📋 CRONACA GOL
-${timelineWithPartial.length === 0 ? '  Nessun gol (un capolavoro di inutilità)' : timelineWithPartial.map(ev => {
-    const min = ev.minute != null ? `${String(ev.minute).padStart(2, '0')}'` : '  ';
-    const team = ev.team === 'red' ? '🔴' : '🔵';
-    const partial = `[${ev.partialRed}–${ev.partialBlue}]`;
-    if (ev.type === 'goal') {
-      const assist = ev.assistName && ev.assistName !== 'Nessuno' ? ` (assist: ${ev.assistName})` : '';
-      return `  ${min} ${team} ⚽ ${resolveName(ev)}${assist} ${partial}`;
-    } else {
-      return `  ${min} ${team} 🤦 AUTOGOL ${resolveName(ev)} ${partial}`;
-    }
-  }).join('\n')}
+  sections.push(`🔴 Rossi *${match.redScore} – ${match.blueScore}* Blu 🔵\n${winner}`);
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🔴 ROSSI: ${(match.redTeam || []).map(p => p.name).join(' • ')}
-🔵 BLU: ${(match.blueTeam || []).map(p => p.name).join(' • ')}
+  const cronaca = timelineWithPartial.length === 0
+    ? '_Nessun gol (un capolavoro di inutilità)_'
+    : timelineWithPartial.map(ev => {
+        const min = ev.minute != null ? `${String(ev.minute).padStart(2, '0')}'` : '—';
+        const team = ev.team === 'red' ? '🔴' : '🔵';
+        const partial = `[${ev.partialRed}–${ev.partialBlue}]`;
+        if (ev.type === 'goal') {
+          const assist = ev.assistName && ev.assistName !== 'Nessuno' ? ` _(assist: ${ev.assistName})_` : '';
+          return `${min} ${team} ⚽ ${resolveName(ev)}${assist} ${partial}`;
+        }
+        return `${min} ${team} 🤦 AUTOGOL ${resolveName(ev)} ${partial}`;
+      }).join('\n');
+  sections.push(`📋 *Cronaca gol*\n${cronaca}`);
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🏆 MVP TECNICO
-${mvpName ? `⭐ ${mvpName} (${mvp.points} pt)` : 'Nessun meritevole trovato'}
+  const rosters = [];
+  if (match.redTeam?.length) rosters.push(`🔴 *Rossi:* ${match.redTeam.map(p => p.name).join(' • ')}`);
+  if (match.blueTeam?.length) rosters.push(`🔵 *Blu:* ${match.blueTeam.map(p => p.name).join(' • ')}`);
+  if (rosters.length) sections.push(rosters.join('\n'));
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🥫 PREMI DI LATTA
-${tinAwards.length > 0 ? tinAwards.join('\n') : 'Stasera tutti promossi. Miracolo.'}
+  sections.push(`⭐ *MVP Tecnico*\n${mvpName ? `⭐ ${mvpName} (${mvp.points} pt)` : '_Nessun meritevole trovato_'}`);
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Powered by Calcetto Analytics`;
+  sections.push(`🥫 *Premi di Latta*\n${tinAwards.length > 0 ? tinAwards.join('\n') : '_Stasera tutti promossi. Miracolo._'}`);
+
+  sections.push('_Powered by Calcetto Analytics_');
+
+  return sections.join('\n\n');
 }

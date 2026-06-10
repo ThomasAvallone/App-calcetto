@@ -15,6 +15,13 @@ import toast from 'react-hot-toast';
 
 const CHANGELOG = [
   {
+    version: '3.19.1',
+    date: 'Giugno 2026',
+    entries: [
+      { type: 'improve', text: 'Verdetto finale rinnovato per la condivisione, in linea con la Match Preview: grassetti e corsivi WhatsApp, sezioni compatte separate da una riga vuota e niente righe-separatore lunghe che andavano a capo impaginando male. Le formazioni vuote non lasciano più righe orfane.' },
+    ],
+  },
+  {
     version: '3.19.0',
     date: 'Giugno 2026',
     entries: [

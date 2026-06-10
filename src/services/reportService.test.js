@@ -109,6 +109,45 @@ describe('generateMatchReport — premi di latta e cronaca', () => {
   });
 });
 
+describe('generateMatchReport — formattazione WhatsApp-friendly', () => {
+  const match = {
+    redScore: 2, blueScore: 1,
+    redTeam: [{ id: 'p1', name: 'Marco' }],
+    blueTeam: [{ id: 'p2', name: 'Luca' }],
+    events: [
+      goal({ team: 'red', scorerId: 'p1', scorerName: 'Marco', minute: 5 }),
+      goal({ team: 'blue', scorerId: 'p2', scorerName: 'Luca', minute: 20 }),
+      goal({ team: 'red', scorerId: 'p1', scorerName: 'Marco', minute: 40 }),
+    ],
+  };
+
+  it('niente righe-separatore lunghe (impaginano male su WhatsApp)', () => {
+    expect(generateMatchReport(match, players)).not.toContain('━');
+  });
+
+  it('header in stile preview: titolo bold + sezioni bold', () => {
+    const r = generateMatchReport(match, players);
+    expect(r).toContain('*VERDETTO FINALE*');
+    expect(r).toContain('*Cronaca gol*');
+    expect(r).toContain('*MVP Tecnico*');
+    expect(r).toContain('*Premi di Latta*');
+    expect(r).toContain(`🔴 Rossi *2 – 1* Blu 🔵`);
+  });
+
+  it('blocchi separati da UNA sola riga vuota (mai doppie)', () => {
+    expect(generateMatchReport(match, players)).not.toMatch(/\n\n\n/);
+  });
+
+  it('formazioni su riga compatta, omesse se mancanti', () => {
+    const r = generateMatchReport(match, players);
+    expect(r).toContain('🔴 *Rossi:* Marco');
+    expect(r).toContain('🔵 *Blu:* Luca');
+    // Senza team: nessuna riga formazione orfana
+    const bare = generateMatchReport({ redScore: 0, blueScore: 0, events: [] }, players);
+    expect(bare).not.toContain('*Rossi:*');
+  });
+});
+
 describe('computeMatchMVP — source of truth unica (card + verdetto)', () => {
   it('lista vuota / null → null', () => {
     expect(computeMatchMVP([])).toBeNull();
