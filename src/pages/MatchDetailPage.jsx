@@ -4,7 +4,8 @@ import { getMatch, getMatches, updateMatch, deleteMatch, recalculatePlayerStats 
 import useAuthStore, { selectIsAdmin } from '../store/authStore';
 import usePlayersStore from '../store/playersStore';
 import { generateMatchReport, computeMatchMVP } from '../services/reportService';
-import { generateMatchCommentary } from '../services/geminiService';
+import { generateMatchCommentary, generateMatchHeadline } from '../services/geminiService';
+import { eventsSignature, isHeadlineFresh } from '../utils/eventsSignature';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import toast from 'react-hot-toast';
@@ -14,6 +15,7 @@ import MatchReplay from '../components/MatchReplay';
 import BestieSection from '../components/match/BestieSection';
 import RatingSection from '../components/match/RatingSection';
 import ReactionsSection from '../components/match/ReactionsSection';
+import PagelleSection from '../components/match/PagelleSection';
 
 function weatherIcon(condition) {
   const icons = { sunny: '☀️', cloudy: '☁️', rainy: '🌧️', cold: '🥶', hot: '🔥', wind: '💨' };
@@ -86,6 +88,19 @@ export default function MatchDetailPage() {
     getMatches().then(ms => { allMatchesRef.current = ms; });
   }, [id]);
 
+  // Rigenera il titolo AI dopo una modifica agli eventi (fire-and-forget, non
+  // critico): il titolo salvato porta con sé la firma degli eventi, quindi se
+  // questa rigenerazione fallisce il vecchio titolo risulta "stale" e viene
+  // semplicemente nascosto in HistoryPage invece di mostrare un titolo sbagliato.
+  const refreshHeadline = (updated) => {
+    if (updated?.status !== 'finished' || updated.isHistorical) return;
+    generateMatchHeadline(updated).then(headline => {
+      const sig = eventsSignature(updated.events);
+      updateMatch(id, { aiHeadline: headline, aiHeadlineSig: sig }).catch(() => {});
+      setMatch(m => ({ ...m, aiHeadline: headline, aiHeadlineSig: sig }));
+    }).catch(() => {});
+  };
+
   // Ricalcola le statistiche usando dati già in cache, evitando read extra su Firestore.
   // updatedMatch: la versione aggiornata della partita corrente (null se eliminata).
   const recalcStats = async (playerIds, updatedMatch) => {
@@ -133,6 +148,7 @@ export default function MatchDetailPage() {
       setSaving(false);
       return;
     }
+    refreshHeadline(updated);
     // 2) Ricalcolo statistiche — non-critico e ISOLATO (come endMatch): un suo
     //    errore non deve far sparire dalla UI un evento già salvato su Firestore.
     try {
@@ -203,6 +219,7 @@ export default function MatchDetailPage() {
       return;
     }
     setAddForm({ type: 'goal', team: 'red', scorerId: '', assistId: '', gkId: '', minute: '' });
+    refreshHeadline(updated);
     // 2) Ricalcolo statistiche — non-critico e ISOLATO: un suo errore non deve
     //    far sparire dalla UI un evento già salvato su Firestore.
     try {
@@ -260,6 +277,7 @@ export default function MatchDetailPage() {
       setSaving(false);
       return;
     }
+    refreshHeadline({ ...match, events: newEvents });
     // 2) Ricalcolo statistiche — non-critico e ISOLATO: un suo errore non deve
     //    far sparire dalla UI un evento già salvato su Firestore.
     try {
@@ -517,6 +535,11 @@ export default function MatchDetailPage() {
 
       {/* Score */}
       <div className="card mb-4" style={{ textAlign: 'center' }}>
+        {isHeadlineFresh(match) && (
+          <div style={{ fontSize: '0.92rem', fontWeight: 700, fontStyle: 'italic', color: '#B794F4', marginBottom: '0.5rem', lineHeight: 1.4 }}>
+            🗞️ «{match.aiHeadline}»
+          </div>
+        )}
         {match.weather?.condition && (
           <div style={{ fontSize: '0.75rem', color: '#718096', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}>
             <span>{weatherIcon(match.weather.condition)}</span>
@@ -694,6 +717,11 @@ export default function MatchDetailPage() {
       {/* Reactions — all logged-in users */}
       {match.status === 'finished' && (
         <ReactionsSection matchId={match.id} userId={user?.uid || null} displayName={reactionDisplayName} />
+      )}
+
+      {/* Pagelle AI — cache condivisa, generazione admin */}
+      {match.status === 'finished' && !match.isHistorical && (
+        <PagelleSection match={match} isAdmin={isAdmin} />
       )}
 
       {/* Rating section */}

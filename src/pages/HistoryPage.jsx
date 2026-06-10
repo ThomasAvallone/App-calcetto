@@ -8,6 +8,7 @@ import toast from 'react-hot-toast';
 import { safeDate } from '../utils/dateUtils';
 import { downloadICS } from '../utils/calendarUtils';
 import { withProgressiveScore } from '../utils/matchScore';
+import { isHeadlineFresh } from '../utils/eventsSignature';
 
 const HISTORY_SS_KEY = 'history-page-state';
 const readSS = () => { try { return JSON.parse(sessionStorage.getItem(HISTORY_SS_KEY)) || {}; } catch { return {}; } };
@@ -585,6 +586,9 @@ function MatchCard({ match: m, onClick }) {
   const d = safeDate(m.date);
   const goals = (m.events || []).filter(e => e.type === 'goal');
   const matchBadges = m.status === 'finished' ? getMatchBadges(m) : [];
+  // Titolo AI: mostrato solo se la firma eventi coincide (eventi non modificati
+  // dopo la generazione) — un titolo stale viene nascosto, mai mostrato sbagliato.
+  const headline = m.status === 'finished' && isHeadlineFresh(m) ? m.aiHeadline : null;
 
   // Lookup nome giocatore per le partite storiche (che hanno solo scorerId, non scorerName)
   const playerById = Object.fromEntries(
@@ -656,6 +660,12 @@ function MatchCard({ match: m, onClick }) {
           <path d="M9 18l6-6-6-6"/>
         </svg>
       </div>
+      {/* Titolo AI */}
+      {headline && (
+        <div style={{ fontSize: '0.78rem', fontWeight: 600, fontStyle: 'italic', color: '#B794F4', marginBottom: '0.35rem', lineHeight: 1.4 }}>
+          🗞️ {headline}
+        </div>
+      )}
       {/* Marcatori aggregati */}
       {(Object.keys(redMap).length > 0 || Object.keys(blueMap).length > 0) && (
         <div className="text-xs text-secondary">

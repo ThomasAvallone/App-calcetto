@@ -14,7 +14,8 @@ import { waitUndo } from '../utils/waitUndo';
 import { withTimeout, isTimeout } from '../utils/withTimeout';
 import { scoreFromEvents, withProgressiveScore } from '../utils/matchScore';
 import { parseVoiceGoal } from '../utils/voiceParser';
-import { parseVoiceGoalWithAI } from '../services/geminiService';
+import { parseVoiceGoalWithAI, generateMatchHeadline } from '../services/geminiService';
+import { eventsSignature } from '../utils/eventsSignature';
 import toast from 'react-hot-toast';
 
 const MATCH_DURATION = 60 * 60; // durata regolamentare (per progress bar)
@@ -492,7 +493,7 @@ export default function MatchPage() {
       if (confettiWinner) setShowConfetti(confettiWinner);
       reportTimeoutRef.current = setTimeout(() => { setShowConfetti(null); setReportModal(true); }, 2200);
 
-      // Salva report+meteo su Firestore in background (fire-and-forget).
+      // Salva report+meteo+titolo AI su Firestore in background (fire-and-forget).
       // Un eventuale errore di rete qui non deve nascondere il verdetto all'utente.
       if (activeMatchId) {
         const mid = activeMatchId;
@@ -501,6 +502,14 @@ export default function MatchPage() {
           if (!freshMatch?.weather?.temp) {
             const w = await fetchWeatherForDate(new Date()).catch(() => null);
             if (w) extraFields.weather = w;
+          }
+          // Titolo AI per HistoryPage: la firma eventi lo invalida da sola se la
+          // cronaca viene poi modificata in post (vedi utils/eventsSignature).
+          const headlineSrc = { ...freshMatch, events: snapshotEvents, redScore, blueScore };
+          const headline = await generateMatchHeadline(headlineSrc).catch(() => null);
+          if (headline) {
+            extraFields.aiHeadline = headline;
+            extraFields.aiHeadlineSig = eventsSignature(snapshotEvents);
           }
           updateMatch(mid, extraFields).catch(() => {});
         })();

@@ -60,6 +60,7 @@ src/
 │   ├── roleIcons.js          # getRoleIcon(role) — emoji ruolo, condiviso setup/scheduled
 │   ├── matchSyncState.js / matchSyncState.test.js  # stato indicatore sync live (puro)
 │   ├── withTimeout.js / withTimeout.test.js  # withTimeout/isTimeout — bound su await di write Firestore (offline non risolvono mai)
+│   ├── eventsSignature.js / eventsSignature.test.js  # firma eventi → invalida titolo/pagelle AI dopo modifiche in post
 │   └── waitUndo.js           # Toast con countdown per operazioni annullabili
 ├── constants/
 │   ├── colors.js             # Costanti colori (CLR_WIN, CLR_LOSS, ecc.)
@@ -124,6 +125,7 @@ src/
 - `BestieSection.jsx` — Premio "Bestie" (admin); toggle con ri-click, ricalcola PI del vecchio e nuovo holder.
 - `MatchPreviewCard.jsx` — Card "Match Preview" condivisa (titolo + Copia/WhatsApp + `<pre>`), usata da MatchSetupPage e ScheduledMatchDetailPage. La logica copia/condivisione sta in `hooks/useMatchPreview.js`.
 - `MatchSyncChip.jsx` — Chip stato sincronizzazione partita live (offline 🔴 / salvataggio 🟡 / sincronizzato 🟢). Stato/visibilità puri in `utils/matchSyncState.js`; segnali da `hooks/useMatchSyncStatus.js`.
+- `PagelleSection.jsx` — Pagelle AI post-partita (Gemini `generateMatchPagelle`). Generazione admin-only, testo in cache condivisa `settings/aiCache_pagelle_{matchId}` con firma eventi (`utils/eventsSignature.js`): se la cronaca cambia compare "⚠️ Eventi modificati" e si rigenera.
 
 ## Convenzioni
 
@@ -198,6 +200,8 @@ Aree già revisionate a fondo (bug + hardening + test). **Non rifare questi chec
 - **Infortuni live**: registrabili durante la partita (`matchStore.recordInjury` → evento `injury` con `team`, optimistic + rollback). Lo storico infortuni (`InjuryHistory`) usa `ev.team`.
 - **Indicatore sync live** (`MatchSyncChip` + `useMatchSyncStatus`): la persistenza IndexedDB è **attiva** (`config.js` → `enableIndexedDbPersistence`), quindi le scritture offline restano in coda e si sincronizzano da sole — i messaggi del chip lo riflettono (niente "i dati potrebbero non sincronizzarsi"). `hasPendingWrites` arriva da `subscribeToMatchSync`, un listener **metadata-aware separato** (`includeMetadataChanges:true`) sul doc `matches/{id}`, SOLO-LETTURA: ⚠️ **non** aggiungere `includeMetadataChanges` a `subscribeToMatch` (lo store) — provocherebbe render spuri e callback extra sull'optimistic-update. Il chip è nascosto a partita `finished`; per i viewer lo stato `synced` non si mostra. Precedenza stati: offline > syncing > synced.
 - **Flusso match (MatchPage/MatchSetupPage)** — comportamenti da non disfare: (A4) protezione anti-uscita su partita `active` con eventi tramite **`beforeunload`** (refresh/chiusura scheda). ⚠️ **NON usare `useBlocker`/hook da data-router** (`useNavigation`, `useLoaderData`, ecc.): l'app monta `<BrowserRouter>` (vedi `main.jsx`), non un data router. Con `BrowserRouter` quegli hook chiamano `invariant(false)` che **in build di produzione è un `Error` senza messaggio** → crash dell'intera pagina ("Errore inatteso"). È esattamente il bug che ha bloccato la MatchPage live. Se serve il blocco di navigazione in-app, migrare prima a `createBrowserRouter` + `RouterProvider`. (D2) MatchSetupPage avvisa con toast al superamento dei 10 giocatori e chiede conferma su "Pianifica senza giocatori"; (D3) i timer di animazione (goalFlash/scoreShake/scoreBounce) usano ref dedicate e guard `isMountedRef` nei `setTimeout` per evitare set su componente smontato e collisioni su gol ravvicinati.
+
+- **Titolo AI partita** 🗞️: campo `aiHeadline` + `aiHeadlineSig` sul doc match (write admin). Generato a fine partita (background IIFE in `MatchPage.handleEndMatch`), rigenerato fire-and-forget ad ogni modifica eventi in `MatchDetailPage` (`refreshHeadline`), retroattivo via bottone AdminPage (ultimi 2 mesi). Mostrato in HistoryPage/MatchDetailPage **solo se `isHeadlineFresh(match)`** (firma eventi coincidente): un titolo stale si nasconde, mai mostrato sbagliato. La firma (`eventsSignature`) è order-insensitive e copre type/team/scorer/assist/minute.
 
 ## Gemini (modelli)
 

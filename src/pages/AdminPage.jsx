@@ -6,12 +6,22 @@ import { doc, getDocs, collection, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { HISTORICAL_SEASONS, getCurrentRosterPlayers, computeCumulativeStats } from '../data/historicalData';
 import useAuthStore, { selectIsAdmin, selectIsSuperAdmin } from '../store/authStore';
-import { getAICallCount, onAICallCountChange, resetAICallCount } from '../services/geminiService';
+import { getAICallCount, onAICallCountChange, resetAICallCount, generateMatchHeadline } from '../services/geminiService';
+import { eventsSignature } from '../utils/eventsSignature';
+import { getMs } from '../utils/dateUtils';
 import { exportJSON, exportMatchesCSV, exportPlayersCSV } from '../utils/dataExport';
 import { DEFAULT_PI_CONFIG } from '../utils/playerStats';
 import toast from 'react-hot-toast';
 
 const CHANGELOG = [
+  {
+    version: '3.19.0',
+    date: 'Giugno 2026',
+    entries: [
+      { type: 'new', text: '📝 Pagelle AI post-partita: nel dettaglio di ogni partita conclusa gli admin possono generare le pagelle stile quotidiano sportivo — un voto e un commento tagliente per ogni giocatore, basati su gol, assist, autogol, parate, infortuni e voti della giuria admin. Il testo è in cache condivisa (una sola chiamata Gemini, lo vedono tutti) con bottoni Copia/WhatsApp; se la cronaca viene modificata in post compare l\'avviso "eventi modificati" e si possono rigenerare.' },
+      { type: 'new', text: '🗞️ Titoli AI delle partite: ogni partita riceve alla chiusura un titolo stile giornale sportivo ("La rimonta del secolo: da 0-3 a 5-4"), mostrato nello Storico e nel dettaglio. Se gli eventi vengono modificati in post, il titolo viene rigenerato automaticamente; finché non è aggiornato viene nascosto (mai mostrato un titolo sbagliato). In Admin un bottone genera retroattivamente i titoli mancanti per le partite degli ultimi 2 mesi.' },
+    ],
+  },
   {
     version: '3.18.0',
     date: 'Giugno 2026',
@@ -509,6 +519,7 @@ export default function AdminPage() {
   const [showChangelog, setShowChangelog] = useState(false);
   const [showPIEditor, setShowPIEditor] = useState(false);
   const [healthIssues, setHealthIssues] = useState(null);
+  const [headlineProgress, setHeadlineProgress] = useState(null);
   const [expandedHealthGroups, setExpandedHealthGroups] = useState({});
   const [piCfg, setPICfg] = useState(DEFAULT_PI_CONFIG);
   const [piSaving, setPISaving] = useState(false);
@@ -616,6 +627,47 @@ export default function AdminPage() {
     } finally {
       setRecalculating(false);
     }
+  };
+
+  // Genera (o aggiorna) il titolo AI per le partite degli ultimi 2 mesi che ne
+  // sono prive o il cui titolo è stale (eventi modificati dopo la generazione).
+  // Sequenziale: una chiamata Gemini per partita, con progresso visibile.
+  const handleGenerateHeadlines = async () => {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      toast.error('Sei offline — i titoli AI richiedono la rete');
+      return;
+    }
+    const cutoff = Date.now() - 60 * 24 * 60 * 60 * 1000;
+    const targets = matches.filter(m =>
+      m.status === 'finished' && !m.isHistorical &&
+      getMs(m.date) >= cutoff &&
+      (m.events || []).length > 0 &&
+      (!m.aiHeadline || m.aiHeadlineSig !== eventsSignature(m.events))
+    );
+    if (targets.length === 0) {
+      toast('Tutte le partite degli ultimi 2 mesi hanno già un titolo aggiornato ✓');
+      return;
+    }
+    if (!window.confirm(`Generare il titolo AI per ${targets.length} partit${targets.length === 1 ? 'a' : 'e'} degli ultimi 2 mesi? (${targets.length} chiamate Gemini)`)) return;
+    setHeadlineProgress({ done: 0, total: targets.length });
+    let ok = 0, failed = 0;
+    const updatedById = {};
+    for (const m of targets) {
+      try {
+        const headline = await generateMatchHeadline(m);
+        const sig = eventsSignature(m.events);
+        await updateMatch(m.id, { aiHeadline: headline, aiHeadlineSig: sig });
+        updatedById[m.id] = { aiHeadline: headline, aiHeadlineSig: sig };
+        ok++;
+      } catch {
+        failed++;
+      }
+      setHeadlineProgress(p => (p ? { ...p, done: p.done + 1 } : p));
+    }
+    setMatches(ms => ms.map(m => updatedById[m.id] ? { ...m, ...updatedById[m.id] } : m));
+    setHeadlineProgress(null);
+    if (failed > 0) toast.error(`${ok} titoli generati, ${failed} falliti — riprova più tardi`);
+    else toast.success(`🗞️ ${ok} titoli generati!`);
   };
 
   const handleHealthCheck = () => {
@@ -843,6 +895,26 @@ export default function AdminPage() {
             🗄️ JSON Backup Completo
           </button>
         </div>
+      </div>
+
+      {/* Titoli AI retroattivi */}
+      <div className="card mb-4 stagger-4" style={{ border: '1px solid rgba(183,148,244,0.25)', background: 'rgba(183,148,244,0.03)' }}>
+        <h3 className="mb-1">🗞️ Titoli AI Partite</h3>
+        <p className="text-sm text-muted mb-3">
+          Genera il titolo stile giornale sportivo per le partite degli ultimi 2 mesi
+          che non lo hanno (o con eventi modificati dopo la generazione). Le nuove
+          partite ricevono il titolo automaticamente alla chiusura.
+        </p>
+        <button
+          className="btn btn-full"
+          style={{ background: 'rgba(183,148,244,0.12)', color: '#B794F4', border: '1px solid rgba(183,148,244,0.4)', fontWeight: 700 }}
+          onClick={handleGenerateHeadlines}
+          disabled={!!headlineProgress}
+        >
+          {headlineProgress
+            ? `⏳ Generazione... ${headlineProgress.done}/${headlineProgress.total}`
+            : '🗞️ Genera Titoli AI (ultimi 2 mesi)'}
+        </button>
       </div>
 
       {/* PI Formula Editor */}

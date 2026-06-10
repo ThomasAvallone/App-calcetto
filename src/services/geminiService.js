@@ -4,6 +4,7 @@
 // Protezione aggiuntiva: imposta la restrizione HTTP referrer su Google Cloud Console.
 
 import { resolveBalancedTeams, resolveVoiceGoal } from '../utils/aiResolve';
+import { withProgressiveScore } from '../utils/matchScore';
 
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 
@@ -429,6 +430,118 @@ DATI GIOCATORE: ${player.name}
 - Streak attuale: ${streakStr}`;
 
   return callGemini(prompt, { temperature: 0.97, maxTokens: 120 });
+}
+
+// ─── Titolo AI partita (headline per HistoryPage) ────────────────────────────
+// Una riga stile titolo di giornale sportivo, generata dagli eventi. Il chiamante
+// salva sul doc partita { aiHeadline, aiHeadlineSig } (vedi utils/eventsSignature)
+// così il titolo viene invalidato/rigenerato se gli eventi cambiano in post.
+export async function generateMatchHeadline(match) {
+  const playerById = Object.fromEntries(
+    [...(match.redTeam || []), ...(match.blueTeam || [])].filter(p => p.id).map(p => [p.id, p.name])
+  );
+  const resolve = ev => ev.scorerName || playerById[ev.scorerId] || '?';
+
+  const annotated = withProgressiveScore(
+    (match.events || [])
+      .filter(e => e.type === 'goal' || e.type === 'autogoal')
+      .sort((a, b) => (a.minute ?? 999) - (b.minute ?? 999))
+  );
+  const timeline = annotated.length === 0
+    ? 'Nessun gol (0-0).'
+    : annotated.map(ev => {
+        const min = ev.minute != null ? `${ev.minute}'` : '?';
+        const who = ev.type === 'autogoal' ? `AUTOGOL di ${resolve(ev)}` : `gol di ${resolve(ev)}`;
+        return `${min} ${ev.team === 'red' ? 'Rossi' : 'Blu'}: ${who} → ${ev.partialRed}-${ev.partialBlue}`;
+      }).join('\n');
+
+  const winner = match.redScore > match.blueScore ? 'vittoria Rossi'
+    : match.blueScore > match.redScore ? 'vittoria Blu' : 'pareggio';
+
+  const prompt = `Sei un titolista di giornale sportivo italiano: titoli brevi, evocativi, ironici quando serve.
+Scrivi UN SOLO titolo per questa partita di calcetto tra amici.
+
+REGOLE:
+- Massimo 10 parole, una sola riga
+- Niente virgolette, markdown, emoji o punto finale
+- Se c'è una rimonta, un crollo, una doppietta/tripletta o un autogol decisivo, valorizzalo
+- Puoi citare al massimo un nome di giocatore
+
+DATI:
+Risultato: Rossi ${match.redScore} – ${match.blueScore} Blu (${winner})
+Cronologia con parziale progressivo:
+${timeline}
+
+Scrivi solo il titolo:`;
+
+  const raw = await callGemini(prompt, { temperature: 0.95, maxTokens: 60, tier: 'fast' });
+  // Difensivo: prendi solo la prima riga e ripulisci virgolette/markdown residui
+  return raw.split('\n')[0].replace(/^["'«*\s]+|["'»*\s.]+$/g, '').slice(0, 120);
+}
+
+// ─── Pagelle AI post-partita ─────────────────────────────────────────────────
+// Una riga di pagella per ogni giocatore, stile quotidiano sportivo. Riceve il
+// match completo; estrae contributi per giocatore dagli eventi e media voti admin.
+export async function generateMatchPagelle(match) {
+  const events = match.events || [];
+
+  // Media voti admin per giocatore (match.ratings = { uid: { raterName, scores: { pid: n } } })
+  const ratingSum = {}, ratingCount = {};
+  for (const rating of Object.values(match.ratings || {})) {
+    for (const [pid, score] of Object.entries(rating?.scores || {})) {
+      if (typeof score !== 'number') continue;
+      ratingSum[pid] = (ratingSum[pid] || 0) + score;
+      ratingCount[pid] = (ratingCount[pid] || 0) + 1;
+    }
+  }
+
+  const fmtTeam = (team, label) => team.map(p => {
+    const parts = [];
+    const goals = events.filter(e => e.type === 'goal' && e.scorerId === p.id).length;
+    const assists = events.filter(e => e.type === 'goal' && e.assistId === p.id).length;
+    const autogoals = events.filter(e => e.type === 'autogoal' && e.scorerId === p.id).length;
+    const saves = events.filter(e => e.type === 'save' && e.playerId === p.id).length;
+    const injured = events.some(e => e.type === 'injury' && e.playerId === p.id);
+    const conceded = events.filter(e => (e.type === 'goal' || e.type === 'autogoal') && e.gkConcededId === p.id).length;
+    if (goals) parts.push(`${goals} gol`);
+    if (assists) parts.push(`${assists} assist`);
+    if (autogoals) parts.push(`${autogoals} AUTOGOL`);
+    if (saves) parts.push(`${saves} parate`);
+    if (conceded) parts.push(`${conceded} gol subiti da portiere`);
+    if (injured) parts.push('uscito per infortunio');
+    if (ratingCount[p.id]) parts.push(`voto giuria admin ${(ratingSum[p.id] / ratingCount[p.id]).toFixed(1)}/10`);
+    if (match.bestieId === p.id) parts.push('premio Bestie (peggior madonna della serata)');
+    return `- ${p.name}: ${parts.length ? parts.join(', ') : 'nessun contributo registrato'}`;
+  }).join('\n') || `- (nessun giocatore ${label})`;
+
+  const winner = match.redScore > match.blueScore ? 'Vittoria Rossi'
+    : match.blueScore > match.redScore ? 'Vittoria Blu' : 'Pareggio';
+
+  const prompt = `Sei un giornalista sportivo italiano che scrive le pagelle del lunedì: \
+voti severi ma giusti, commenti fulminanti, ironia da bar sport senza cattiveria gratuita.
+Scrivi le pagelle di questa partita di calcetto tra amici.
+
+REGOLE:
+- UNA riga per OGNI giocatore elencato (nessuno escluso), nel formato esatto:
+Nome — Voto: commento
+- Voto da 4 a 10 (mezzi voti ammessi, es. 6.5), coerente con i contributi e l'esito della squadra
+- Se c'è il voto della giuria admin, usalo come riferimento principale (scostati di poco)
+- Commento di massimo 15 parole, tagliente e specifico sui fatti della partita
+- Chi non ha contributi registrati merita un commento sul suo essere invisibile
+- Prima i Rossi poi i Blu, separati dalle righe "ROSSI:" e "BLU:"
+- Niente markdown, asterischi o testo extra prima/dopo
+
+PARTITA: Rossi ${match.redScore} – ${match.blueScore} Blu (${winner})
+
+ROSSI:
+${fmtTeam(match.redTeam || [], 'rosso')}
+
+BLU:
+${fmtTeam(match.blueTeam || [], 'blu')}
+
+Scrivi le pagelle ora:`;
+
+  return callGemini(prompt, { temperature: 0.9, maxTokens: 1200, tier: 'pro' });
 }
 
 // ─── Voice goal parsing (fallback AI) ────────────────────────────────────────
