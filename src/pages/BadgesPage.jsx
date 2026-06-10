@@ -20,12 +20,19 @@ const SOURCE_LABELS = {
 
 // Classify each badge by the data source it depends on
 function badgeSource(b) {
-  if (b.id === 'bestie') return 'admin';
-  if (['veterano', 'diamante', 'il_prescelto', 'fenomeno', 'on_fire', 'crisi', 'highlander', 're_infermeria'].includes(b.id)) return 'alltime';
+  // madonna_seriale deriva dai premi Bestie (assegnati a mano dagli admin)
+  if (['bestie', 'madonna_seriale'].includes(b.id)) return 'admin';
+  if ([
+    'veterano', 'diamante', 'il_prescelto', 'fenomeno', 'on_fire', 'crisi',
+    'highlander', 're_infermeria',
+    'razzo', 'paracadutista', // trend Power Index (powerHistory)
+  ].includes(b.id)) return 'alltime';
   if ([
     'early_bird', 'lone_ranger', 'meteorite', 'rockstar',
     'che_io_tassista', 'chirurgo', 'bulldozer', 'last_minute',
     'pokemon_leggendario', 'mutombo', 'giancarlo', 'miglior_luciano',
+    'remuntada', 'crollo_verticale', 'killer_instinct', 'patto_di_sangue',
+    'giano_bifronte', 'gatto', 'ritorno_del_re',
   ].includes(b.id)) return 'match';
   return 'season';
 }

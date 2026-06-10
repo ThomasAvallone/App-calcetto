@@ -189,6 +189,117 @@ describe('badge match-event-based', () => {
   });
 });
 
+describe('nuovi badge — parziali, relazioni, premi, trend PI', () => {
+  const redGoal  = (over = {}) => ({ type: 'goal', team: 'red', scorerId: 'p1', ...over });
+  const blueGoal = (over = {}) => ({ type: 'goal', team: 'blue', scorerId: 'p2', ...over });
+
+  it('remuntada: vince dopo essere stato sotto di 3+', () => {
+    // p1 (rosso) sotto 0-3, poi vince 4-3
+    const m = match({ events: [blueGoal(), blueGoal(), blueGoal(), redGoal(), redGoal(), redGoal(), redGoal()] });
+    expect(badge('remuntada').check({}, player(), [m])).toBe(true);
+    // sotto solo di 2 → no
+    const m2 = match({ events: [blueGoal(), blueGoal(), redGoal(), redGoal(), redGoal()] });
+    expect(badge('remuntada').check({}, player(), [m2])).toBe(false);
+    // sotto di 3 ma perde → no
+    const m3 = match({ events: [blueGoal(), blueGoal(), blueGoal(), redGoal()] });
+    expect(badge('remuntada').check({}, player(), [m3])).toBe(false);
+  });
+
+  it('crollo_verticale: perde dopo essere stato avanti di 3+', () => {
+    // p1 (rosso) avanti 3-0, poi perde 3-4
+    const m = match({ events: [redGoal(), redGoal(), redGoal(), blueGoal(), blueGoal(), blueGoal(), blueGoal()] });
+    expect(badge('crollo_verticale').check({}, player(), [m])).toBe(true);
+    expect(badge('remuntada').check({}, player(), [m])).toBe(false); // ha perso
+    // avanti di 3 ma vince → nessun crollo
+    const m2 = match({ events: [redGoal(), redGoal(), redGoal(), blueGoal()] });
+    expect(badge('crollo_verticale').check({}, player(), [m2])).toBe(false);
+  });
+
+  it('killer_instinct: 3+ gol-partita in vittorie di misura', () => {
+    // 2-1 con p1 che segna l'ultimo punto rosso
+    const clutchWin = (id) => match({ id, events: [
+      blueGoal(), redGoal({ scorerId: 'p9' }), redGoal(),
+    ] });
+    expect(badge('killer_instinct').check({}, player(), [clutchWin('a'), clutchWin('b'), clutchWin('c')])).toBe(true);
+    expect(badge('killer_instinct').check({}, player(), [clutchWin('a'), clutchWin('b')])).toBe(false);
+    // vittoria di 2 → non è di misura
+    const easyWin = match({ events: [redGoal(), redGoal()] });
+    expect(badge('killer_instinct').check({}, player(), [easyWin, easyWin, easyWin])).toBe(false);
+    // il punto decisivo è un autogol avversario → nessun credito
+    const autoWin = (id) => match({ id, events: [
+      redGoal(), blueGoal(), { type: 'autogoal', team: 'blue', scorerId: 'p2' },
+    ] });
+    expect(badge('killer_instinct').check({}, player(), [autoWin('a'), autoWin('b'), autoWin('c')])).toBe(false);
+  });
+
+  it('patto_di_sangue: assist reciproco nella STESSA partita', () => {
+    const m = match({ events: [
+      redGoal({ assistId: 'p3' }),
+      redGoal({ scorerId: 'p3', assistId: 'p1' }),
+    ] });
+    expect(badge('patto_di_sangue').check({}, player(), [m])).toBe(true);
+    // reciprocità spalmata su due partite → no
+    const m1 = match({ id: 'x', events: [redGoal({ assistId: 'p3' })] });
+    const m2 = match({ id: 'y', events: [redGoal({ scorerId: 'p3', assistId: 'p1' })] });
+    expect(badge('patto_di_sangue').check({}, player(), [m1, m2])).toBe(false);
+  });
+
+  it('gatto: 3+ parate in una singola partita', () => {
+    const save = { type: 'save', playerId: 'p1' };
+    expect(badge('gatto').check({}, player(), [match({ events: [save, save, save] })])).toBe(true);
+    expect(badge('gatto').check({}, player(), [match({ events: [save, save] })])).toBe(false);
+    // 3 parate ma spalmate su due partite → no
+    const mA = match({ id: 'a', events: [save, save] });
+    const mB = match({ id: 'b', events: [save] });
+    expect(badge('gatto').check({}, player(), [mA, mB])).toBe(false);
+  });
+
+  it('giano_bifronte: gol e autogol nella stessa partita', () => {
+    const m = match({ events: [redGoal(), { type: 'autogoal', team: 'red', scorerId: 'p1' }] });
+    expect(badge('giano_bifronte').check({}, player(), [m])).toBe(true);
+    expect(badge('giano_bifronte').check({}, player(), [match({ events: [redGoal()] })])).toBe(false);
+  });
+
+  it('madonna_seriale: 3+ premi Bestie all-time, storiche escluse', () => {
+    const bestie = (id, over = {}) => match({ id, bestieId: 'p1', ...over });
+    expect(badge('madonna_seriale').check({}, player(), [bestie('a'), bestie('b'), bestie('c')])).toBe(true);
+    expect(badge('madonna_seriale').check({}, player(), [bestie('a'), bestie('b')])).toBe(false);
+    expect(badge('madonna_seriale').check({}, player(), [bestie('a'), bestie('b'), bestie('h', { isHistorical: true })])).toBe(false);
+  });
+
+  it('ritorno_del_re: segna alla prima partita dopo 60+ giorni', () => {
+    const day = 86400000;
+    const old = match({ id: 'old', date: Date.now() - 100 * day });
+    const back = match({ id: 'back', date: Date.now(), events: [redGoal()] });
+    expect(badge('ritorno_del_re').check({}, player(), [old, back])).toBe(true);
+    // assenza di soli 30 giorni → no
+    const recent = match({ id: 'r', date: Date.now() - 30 * day });
+    expect(badge('ritorno_del_re').check({}, player(), [recent, back])).toBe(false);
+    // torna dopo 100 giorni ma non segna → no
+    const backNoGoal = match({ id: 'b2', date: Date.now(), events: [] });
+    expect(badge('ritorno_del_re').check({}, player(), [old, backNoGoal])).toBe(false);
+  });
+
+  it('razzo / paracadutista: delta PI ±10 negli ultimi 30 giorni', () => {
+    const iso = (daysAgo) => new Date(Date.now() - daysAgo * 86400000).toISOString().slice(0, 10);
+    const up = player({ powerHistory: [{ d: iso(20), pi: 60 }, { d: iso(1), pi: 70 }] });
+    expect(badge('razzo').check({}, up)).toBe(true);
+    expect(badge('paracadutista').check({}, up)).toBe(false);
+    const down = player({ powerHistory: [{ d: iso(20), pi: 70 }, { d: iso(1), pi: 60 }] });
+    expect(badge('paracadutista').check({}, down)).toBe(true);
+    expect(badge('razzo').check({}, down)).toBe(false);
+    // +9 → niente razzo
+    const small = player({ powerHistory: [{ d: iso(20), pi: 60 }, { d: iso(1), pi: 69 }] });
+    expect(badge('razzo').check({}, small)).toBe(false);
+    // snapshot fuori finestra (40 giorni fa) ignorato → un solo punto utile → nessun trend
+    const stale = player({ powerHistory: [{ d: iso(40), pi: 50 }, { d: iso(1), pi: 70 }] });
+    expect(badge('razzo').check({}, stale)).toBe(false);
+    // powerHistory assente/vuoto → nessun crash, nessun badge
+    expect(badge('razzo').check({}, player())).toBe(false);
+    expect(badge('paracadutista').check({}, player({ powerHistory: [] }))).toBe(false);
+  });
+});
+
 describe('coerenza definizioni', () => {
   it('ogni badge ha id, icon, label, desc, positive booleano e check funzione', () => {
     const ids = new Set();

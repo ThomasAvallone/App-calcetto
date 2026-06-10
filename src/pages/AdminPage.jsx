@@ -13,6 +13,13 @@ import toast from 'react-hot-toast';
 
 const CHANGELOG = [
   {
+    version: '3.17.0',
+    date: 'Giugno 2026',
+    entries: [
+      { type: 'new', text: '10 nuovi badge — il catalogo sale a 50! Dal parziale progressivo: 🔄 Remuntada (vinci dopo essere stato sotto di 3+) e 🫠 Crollo Verticale (perdi dopo essere stato avanti di 3+). Dalle imprese: 🗡️ Killer Instinct (3+ gol-partita in vittorie di misura), 🤝 Patto di Sangue (assist reciproco con un compagno nella stessa partita), 🐱 Gatto (3+ parate registrate in una partita), 👑 Il Ritorno del Re (segni alla prima partita dopo 60+ giorni di assenza), 🎭 Giano Bifronte (gol e autogol nella stessa partita). Dal trend del Power Index: 🚀 Razzo (+10 PI in 30 giorni) e 🪂 Paracadutista (−10 PI in 30 giorni). E per i recidivi del premio Bestie: 📿 Madonna Seriale (3+ premi all-time). Tutti calcolati al volo dai dati già raccolti, catalogo aggiornato nella pagina Badge.' },
+    ],
+  },
+  {
     version: '3.16.0',
     date: 'Giugno 2026',
     entries: [

@@ -147,7 +147,7 @@ src/
 npm run dev        # Dev server
 npm run build      # Build produzione
 npm run preview    # Preview build
-npm test           # Run Vitest (headless) — ~236 test, 15 file
+npm test           # Run Vitest (headless) — ~245 test, 15 file
 npm run test:watch # Vitest watch mode
 ```
 
@@ -161,7 +161,7 @@ ogni nuova funzione di calcolo va messa lì (non inline nei componenti) e testat
 |--------|-----------|
 | `playerStats.js` | stats, Power Index, streak, recentForm, `computeStatsFromMatches` |
 | `leaderboards.js` | `computeStandings`, `computeDuoStats`, `computeH2HStats`, `computeSquadreStats`, `rankGoalkeepers`, `getSeasonStartMs` |
-| `badges.js` | 40 badge def + `computeBadges` (error-isolation per badge) |
+| `badges.js` | 50 badge def + `computeBadges` (error-isolation per badge) |
 | `weatherStats.js` | aggregati meteo per partita/giocatore |
 | `nextBadge.js` | hint prossimo badge |
 | `aiResolve.js` | `resolveBalancedTeams`, `resolveVoiceGoal` (output Gemini → player) |

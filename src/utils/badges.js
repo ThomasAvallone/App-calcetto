@@ -1,5 +1,6 @@
 import { getMs } from './dateUtils';
 import { computePlayerWeatherStats } from './weatherStats';
+import { withProgressiveScore } from './matchScore';
 
 // Helper usato dai badge meteo: filtra le partite del giocatore e calcola le stats meteo.
 // Esclude esplicitamente partite storiche e non terminate (defensive: computePlayerWeatherStats
@@ -11,6 +12,43 @@ function _getWeatherStats(player, allMatches) {
     [...(m.redTeam || []), ...(m.blueTeam || [])].some(pl => pl.id === player.id)
   );
   return computePlayerWeatherStats(playerMatches, player.id);
+}
+
+// Helper: partite finite non-storiche in cui il player è presente.
+function _playedMatches(pid, matches) {
+  return (matches || []).filter(m =>
+    m.status === 'finished' && !m.isHistorical &&
+    [...(m.redTeam || []), ...(m.blueTeam || [])].some(pl => pl.id === pid)
+  );
+}
+
+// Helper Remuntada/Crollo Verticale: andamento del parziale dal punto di vista del
+// player. Ritorna null se la partita non ha eventi (parziale non ricostruibile).
+function _swingStats(m, pid) {
+  const inRed = (m.redTeam || []).some(pl => pl.id === pid);
+  const annotated = withProgressiveScore(m.events || []);
+  if (!annotated.length) return null;
+  const last = annotated[annotated.length - 1];
+  const myFinal = inRed ? last.partialRed : last.partialBlue;
+  const theirFinal = inRed ? last.partialBlue : last.partialRed;
+  let maxDown = 0, maxUp = 0;
+  for (const ev of annotated) {
+    const diff = inRed ? ev.partialRed - ev.partialBlue : ev.partialBlue - ev.partialRed;
+    if (-diff > maxDown) maxDown = -diff;
+    if (diff > maxUp) maxUp = diff;
+  }
+  return { won: myFinal > theirFinal, lost: myFinal < theirFinal, maxDown, maxUp };
+}
+
+// Helper Razzo/Paracadutista: delta del Power Index negli ultimi 30 giorni, dal
+// powerHistory del player ([{ d: 'YYYY-MM-DD', pi }], max 30 voci, ordine cronologico).
+// Serve almeno 2 snapshot nella finestra, altrimenti 0 (nessun trend misurabile).
+function _piDelta30(p) {
+  const h = Array.isArray(p?.powerHistory) ? p.powerHistory : [];
+  const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  const win = h.filter(e => e && typeof e.pi === 'number' && e.d && new Date(e.d).getTime() >= cutoff);
+  if (win.length < 2) return 0;
+  return win[win.length - 1].pi - win[0].pi;
 }
 
 // Each badge definition uses:
@@ -370,6 +408,117 @@ export const BADGE_DEFS = [
       (s.matches || 0) >= 12 &&
       Math.abs((s.wins || 0) - (s.losses || 0)) <= 1,
   },
+  {
+    id: 'remuntada',
+    icon: '🔄',
+    label: 'Remuntada',
+    desc: 'Vince una partita in cui la sua squadra era sotto di 3+ gol — non è finita finché non è finita',
+    positive: true,
+    check: (_s, p, matches) => {
+      if (!p?.id) return false;
+      for (const m of _playedMatches(p.id, matches)) {
+        const sw = _swingStats(m, p.id);
+        if (sw && sw.won && sw.maxDown >= 3) return true;
+      }
+      return false;
+    },
+  },
+  {
+    id: 'killer_instinct',
+    icon: '🗡️',
+    label: 'Killer Instinct',
+    desc: 'Segna il gol-partita (l\'ultimo gol di una vittoria di misura) in 3+ partite — freddezza glaciale',
+    positive: true,
+    check: (_s, p, matches) => {
+      if (!p?.id) return false;
+      const pid = p.id;
+      let count = 0;
+      for (const m of _playedMatches(pid, matches)) {
+        const inRed = (m.redTeam || []).some(pl => pl.id === pid);
+        const annotated = withProgressiveScore(m.events || []);
+        if (!annotated.length) continue;
+        const last = annotated[annotated.length - 1];
+        const myFinal = inRed ? last.partialRed : last.partialBlue;
+        const theirFinal = inRed ? last.partialBlue : last.partialRed;
+        if (myFinal - theirFinal !== 1) continue; // serve la vittoria di misura
+        // Il gol-partita è l'ultimo evento che ha dato un punto alla mia squadra
+        // (con margine 1, coincide col gol che fissa il risultato). Un autogol
+        // avversario decisivo non dà credito a nessuno.
+        let decisive = null, prevMy = 0;
+        for (const ev of annotated) {
+          const my = inRed ? ev.partialRed : ev.partialBlue;
+          if (my > prevMy) decisive = ev;
+          prevMy = my;
+        }
+        if (decisive && decisive.type === 'goal' && decisive.scorerId === pid) {
+          count++;
+          if (count >= 3) return true;
+        }
+      }
+      return false;
+    },
+  },
+  {
+    id: 'patto_di_sangue',
+    icon: '🤝',
+    label: 'Patto di Sangue',
+    desc: 'Nella stessa partita segna su assist di un compagno E lo ricambia con un assist — fratelli di gol',
+    positive: true,
+    check: (_s, p, matches) => {
+      if (!p?.id) return false;
+      const pid = p.id;
+      for (const m of _playedMatches(pid, matches)) {
+        const goals = (m.events || []).filter(e => e.type === 'goal');
+        const myAssisters = new Set(goals.filter(e => e.scorerId === pid && e.assistId).map(e => e.assistId));
+        if (!myAssisters.size) continue;
+        if (goals.some(e => e.assistId === pid && e.scorerId && myAssisters.has(e.scorerId))) return true;
+      }
+      return false;
+    },
+  },
+  {
+    id: 'gatto',
+    icon: '🐱',
+    label: 'Gatto',
+    desc: '3+ parate registrate in una singola partita — riflessi felini tra i pali',
+    positive: true,
+    check: (_s, p, matches) => {
+      if (!p?.id) return false;
+      for (const m of _playedMatches(p.id, matches)) {
+        const saves = (m.events || []).filter(e => e.type === 'save' && e.playerId === p.id);
+        if (saves.length >= 3) return true;
+      }
+      return false;
+    },
+  },
+  {
+    id: 'ritorno_del_re',
+    icon: '👑',
+    label: 'Il Ritorno del Re',
+    desc: 'Segna alla prima partita dopo 60+ giorni di assenza — come se non se ne fosse mai andato',
+    positive: true,
+    check: (_s, p, matches) => {
+      if (!p?.id) return false;
+      const pid = p.id;
+      const played = _playedMatches(pid, matches)
+        .slice()
+        .sort((a, b) => getMs(a.date) - getMs(b.date));
+      const GAP = 60 * 24 * 60 * 60 * 1000;
+      for (let i = 1; i < played.length; i++) {
+        if (getMs(played[i].date) - getMs(played[i - 1].date) < GAP) continue;
+        if ((played[i].events || []).some(e => e.type === 'goal' && e.scorerId === pid)) return true;
+      }
+      return false;
+    },
+  },
+  {
+    id: 'razzo',
+    icon: '🚀',
+    label: 'Razzo',
+    desc: 'Power Index salito di 10+ punti negli ultimi 30 giorni — in rampa di lancio',
+    positive: true,
+    check: (_s, p) => _piDelta30(p) >= 10,
+  },
 
   {
     id: 'giancarlo',
@@ -536,6 +685,58 @@ export const BADGE_DEFS = [
       const maxCount = Math.max(...Object.values(counts));
       return myCount === maxCount;
     },
+  },
+  {
+    id: 'crollo_verticale',
+    icon: '🫠',
+    label: 'Crollo Verticale',
+    desc: 'Perde una partita in cui la sua squadra era avanti di 3+ gol — l\'arte di complicarsi la vita',
+    positive: false,
+    check: (_s, p, matches) => {
+      if (!p?.id) return false;
+      for (const m of _playedMatches(p.id, matches)) {
+        const sw = _swingStats(m, p.id);
+        if (sw && sw.lost && sw.maxUp >= 3) return true;
+      }
+      return false;
+    },
+  },
+  {
+    id: 'giano_bifronte',
+    icon: '🎭',
+    label: 'Giano Bifronte',
+    desc: 'Gol e autogol nella stessa partita — il bene e il male in un corpo solo',
+    positive: false,
+    check: (_s, p, matches) => {
+      if (!p?.id) return false;
+      const pid = p.id;
+      for (const m of _playedMatches(pid, matches)) {
+        const evs = m.events || [];
+        const scored = evs.some(e => e.type === 'goal' && e.scorerId === pid);
+        const own = evs.some(e => e.type === 'autogoal' && e.scorerId === pid);
+        if (scored && own) return true;
+      }
+      return false;
+    },
+  },
+  {
+    id: 'madonna_seriale',
+    icon: '📿',
+    label: 'Madonna Seriale',
+    desc: '3+ premi Bestie all-time — ormai è una liturgia: la giuria non perdona',
+    positive: false,
+    check: (_s, p, matches) => {
+      if (!p?.id) return false;
+      return (matches || []).filter(m => !m.isHistorical && m.bestieId === p.id).length >= 3;
+    },
+  },
+  {
+    id: 'paracadutista',
+    icon: '🪂',
+    label: 'Paracadutista',
+    desc: 'Power Index sceso di 10+ punti negli ultimi 30 giorni — atterraggio morbido non garantito',
+    positive: false,
+    check: (_s, p) => _piDelta30(p) <= -10,
   },
 
   // ── METEO ─────────────────────────────────────────────────────────────────────
