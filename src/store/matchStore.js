@@ -17,6 +17,19 @@ const DEFAULT_TIMER_STATE = {
   elapsedMs: 0,
 };
 
+// Il punteggio live si deriva SEMPRE dagli eventi (source of truth, vedi
+// scoreFromEvents): i campi redScore/blueScore del doc sono mantenuti via
+// increment() e in rari casi concorrenti possono driftare (es. due admin che
+// eliminano lo stesso evento → doppio decrement). Per i doc senza eventi e non
+// attivi (legacy/storici) si rispettano i campi del doc.
+function withDerivedScore(m) {
+  if (!m) return m;
+  if (m.status === 'active' || (Array.isArray(m.events) && m.events.length > 0)) {
+    return { ...m, ...scoreFromEvents(m.events || []) };
+  }
+  return m;
+}
+
 const useMatchStore = create(
   persist(
     (set, get) => ({
@@ -26,6 +39,9 @@ const useMatchStore = create(
       goalModal: null,
       unsubscribeMatch: null,
       unsubscribeState: null,
+      // null | 'not-found' | 'load-failed' — permette alla MatchPage di mostrare
+      // un errore con "Riprova" invece di uno spinner infinito.
+      loadError: null,
       _loadToken: 0,
 
       async loadMatch(matchId) {
@@ -34,17 +50,20 @@ const useMatchStore = create(
         if (unsubscribeState) unsubscribeState();
         // Cancellation token: stale loads/subscriptions are silently ignored
         const token = Date.now() + Math.random();
-        set({ _loadToken: token, unsubscribeMatch: null, unsubscribeState: null });
+        set({ _loadToken: token, loadError: null, unsubscribeMatch: null, unsubscribeState: null });
         try {
           const [match, timerState] = await Promise.all([
             getMatch(matchId),
-            getMatchTimerState(matchId),
+            // Non-fatale: offline con cache miss (es. partita appena creata il cui
+            // matchStates non esiste ancora) getDoc rigetta — senza questo catch
+            // l'intero load fallirebbe pur avendo il match disponibile in cache.
+            getMatchTimerState(matchId).catch(() => null),
           ]);
           if (get()._loadToken !== token) return; // superseded by a newer loadMatch call
-          if (!match) return;
+          if (!match) { set({ loadError: 'not-found' }); return; }
           set({
             activeMatchId: matchId,
-            match,
+            match: withDerivedScore(match),
             timerState: {
               ...DEFAULT_TIMER_STATE,
               isRunning: timerState?.isRunning || false,
@@ -54,7 +73,7 @@ const useMatchStore = create(
           });
           const unsub = subscribeToMatch(matchId, (updatedMatch) => {
             if (get()._loadToken !== token) return;
-            if (updatedMatch) set({ match: updatedMatch });
+            if (updatedMatch) set({ match: withDerivedScore(updatedMatch) });
           });
           const unsubState = subscribeToMatchState(matchId, (state) => {
             if (get()._loadToken !== token) return;
@@ -71,6 +90,7 @@ const useMatchStore = create(
           set({ unsubscribeMatch: unsub, unsubscribeState: unsubState });
         } catch (e) {
           if (get()._loadToken !== token) return;
+          set({ loadError: 'load-failed' });
           toast.error('Impossibile caricare la partita');
         }
       },
@@ -85,6 +105,7 @@ const useMatchStore = create(
           unsubscribeMatch: null,
           unsubscribeState: null,
           goalModal: null,
+          loadError: null,
           timerState: DEFAULT_TIMER_STATE,
         });
       },
@@ -100,8 +121,10 @@ const useMatchStore = create(
       pauseTimer() {
         const { timerState } = get();
         if (!timerState.isRunning) return;
-        const elapsed = Date.now() - timerState.startTimestamp;
-        const newState = { ...timerState, isRunning: false, startTimestamp: null, elapsedMs: timerState.elapsedMs + elapsed };
+        // getElapsedMs è già protetto contro startTimestamp null/futuro: evita
+        // di scrivere NaN o valori negativi in elapsedMs (Firestore rifiuta NaN
+        // e un valore corrotto persisterebbe via localStorage + matchStates).
+        const newState = { ...timerState, isRunning: false, startTimestamp: null, elapsedMs: get().getElapsedMs() };
         set({ timerState: newState });
         get()._syncTimer(newState).catch(e => console.warn('[timer-sync]', e?.code || e?.message || e));
       },
@@ -113,7 +136,9 @@ const useMatchStore = create(
         // tornare NaN, che a sua volta produrrebbe `minute: NaN` negli eventi
         // → Firestore rifiuta NaN nei campi number.
         if (!timerState.startTimestamp) return timerState.elapsedMs;
-        return timerState.elapsedMs + (Date.now() - timerState.startTimestamp);
+        // Math.max: startTimestamp nel futuro (clock skew tra device che condividono
+        // matchStates, o regressione dell'orologio) non deve produrre tempi negativi.
+        return timerState.elapsedMs + Math.max(0, Date.now() - timerState.startTimestamp);
       },
 
       getElapsedSeconds() {
@@ -218,13 +243,22 @@ const useMatchStore = create(
 
       async endMatch() {
         const { activeMatchId, timerState } = get();
-        if (!activeMatchId || !get().match) return;
+        const m = get().match;
+        if (!activeMatchId || !m) return;
         if (timerState.isRunning) get().pauseTimer();
-        await updateMatch(activeMatchId, { status: 'finished', endedAt: Date.now() });
-        // Re-read match from store (not closure) to avoid overwriting events that
-        // arrived from the Firestore subscription during the await above.
+        // Punteggio finale normalizzato dagli eventi (source of truth): self-heal
+        // di eventuali drift dei campi increment del doc — classifiche e stats
+        // leggono redScore/blueScore dal documento. Gli eventi NON si riscrivono
+        // mai in blocco qui: un evento concorrente non ancora visto localmente
+        // verrebbe cancellato (arrayUnion resta l'unica via di scrittura eventi).
+        const finalScore = scoreFromEvents(m.events || []);
+        const written = updateMatch(activeMatchId, { status: 'finished', endedAt: Date.now(), ...finalScore });
+        // Optimistic: lo stato locale è subito 'finished'. Offline la write resta
+        // in coda (persistenza IndexedDB) e si sincronizza da sola; se il server
+        // la rifiutasse, la subscription riconsegna il doc reale e si ricorregge.
         const cur = get().match;
-        if (cur) set({ match: { ...cur, status: 'finished' } });
+        if (cur) set({ match: { ...cur, status: 'finished', ...finalScore } });
+        await written;
       },
 
       async createNewMatch(matchData) {

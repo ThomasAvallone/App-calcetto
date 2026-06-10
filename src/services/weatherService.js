@@ -32,6 +32,13 @@ export async function fetchWeatherForDate(date) {
 
   if (diffDays > 16) return null; // Open-Meteo forecast limit
 
+  // Su rete stallata (tipica al campo) una fetch senza deadline può restare
+  // appesa per minuti, ritardando flussi che la attendono (es. avvio partita).
+  // L'abort cade nel try/catch → null, come ogni altro fallimento meteo.
+  const signal = typeof AbortSignal !== 'undefined' && AbortSignal.timeout
+    ? AbortSignal.timeout(8000)
+    : undefined;
+
   try {
     if (diffDays < 0.5) {
       // Current conditions
@@ -40,7 +47,7 @@ export async function fetchWeatherForDate(date) {
         `?latitude=${LAT}&longitude=${LON}` +
         `&current=temperature_2m,weathercode,windspeed_10m` +
         `&timezone=Europe%2FRome`;
-      const json = await fetch(url).then(r => r.json());
+      const json = await fetch(url, { signal }).then(r => r.json());
       const c = json.current;
       const temp = Math.round(c.temperature_2m);
       const { condition, description } = mapCode(c.weathercode, c.windspeed_10m);
@@ -55,7 +62,7 @@ export async function fetchWeatherForDate(date) {
         `&hourly=temperature_2m,weathercode,windspeed_10m` +
         `&timezone=Europe%2FRome` +
         `&start_date=${dateStr}&end_date=${dateStr}`;
-      const json = await fetch(url).then(r => r.json());
+      const json = await fetch(url, { signal }).then(r => r.json());
       const idx = Math.min(d.getHours(), (json.hourly.time?.length || 1) - 1);
       const temp = Math.round(json.hourly.temperature_2m[idx]);
       const code = json.hourly.weathercode[idx];

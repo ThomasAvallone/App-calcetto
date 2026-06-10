@@ -13,6 +13,15 @@ import toast from 'react-hot-toast';
 
 const CHANGELOG = [
   {
+    version: '3.16.0',
+    date: 'Giugno 2026',
+    entries: [
+      { type: 'improve', text: 'Partita live a prova di campo (rete assente o instabile). Prima, con rete giù, diversi flussi restavano bloccati per sempre in attesa della conferma del server: un gol registrato con la voce disabilitava TUTTI i bottoni evento finché non tornava la rete; "Fine partita" non mostrava mai il verdetto; avviare una partita (da setup o da programmata) restava appeso sul salvataggio. Ora gli eventi appaiono subito in cronaca e si sincronizzano da soli in background (con avviso e annullamento automatico solo in caso di errore reale), il verdetto finale appare sempre entro pochi secondi anche offline, e la partita può partire anche senza rete con un avviso "si sincronizza da sola".' },
+      { type: 'fix', text: 'Punteggio sempre coerente con la cronaca: il tabellone live ora deriva il punteggio direttamente dagli eventi registrati (come già il verdetto), e a fine partita il punteggio salvato viene normalizzato dagli eventi. Questo previene rari disallineamenti del contatore (es. doppia eliminazione simultanea dello stesso gol da due admin) che avrebbero falsato classifiche e statistiche.' },
+      { type: 'fix', text: 'Apertura partita più robusta: se il caricamento fallisce (rete giù e dati non in cache) compare un messaggio con "Riprova" invece dello spinner infinito; una partita eliminata mostra "Partita non trovata". Il ricalcolo statistiche non parte più da offline (avrebbe potuto calcolare su dati incompleti del dispositivo): viene rimandato con un avviso. Corretti anche: timer protetto da stati corrotti (niente più rischio NaN), doppia conferma simultanea del modal assist (tap + scadenza countdown nello stesso istante), e timeout di 8s sulle richieste meteo che su rete lenta potevano restare appese per minuti.' },
+    ],
+  },
+  {
     version: '3.15.4',
     date: 'Giugno 2026',
     entries: [

@@ -4,6 +4,8 @@ import usePlayersStore from '../store/playersStore';
 import useMatchStore from '../store/matchStore';
 import { generateMatchPreview } from '../services/reportService';
 import { fetchWeatherForDate } from '../services/weatherService';
+import { createMatchQueued } from '../firebase/firestore';
+import { withTimeout, isTimeout } from '../utils/withTimeout';
 import { generateAIBalancedTeams, generateMatchPrediction } from '../services/geminiService';
 import { useMatchPreview } from '../hooks/useMatchPreview';
 import { getRoleIcon } from '../utils/roleIcons';
@@ -15,7 +17,7 @@ const ROLES = ['Portiere', 'Difensore', 'Centrocampista', 'Attaccante'];
 export default function MatchSetupPage() {
   const navigate = useNavigate();
   const { players, balanceTeams, balanceWithLocks } = usePlayersStore();
-  const { createNewMatch, loadMatch } = useMatchStore();
+  const { createNewMatch } = useMatchStore();
 
   const [step, setStep] = useState('select'); // select | preview
   const [selectedIds, setSelectedIds] = useState([]);
@@ -176,7 +178,11 @@ export default function MatchSetupPage() {
           setWeather({ ...fw, temp: fw.temp != null ? String(fw.temp) : '' });
         }
       }
-      const matchId = await createNewMatch({
+      // ID generato client-side: la partita può partire anche con rete assente o
+      // stallata al campo. Si attende l'ack del server al massimo 5s — se non
+      // arriva, la write è comunque in coda (persistenza IndexedDB) e si
+      // sincronizza da sola; un errore reale invece interrompe (catch esterno).
+      const { id: matchId, written } = createMatchQueued({
         redTeam: teams.red.map(p => ({ id: p.id, name: p.name, primaryRole: p.primaryRole || '' })),
         blueTeam: teams.blue.map(p => ({ id: p.id, name: p.name, primaryRole: p.primaryRole || '' })),
         weather: currentWeather,
@@ -186,7 +192,14 @@ export default function MatchSetupPage() {
         date,
         events: [],
       });
-      await loadMatch(matchId);
+      try {
+        await withTimeout(written, 5000);
+      } catch (e) {
+        if (!isTimeout(e)) throw e;
+        toast('📡 Rete assente — partita avviata in locale, si sincronizza da sola', { icon: '⏳' });
+      }
+      // Niente loadMatch qui: MatchPage carica da sé al mount (con UI di retry).
+      // Su rete stallata un await su getDoc terrebbe il bottone su "salvataggio".
       navigate(`/match/${matchId}`);
     } catch (e) {
       toast.error('Errore creazione partita: ' + e.message);

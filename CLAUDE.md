@@ -59,9 +59,11 @@ src/
 │   ├── dateUtils.js          # getMs(), safeDate()
 │   ├── roleIcons.js          # getRoleIcon(role) — emoji ruolo, condiviso setup/scheduled
 │   ├── matchSyncState.js / matchSyncState.test.js  # stato indicatore sync live (puro)
+│   ├── withTimeout.js / withTimeout.test.js  # withTimeout/isTimeout — bound su await di write Firestore (offline non risolvono mai)
 │   └── waitUndo.js           # Toast con countdown per operazioni annullabili
 ├── constants/
-│   └── colors.js             # Costanti colori (CLR_WIN, CLR_LOSS, ecc.)
+│   ├── colors.js             # Costanti colori (CLR_WIN, CLR_LOSS, ecc.)
+│   └── owner.js              # OWNER_EMAIL/isOwnerEmail — identità owner robusta al secret mancante
 └── hooks/
     ├── useMatchesSubscription.js  # Real-time subscription alla collezione matches
     ├── usePIConfig.js              # Real-time subscription a settings/piConfig (dedup JSON key)
@@ -145,7 +147,7 @@ src/
 npm run dev        # Dev server
 npm run build      # Build produzione
 npm run preview    # Preview build
-npm test           # Run Vitest (headless) — ~228 test, 14 file
+npm test           # Run Vitest (headless) — ~236 test, 15 file
 npm run test:watch # Vitest watch mode
 ```
 
@@ -170,6 +172,7 @@ ogni nuova funzione di calcolo va messa lì (non inline nei componenti) e testat
 | `matchScore.js` | `scoreFromEvents`, `withProgressiveScore` (punteggio derivato dagli eventi) |
 | `teamBalance.js` | `balanceTeams` (snake draft), `balanceWithLocks` (lock + greedy PI, `null` su overflow) |
 | `matchSyncState.js` | `matchSyncState` (offline>syncing>synced) + `shouldShowSyncChip` (nasconde synced ai viewer) |
+| `withTimeout.js` | `withTimeout(promise, ms)` + `isTimeout(e)` — TimeoutError, no unhandled rejection tardive |
 | `playerStats.js` (+) | `aggregatePlayerMatchStats` (stats di un player su una lista di partite; proration assist storici cap a 1) |
 | `firestore.js` | solo `sanitizePublicName` (resto non testato: richiede Firebase) |
 
@@ -187,7 +190,8 @@ Aree già revisionate a fondo (bug + hardening + test). **Non rifare questi chec
 - **Subscription** (`firestore.js`): tutte le `onSnapshot` hanno error callback (`_subError`); le liste preservano l'ultimo dato (no-wipe), le settings resettano a null.
 - **Gemini**: `resolveBalancedTeams` garantisce squadre **disgiunte** (nome duplicato da Gemini non finisce in entrambe); `resolveVoiceGoal` scarta gli ID inventati e deduce il team dallo scorer.
 - **reportService / MVP**: l'MVP è calcolato da `computeMatchMVP(events)` (gol +3, assist +2, autogol -2; `null` se saldo ≤ 0 → niente MVP a chi ha solo autogol). **Source of truth unica**: la usano sia il verdetto testuale (`generateMatchReport`) sia la card del Report Modal in `MatchPage`. Non re-implementare il calcolo inline.
-- **Punteggio partita** 🎯: si **deriva sempre** dagli eventi via `scoreFromEvents()` (goal→squadra marcatore, autogoal→avversaria, save/injury neutri), mai incrementato a mano. `matchStore._appendEvent` fa optimistic update + **rollback uniforme** per gol/autogol/infortuni; `deleteEvent` ri-deriva il punteggio. `withProgressiveScore()` annota il parziale per le cronache (MatchPage log, MatchReplay, reportService).
+- **Punteggio partita** 🎯: si **deriva sempre** dagli eventi via `scoreFromEvents()` (goal→squadra marcatore, autogoal→avversaria, save/injury neutri), mai incrementato a mano. `matchStore._appendEvent` fa optimistic update + **rollback uniforme** per gol/autogol/infortuni; `deleteEvent` ri-deriva il punteggio. `withProgressiveScore()` annota il parziale per le cronache (MatchPage log, MatchReplay, reportService). In più: `matchStore.withDerivedScore` ri-deriva il punteggio anche sui dati **in arrivo dalla subscription** (i campi `redScore/blueScore` del doc sono mantenuti via `increment()` e possono driftare in race concorrenti), e `endMatch` **normalizza il punteggio finale** dagli eventi nella stessa write dello status `finished` (classifiche/stats leggono i campi del doc). ⚠️ Gli eventi NON si riscrivono mai in blocco (solo `arrayUnion`/`arrayRemove`): una riscrittura cancellerebbe eventi concorrenti non ancora visti.
+- **Offline-first in-game** 📡 (cruciale per il campo): con la persistenza IndexedDB le write Firestore offline **restano in coda ma le loro promise non risolvono MAI** finché non torna la rete. Quindi: (1) i handler di MatchPage (`handleGkConcededSelected`, `applyParsedGoal` voce, infortuni) **non await-ano** le `record*` — feedback immediato, `.catch` → toast "Registrazione annullata" (lo store fa già rollback); un `await` nel flusso voce terrebbe `voiceProcessing=true` per sempre bloccando TUTTI i bottoni evento. (2) `handleEndMatch` bound-a `endMatch()` (8s), `recalculatePlayerStats` (12s) ed `exportMatchToSheets` (8s) con `withTimeout` — il verdetto appare sempre; `endMatch` è ottimistico (status locale subito `finished`). (3) L'avvio partita usa `createMatchQueued` (ID client-side) / `updateMatch` con `withTimeout(5s)` → toast "partita avviata in locale". (4) `recalculatePlayerStats` **rifiuta subito se `navigator.onLine === false`**: offline leggerebbe una cache potenzialmente parziale e accoderebbe stats sbagliate. (5) `loadMatch`: `getMatchTimerState` è non-fatale (`.catch(() => null)`) e gli errori settano `loadError` (`'not-found'`/`'load-failed'`) → MatchPage mostra UI con "Riprova" invece dello spinner infinito.
 - **Fine partita** (`MatchPage.handleEndMatch` + `matchStore.endMatch`): lo snapshot (score+tabellino) si cattura **dopo** i 5s di `waitUndo` leggendo `useMatchStore.getState().match` (no stale closure) e con `scoreFromEvents`. `recalculatePlayerStats` è non-critico (try/catch isolato: un suo errore non nasconde il verdetto). `endMatch` rilegge il match dallo store dopo l'await per non sovrascrivere eventi arrivati dalla subscription.
 - **Editor eventi (MatchDetailPage)** `handleAddEvent`/`handleDeleteEvent`/`handleSaveEvent`: due fasi nette. (1) **Persistenza** (`updateMatch`) critica → se fallisce, rollback dell'optimistic update e `return`. (2) **Ricalcolo** (`recalcStats`) non-critico e **isolato** in un try/catch separato. Invariante: un errore del ricalcolo NON deve far sparire dalla UI un evento già salvato su Firestore (era il bug: il `catch` unico faceva `setMatch(match)` anche quando l'evento era persistito). I sub-componenti (`RatingSection`/`BestieSection`/`ReactionsSection`) sono in `components/match/`.
 - **StatsPage**: classifica GK = `rankGoalkeepers` (media gol/turno **crescente**, min 6 turni — più basso = migliore; diverso dai badge GK). Cronologie ordinate per data reale (`getMs`/`dateMs`), mai per stringa `GG/MM/AA`. Finestra 30gg legata allo stato `now` (refresh su visibilitychange).

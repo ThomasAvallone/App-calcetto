@@ -75,8 +75,14 @@ export async function getMatch(id) {
   return snap.exists() ? { id: snap.id, ...snap.data() } : null;
 }
 
-export async function createMatch(data) {
-  const ref = await addDoc(collection(db, 'matches'), {
+// Variante offline-capable di createMatch: l'ID è generato client-side, quindi è
+// disponibile SUBITO anche senza rete; `written` risolve solo all'ack del server
+// (offline resta pending, ma la write è in coda via persistenza IndexedDB e si
+// applica da sola al riconnect). I caller che devono avviare una partita anche
+// con rete assente/stallata usano questa e bound-ano l'attesa con withTimeout.
+export function createMatchQueued(data) {
+  const ref = doc(collection(db, 'matches'));
+  const written = setDoc(ref, {
     events: [],
     redScore: 0,
     blueScore: 0,
@@ -85,7 +91,13 @@ export async function createMatch(data) {
     ...data,
     createdAt: serverTimestamp(),
   });
-  return ref.id;
+  return { id: ref.id, written };
+}
+
+export async function createMatch(data) {
+  const { id, written } = createMatchQueued(data);
+  await written;
+  return id;
 }
 
 export async function updateMatch(id, data) {
@@ -192,6 +204,14 @@ export function subscribeToMatches(callback) {
 // ─── POWER INDEX RECALCULATION ────────────────────────────────────────────────
 
 export async function recalculatePlayerStats(playerIds, { cachedMatches, cachedPlayers } = {}) {
+  // Offline: getDocs ripiegherebbe sulla cache locale, potenzialmente PARZIALE
+  // (solo i doc già visti da questo device), e il batch di update verrebbe
+  // accodato → al ritorno della rete si applicherebbero stats calcolate su dati
+  // incompleti. Meglio fallire subito con un errore chiaro: i caller trattano il
+  // ricalcolo come non-critico e lo si rilancia da Admin a rete tornata.
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    throw new Error('Offline — ricalcolo statistiche rimandato (rilancialo da Admin)');
+  }
   const [allMatches, allPlayers, piConfigSnap] = await Promise.all([
     cachedMatches || getMatches(),
     cachedPlayers || getPlayers(),

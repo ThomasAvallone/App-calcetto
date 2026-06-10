@@ -11,6 +11,7 @@ import { exportMatchToSheets } from '../services/sheetsService';
 import { recalculatePlayerStats, updateMatch } from '../firebase/firestore';
 import { fetchWeatherForDate } from '../services/weatherService';
 import { waitUndo } from '../utils/waitUndo';
+import { withTimeout, isTimeout } from '../utils/withTimeout';
 import { scoreFromEvents, withProgressiveScore } from '../utils/matchScore';
 import { parseVoiceGoal } from '../utils/voiceParser';
 import { parseVoiceGoalWithAI } from '../services/geminiService';
@@ -28,7 +29,7 @@ export default function MatchPage() {
   const isAdmin = useAuthStore(selectIsAdmin);
 
   const {
-    match, activeMatchId, timerState,
+    match, activeMatchId, timerState, loadError,
     loadMatch, unloadMatch, startTimer, pauseTimer, getElapsedSeconds,
     recordGoal, recordAutogoal, recordInjury, deleteEvent, endMatch,
   } = useMatchStore();
@@ -65,6 +66,11 @@ export default function MatchPage() {
   const scoreShakeTimerRef = useRef(null);
   const goalFlashTimerRef = useRef(null);
   const isMountedRef = useRef(true);
+  // Doppio-fire del modal assist: il timeout dei 5s e il tap dell'utente possono
+  // accodarsi nello stesso tick (il tap arriva un attimo prima che la cleanup
+  // dell'effect annulli il timeout) → handleAssistSelected verrebbe chiamata due
+  // volte e la seconda (assist=null) sovrascriverebbe la scelta. Primo vince.
+  const assistResolvedRef = useRef(false);
   const prevRedScore  = useRef(null); // null on first render to avoid false bounce on load
   const prevBlueScore = useRef(null);
 
@@ -161,6 +167,27 @@ export default function MatchPage() {
     }
   }, [pendingAssist]);
 
+  // Caricamento fallito (rete assente + cache vuota) o partita inesistente:
+  // mostra un errore actionable invece di uno spinner infinito.
+  if (!match && loadError) {
+    const notFound = loadError === 'not-found';
+    return (
+      <div className="page-content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '50vh' }}>
+        <div className="card" style={{ textAlign: 'center', padding: '2rem 1.5rem', maxWidth: 360, width: '100%' }}>
+          <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>{notFound ? '🔍' : '📡'}</div>
+          <h3 className="mb-2">{notFound ? 'Partita non trovata' : 'Impossibile caricare la partita'}</h3>
+          <p className="text-sm text-muted mb-4">
+            {notFound ? 'La partita potrebbe essere stata eliminata.' : 'Controlla la connessione e riprova.'}
+          </p>
+          {!notFound && (
+            <button className="btn btn-teal btn-full mb-2" onClick={() => loadMatch(id)}>↺ Riprova</button>
+          )}
+          <button className="btn btn-ghost btn-full" onClick={() => navigate('/')}>🏠 Torna alla Home</button>
+        </div>
+      </div>
+    );
+  }
+
   if (!match) {
     return (
       <div className="page-content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '50vh' }}>
@@ -207,7 +234,12 @@ export default function MatchPage() {
   };
 
   // Esegue il parsed (rule-based o AI): flash + recordGoal/Autogoal o apre il modal GK.
-  const applyParsedGoal = async (parsed) => {
+  // Le record* NON si await-ano: l'optimistic update mette subito l'evento in cronaca
+  // e la write si sincronizza in background (offline resta in coda — IndexedDB). Un
+  // await qui non risolverebbe MAI senza rete, tenendo voiceProcessing=true e quindi
+  // TUTTI i bottoni evento disabilitati. In caso di errore reale lo store fa rollback
+  // e il catch avvisa che l'evento è stato annullato.
+  const applyParsedGoal = (parsed) => {
     if (!parsed.isAutogoal) {
       if (goalFlashTimerRef.current) clearTimeout(goalFlashTimerRef.current);
       setGoalFlash(parsed.team);
@@ -219,22 +251,19 @@ export default function MatchPage() {
     }
     if (parsed.gk) {
       const gkFields = { gkConcededId: parsed.gk.id, gkConcededName: parsed.gk.name };
-      try {
-        if (parsed.isAutogoal) {
-          await recordAutogoal({ team: parsed.team, scorerId: parsed.scorer.id, scorerName: parsed.scorer.name, ...gkFields });
-          toast.success(`🤦 Autogol di ${parsed.scorer.name} (🧤 ${parsed.gk.name})`);
-          navigator.vibrate?.([80]);
-        } else {
-          await recordGoal({
-            team: parsed.team, scorerId: parsed.scorer.id, scorerName: parsed.scorer.name, ...gkFields,
-            assistId: parsed.assist?.id || null, assistName: parsed.assist?.name || null,
-          });
-          const assistMsg = parsed.assist ? ` (assist: ${parsed.assist.name})` : '';
-          toast.success(`⚽ Gol di ${parsed.scorer.name}${assistMsg}`);
-          navigator.vibrate?.([100, 50, 100]);
-        }
-      } catch (err) {
-        toast.error('Errore registrazione: ' + (err?.message || 'riprova'));
+      if (parsed.isAutogoal) {
+        recordAutogoal({ team: parsed.team, scorerId: parsed.scorer.id, scorerName: parsed.scorer.name, ...gkFields })
+          .catch(err => toast.error('Registrazione annullata: ' + (err?.message || 'errore di rete')));
+        toast.success(`🤦 Autogol di ${parsed.scorer.name} (🧤 ${parsed.gk.name})`);
+        navigator.vibrate?.([80]);
+      } else {
+        recordGoal({
+          team: parsed.team, scorerId: parsed.scorer.id, scorerName: parsed.scorer.name, ...gkFields,
+          assistId: parsed.assist?.id || null, assistName: parsed.assist?.name || null,
+        }).catch(err => toast.error('Registrazione annullata: ' + (err?.message || 'errore di rete')));
+        const assistMsg = parsed.assist ? ` (assist: ${parsed.assist.name})` : '';
+        toast.success(`⚽ Gol di ${parsed.scorer.name}${assistMsg}`);
+        navigator.vibrate?.([100, 50, 100]);
       }
     } else {
       // Manca portiere → apri solo il modal GK con scorer/assist precompilati
@@ -273,7 +302,7 @@ export default function MatchPage() {
         const parsed = parseVoiceGoal(transcript, redTeam, blueTeam);
         if (parsed.scorer && parsed.team) {
           if (!isMountedRef.current) return;
-          await applyParsedGoal(parsed);
+          applyParsedGoal(parsed);
           return;
         }
         // 2) Fallback Gemini per frasi creative / errori di trascrizione
@@ -286,7 +315,7 @@ export default function MatchPage() {
             toast(`🎙️ Non ho capito il marcatore — riprova o usa i bottoni.\n"${transcript}"`, { duration: 4000 });
             return;
           }
-          await applyParsedGoal(aiParsed);
+          applyParsedGoal(aiParsed);
         } catch (err) {
           toast.dismiss(toastId);
           if (!isMountedRef.current) return;
@@ -354,11 +383,15 @@ export default function MatchPage() {
       });
       setPendingGkConceded(true);
     } else {
+      assistResolvedRef.current = false;
       setPendingAssist(true);
     }
   };
 
   const handleAssistSelected = (player, name) => {
+    // Primo vince: tap utente vs auto-timeout dei 5s (vedi assistResolvedRef)
+    if (assistResolvedRef.current) return;
+    assistResolvedRef.current = true;
     setPendingAssist(false);
     if (!selectedScorer) return;
     setPendingGoalData({
@@ -371,29 +404,30 @@ export default function MatchPage() {
     setPendingGkConceded(true);
   };
 
-  const handleGkConcededSelected = async (player) => {
+  // Le record* NON si await-ano (vedi nota su applyParsedGoal): l'evento è già in
+  // cronaca via optimistic update; offline la write resta in coda e si sincronizza
+  // da sola. Su errore reale lo store fa rollback e il catch avvisa.
+  const handleGkConcededSelected = (player) => {
     setPendingGkConceded(false);
     if (!pendingGoalData) return;
     const gkFields = { gkConcededId: player?.id || null, gkConcededName: player?.name || null };
-    try {
-      if (pendingGoalData._autogoal) {
-        await recordAutogoal({ team: pendingGoalData.team, scorerId: pendingGoalData.scorerId, scorerName: pendingGoalData.scorerName, ...gkFields });
-        toast.success(`🤦 Autogol di ${pendingGoalData.scorerName}`);
-        navigator.vibrate?.([80]);
-        if (scoreShakeTimerRef.current) clearTimeout(scoreShakeTimerRef.current);
-        setScoreShake(pendingGoalData.team);
-        scoreShakeTimerRef.current = setTimeout(() => { if (isMountedRef.current) setScoreShake(null); }, 450);
-      } else {
-        await recordGoal({ ...pendingGoalData, ...gkFields });
-        const assistMsg = pendingGoalData.assistId ? ` (assist: ${pendingGoalData.assistName})` : '';
-        toast.success(`⚽ Gol di ${pendingGoalData.scorerName}${assistMsg}!`);
-        navigator.vibrate?.([100, 50, 100]);
-        if (goalFlashTimerRef.current) clearTimeout(goalFlashTimerRef.current);
-        setGoalFlash(pendingGoalData.team);
-        goalFlashTimerRef.current = setTimeout(() => { if (isMountedRef.current) setGoalFlash(null); }, 600);
-      }
-    } catch (e) {
-      toast.error('Errore registrazione gol: ' + e.message);
+    if (pendingGoalData._autogoal) {
+      recordAutogoal({ team: pendingGoalData.team, scorerId: pendingGoalData.scorerId, scorerName: pendingGoalData.scorerName, ...gkFields })
+        .catch(e => toast.error('Registrazione annullata: ' + (e?.message || 'errore di rete')));
+      toast.success(`🤦 Autogol di ${pendingGoalData.scorerName}`);
+      navigator.vibrate?.([80]);
+      if (scoreShakeTimerRef.current) clearTimeout(scoreShakeTimerRef.current);
+      setScoreShake(pendingGoalData.team);
+      scoreShakeTimerRef.current = setTimeout(() => { if (isMountedRef.current) setScoreShake(null); }, 450);
+    } else {
+      recordGoal({ ...pendingGoalData, ...gkFields })
+        .catch(e => toast.error('Registrazione annullata: ' + (e?.message || 'errore di rete')));
+      const assistMsg = pendingGoalData.assistId ? ` (assist: ${pendingGoalData.assistName})` : '';
+      toast.success(`⚽ Gol di ${pendingGoalData.scorerName}${assistMsg}!`);
+      navigator.vibrate?.([100, 50, 100]);
+      if (goalFlashTimerRef.current) clearTimeout(goalFlashTimerRef.current);
+      setGoalFlash(pendingGoalData.team);
+      goalFlashTimerRef.current = setTimeout(() => { if (isMountedRef.current) setGoalFlash(null); }, 600);
     }
     setPendingGoalData(null);
     setSelectedScorer(null);
@@ -421,18 +455,30 @@ export default function MatchPage() {
         blueTeam: liveMatch.blueTeam || [],
         events: snapshotEvents,
       };
-      await endMatch();
+      // endMatch è ottimistico (stato locale 'finished' subito) e la write è in
+      // coda anche offline. L'ack del server però non arriva MAI senza rete: il
+      // timeout fa proseguire il flusso, la sincronizzazione avviene da sola.
+      try {
+        await withTimeout(endMatch(), 8000);
+      } catch (e) {
+        if (!isTimeout(e)) throw e; // errore reale → toast + abort (catch esterno)
+        toast('📡 Rete lenta o assente — partita chiusa in locale, si sincronizza da sola', { icon: '⏳' });
+      }
       const allIds = [...snapshot.redTeam.map(p => p.id), ...snapshot.blueTeam.map(p => p.id)];
       // Stats recalculation is non-critical: a failure here must not hide the
-      // end-match report. Warn with a toast and continue.
-      await recalculatePlayerStats(allIds).catch(e => {
+      // end-match report. Warn with a toast and continue. Bound temporale: su rete
+      // stallata il commit del batch non risolverebbe mai e il verdetto non
+      // apparirebbe (il ricalcolo si rilancia da Admin).
+      await withTimeout(recalculatePlayerStats(allIds), 12000).catch(e => {
         console.warn('[endMatch] recalculate failed', e);
-        toast.error('Ricalcolo statistiche fallito (riprova da Admin)');
+        toast.error('Statistiche non ricalcolate — rilancia da Admin a rete tornata');
       });
       // Read fresh match from store: dopo gli await il match del closure può
       // essere stale rispetto agli ultimi aggiornamenti Firestore.
       const freshMatch = useMatchStore.getState().match || liveMatch;
-      await exportMatchToSheets(freshMatch, players).catch(() => {
+      // Bound: fetch verso Apps Script senza timeout proprio — su rete stallata
+      // terrebbe il verdetto in ostaggio per minuti.
+      await withTimeout(exportMatchToSheets(freshMatch, players), 8000).catch(() => {
         toast.error('Export Google Sheets fallito');
       });
       const report = generateMatchReport(freshMatch, players);
@@ -587,14 +633,12 @@ export default function MatchPage() {
             {taggedPlayers.map(p => (
               <button key={p.id} className="btn btn-ghost"
                 style={{ justifyContent: 'flex-start', padding: '0.875rem 1rem' }}
-                onClick={async () => {
+                onClick={() => {
                   setInjuryModal(false);
-                  try {
-                    await recordInjury({ playerId: p.id, playerName: p.name, team: p._team });
-                    toast.success(`🩹 Infortunio registrato: ${p.name}`);
-                  } catch (e) {
-                    toast.error('Errore registrazione infortunio: ' + (e?.message || 'riprova'));
-                  }
+                  // No await: optimistic update + sync in background (vedi applyParsedGoal)
+                  recordInjury({ playerId: p.id, playerName: p.name, team: p._team })
+                    .catch(e => toast.error('Infortunio annullato: ' + (e?.message || 'errore di rete')));
+                  toast.success(`🩹 Infortunio registrato: ${p.name}`);
                 }}>
                 <span style={{ fontSize: '1.1rem' }}>{p._team === 'red' ? '🔴' : '🔵'}</span>
                 <span style={{ fontSize: '1.1rem' }}>{getRoleIcon(p.primaryRole)}</span>

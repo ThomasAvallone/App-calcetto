@@ -2,12 +2,12 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getMatch, updateMatch, deleteMatch } from '../firebase/firestore';
 import usePlayersStore from '../store/playersStore';
-import useMatchStore from '../store/matchStore';
 import useAuthStore, { selectIsAdmin } from '../store/authStore';
 import { useMatchesSubscription } from '../hooks/useMatchesSubscription';
 import { generateMatchPreview } from '../services/reportService';
 import { useMatchPreview } from '../hooks/useMatchPreview';
 import { getRoleIcon } from '../utils/roleIcons';
+import { withTimeout, isTimeout } from '../utils/withTimeout';
 import MatchPreviewCard from '../components/match/MatchPreviewCard';
 import { downloadICS } from '../utils/calendarUtils';
 import { format } from 'date-fns';
@@ -26,7 +26,6 @@ export default function ScheduledMatchDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { players, balanceTeams } = usePlayersStore();
-  const { loadMatch } = useMatchStore();
   const isAdmin = useAuthStore(selectIsAdmin);
   const allMatches = useMatchesSubscription();
 
@@ -201,15 +200,24 @@ export default function ScheduledMatchDetailPage() {
     }
     setSaving(true);
     try {
-      await updateMatch(id, {
-        redTeam: minimalTeam(startTeams.red),
-        blueTeam: minimalTeam(startTeams.blue),
-        pendingPlayers: [],
-        date: matchDate ? new Date(matchDate) : new Date(),
-        weather,
-        status: 'active',
-      });
-      await loadMatch(id);
+      // Bound sull'ack del server: con rete assente/stallata al campo la promise
+      // non risolverebbe mai, ma la write è in coda (persistenza IndexedDB) e la
+      // partita può partire subito in locale. Errore reale → catch esterno.
+      try {
+        await withTimeout(updateMatch(id, {
+          redTeam: minimalTeam(startTeams.red),
+          blueTeam: minimalTeam(startTeams.blue),
+          pendingPlayers: [],
+          date: matchDate ? new Date(matchDate) : new Date(),
+          weather,
+          status: 'active',
+        }), 5000);
+      } catch (e) {
+        if (!isTimeout(e)) throw e;
+        toast('📡 Rete assente — partita avviata in locale, si sincronizza da sola', { icon: '⏳' });
+      }
+      // Niente loadMatch qui: MatchPage carica da sé al mount (con UI di retry).
+      // Su rete stallata un await su getDoc terrebbe il bottone su "Avvio…".
       navigate(`/match/${id}`);
     } catch (e) {
       toast.error('Errore: ' + e.message);
