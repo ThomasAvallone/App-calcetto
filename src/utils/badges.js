@@ -1,4 +1,4 @@
-import { getMs } from './dateUtils';
+import { getMs, safeDate } from './dateUtils';
 import { computePlayerWeatherStats } from './weatherStats';
 import { withProgressiveScore } from './matchScore';
 
@@ -520,6 +520,180 @@ export const BADGE_DEFS = [
     check: (_s, p) => _piDelta30(p) >= 10,
   },
 
+  // ── TIMING ──────────────────────────────────────────────────────────────────
+  {
+    id: 'blitz',
+    icon: '⚡',
+    label: 'Blitz',
+    desc: 'Gol entro il 1° minuto di gioco in almeno una partita — partenza folgorante',
+    positive: true,
+    check: (_s, p, matches) => {
+      if (!p?.id) return false;
+      const pid = p.id;
+      for (const m of _playedMatches(pid, matches)) {
+        if ((m.events || []).some(e => e.type === 'goal' && e.scorerId === pid && (e.minute || 0) <= 1))
+          return true;
+      }
+      return false;
+    },
+  },
+  {
+    id: 'uno_due',
+    icon: '🔫',
+    label: 'Uno-Due',
+    desc: 'Doppietta in ≤ 5 minuti nella stessa partita — raffica fulminea',
+    positive: true,
+    check: (_s, p, matches) => {
+      if (!p?.id) return false;
+      const pid = p.id;
+      for (const m of _playedMatches(pid, matches)) {
+        const goals = (m.events || [])
+          .filter(e => e.type === 'goal' && e.scorerId === pid && typeof e.minute === 'number')
+          .sort((a, b) => a.minute - b.minute);
+        for (let i = 1; i < goals.length; i++) {
+          if (goals[i].minute - goals[i - 1].minute <= 5) return true;
+        }
+      }
+      return false;
+    },
+  },
+
+  // ── VOTI ────────────────────────────────────────────────────────────────────
+  {
+    id: 'standing_ovation',
+    icon: '🎩',
+    label: 'Standing Ovation',
+    desc: 'Almeno un voto ≥ 9 ricevuto in una partita — serata da incorniciare',
+    positive: true,
+    check: (_s, p, matches) => {
+      if (!p?.id) return false;
+      const pid = p.id;
+      for (const m of _playedMatches(pid, matches)) {
+        const rating = m.ratings?.[pid];
+        if (typeof rating === 'number' && rating >= 9) return true;
+      }
+      return false;
+    },
+  },
+  {
+    id: 'il_professore',
+    icon: '📚',
+    label: 'Il Professore',
+    desc: 'Media voti ≥ 7.5 su tutte le partite votate (min 3) — qualità costante e riconosciuta',
+    positive: true,
+    check: (_s, p, matches) => {
+      if (!p?.id) return false;
+      const pid = p.id;
+      let sum = 0, count = 0;
+      for (const m of _playedMatches(pid, matches)) {
+        const r = m.ratings?.[pid];
+        if (typeof r === 'number') { sum += r; count++; }
+      }
+      return count >= 3 && sum / count >= 7.5;
+    },
+  },
+
+  // ── DUO ─────────────────────────────────────────────────────────────────────
+  {
+    id: 'coppia_doro',
+    icon: '🍀',
+    label: "Coppia d'Oro",
+    desc: '≥ 80% vittorie con un compagno fisso (min 5 partite insieme) — intesa telepatica',
+    positive: true,
+    check: (_s, p, matches) => {
+      if (!p?.id) return false;
+      const pid = p.id;
+      const withPartner = {};
+      for (const m of _playedMatches(pid, matches)) {
+        const inRed = (m.redTeam || []).some(pl => pl.id === pid);
+        const myTeam = inRed ? (m.redTeam || []) : (m.blueTeam || []);
+        const myScore = inRed ? (m.redScore || 0) : (m.blueScore || 0);
+        const theirScore = inRed ? (m.blueScore || 0) : (m.redScore || 0);
+        const won = myScore > theirScore;
+        for (const tm of myTeam) {
+          if (tm.id === pid) continue;
+          if (!withPartner[tm.id]) withPartner[tm.id] = { together: 0, wins: 0 };
+          withPartner[tm.id].together++;
+          if (won) withPartner[tm.id].wins++;
+        }
+      }
+      return Object.values(withPartner).some(st => st.together >= 5 && st.wins / st.together >= 0.8);
+    },
+  },
+
+  // ── PRESENZE ────────────────────────────────────────────────────────────────
+  {
+    id: 'equilibrista',
+    icon: '⚖️',
+    label: 'Equilibrista',
+    desc: '3 pareggi di fila — il re del nulla alla pari',
+    positive: true,
+    check: (_s, p, matches) => {
+      if (!p?.id) return false;
+      const pid = p.id;
+      const played = _playedMatches(pid, matches)
+        .slice()
+        .sort((a, b) => getMs(a.date) - getMs(b.date));
+      let streak = 0;
+      for (const m of played) {
+        if ((m.redScore || 0) === (m.blueScore || 0)) {
+          streak++;
+          if (streak >= 3) return true;
+        } else {
+          streak = 0;
+        }
+      }
+      return false;
+    },
+  },
+  {
+    id: 'stacanovista',
+    icon: '📅',
+    label: 'Stacanovista',
+    desc: 'Presente in 10 partite consecutive del gruppo senza saltarne una — una certezza',
+    positive: true,
+    check: (_s, p, matches) => {
+      if (!p?.id) return false;
+      const pid = p.id;
+      const all = (matches || [])
+        .filter(m => m.status === 'finished' && !m.isHistorical)
+        .sort((a, b) => getMs(a.date) - getMs(b.date));
+      let streak = 0;
+      for (const m of all) {
+        const inMatch = [...(m.redTeam || []), ...(m.blueTeam || [])].some(pl => pl.id === pid);
+        if (inMatch) {
+          streak++;
+          if (streak >= 10) return true;
+        } else {
+          streak = 0;
+        }
+      }
+      return false;
+    },
+  },
+
+  // ── COMEBACK ────────────────────────────────────────────────────────────────
+  {
+    id: 'terminator',
+    icon: '🦾',
+    label: 'Terminator',
+    desc: 'Segna alla prima partita dopo un proprio infortunio — torna più forte di prima',
+    positive: true,
+    check: (_s, p, matches) => {
+      if (!p?.id) return false;
+      const pid = p.id;
+      const played = _playedMatches(pid, matches)
+        .slice()
+        .sort((a, b) => getMs(a.date) - getMs(b.date));
+      for (let i = 0; i < played.length - 1; i++) {
+        const wasInjured = (played[i].events || []).some(e => e.type === 'injury' && e.playerId === pid);
+        if (!wasInjured) continue;
+        if ((played[i + 1].events || []).some(e => e.type === 'goal' && e.scorerId === pid)) return true;
+      }
+      return false;
+    },
+  },
+
   {
     id: 'giancarlo',
     icon: '🎲',
@@ -738,6 +912,70 @@ export const BADGE_DEFS = [
     positive: false,
     check: (_s, p) => _piDelta30(p) <= -10,
   },
+  {
+    id: 'incubo_ricorrente',
+    icon: '😈',
+    label: 'Incubo Ricorrente',
+    desc: 'Perde ≥ 80% degli scontri contro uno stesso avversario (min 5 incroci) — la sua bestia nera',
+    positive: false,
+    check: (_s, p, matches) => {
+      if (!p?.id) return false;
+      const pid = p.id;
+      const vsOpp = {};
+      for (const m of _playedMatches(pid, matches)) {
+        const inRed = (m.redTeam || []).some(pl => pl.id === pid);
+        const myScore = inRed ? (m.redScore || 0) : (m.blueScore || 0);
+        const theirScore = inRed ? (m.blueScore || 0) : (m.redScore || 0);
+        const lost = myScore < theirScore;
+        for (const opp of (inRed ? (m.blueTeam || []) : (m.redTeam || []))) {
+          if (!vsOpp[opp.id]) vsOpp[opp.id] = { total: 0, losses: 0 };
+          vsOpp[opp.id].total++;
+          if (lost) vsOpp[opp.id].losses++;
+        }
+      }
+      return Object.values(vsOpp).some(st => st.total >= 5 && st.losses / st.total >= 0.8);
+    },
+  },
+
+  // ── STAGIONALI ──────────────────────────────────────────────────────────────
+  {
+    id: 'gol_halloween',
+    icon: '🎃',
+    label: 'Gol di Halloween',
+    desc: 'Gol in una partita tra il 25 ottobre e il 2 novembre — chi ha detto che i fantasmi non segnano?',
+    positive: false,
+    check: (_s, p, matches) => {
+      if (!p?.id) return false;
+      const pid = p.id;
+      for (const m of _playedMatches(pid, matches)) {
+        const d = safeDate(m.date);
+        if (!d || isNaN(d.getTime())) continue;
+        const mon = d.getMonth(); // 0-indexed: 9=ott, 10=nov
+        const day = d.getDate();
+        if (!((mon === 9 && day >= 25) || (mon === 10 && day <= 2))) continue;
+        if ((m.events || []).some(e => e.type === 'goal' && e.scorerId === pid)) return true;
+      }
+      return false;
+    },
+  },
+  {
+    id: 'gol_sotto_albero',
+    icon: '🎄',
+    label: "Gol sotto l'Albero",
+    desc: 'Gol in una partita dal 20 al 31 dicembre — Babbo Natale porta i palloni, tu li metti in rete',
+    positive: false,
+    check: (_s, p, matches) => {
+      if (!p?.id) return false;
+      const pid = p.id;
+      for (const m of _playedMatches(pid, matches)) {
+        const d = safeDate(m.date);
+        if (!d || isNaN(d.getTime())) continue;
+        if (d.getMonth() !== 11 || d.getDate() < 20) continue;
+        if ((m.events || []).some(e => e.type === 'goal' && e.scorerId === pid)) return true;
+      }
+      return false;
+    },
+  },
 
   // ── METEO ─────────────────────────────────────────────────────────────────────
   {
@@ -797,6 +1035,38 @@ export const BADGE_DEFS = [
     check: (_s, p, matches) => {
       const ws = _getWeatherStats(p, matches);
       return ws.some(w => w.matches >= 4 && w.wins / w.matches <= 0.3);
+    },
+  },
+  {
+    id: 'iceman',
+    icon: '🧊',
+    label: 'Iceman',
+    desc: 'Gol in una partita con temperatura ≤ 2°C — freddo? Che freddo?',
+    positive: true,
+    check: (_s, p, matches) => {
+      if (!p?.id) return false;
+      const pid = p.id;
+      for (const m of _playedMatches(pid, matches)) {
+        if (typeof m.weather?.temp !== 'number' || m.weather.temp > 2) continue;
+        if ((m.events || []).some(e => e.type === 'goal' && e.scorerId === pid)) return true;
+      }
+      return false;
+    },
+  },
+  {
+    id: 'sahara',
+    icon: '🥵',
+    label: 'Sahara',
+    desc: 'Gol in una partita con temperatura ≥ 32°C — caldo infernale, gol glaciale',
+    positive: true,
+    check: (_s, p, matches) => {
+      if (!p?.id) return false;
+      const pid = p.id;
+      for (const m of _playedMatches(pid, matches)) {
+        if (typeof m.weather?.temp !== 'number' || m.weather.temp < 32) continue;
+        if ((m.events || []).some(e => e.type === 'goal' && e.scorerId === pid)) return true;
+      }
+      return false;
     },
   },
 ];

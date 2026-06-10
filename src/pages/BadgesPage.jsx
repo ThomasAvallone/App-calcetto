@@ -33,6 +33,10 @@ function badgeSource(b) {
     'pokemon_leggendario', 'mutombo', 'giancarlo', 'miglior_luciano',
     'remuntada', 'crollo_verticale', 'killer_instinct', 'patto_di_sangue',
     'giano_bifronte', 'gatto', 'ritorno_del_re',
+    'blitz', 'uno_due', 'standing_ovation', 'il_professore',
+    'coppia_doro', 'equilibrista', 'stacanovista', 'terminator',
+    'incubo_ricorrente', 'gol_halloween', 'gol_sotto_albero',
+    'iceman', 'sahara',
   ].includes(b.id)) return 'match';
   return 'season';
 }

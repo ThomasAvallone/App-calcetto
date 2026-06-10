@@ -13,6 +13,13 @@ import toast from 'react-hot-toast';
 
 const CHANGELOG = [
   {
+    version: '3.18.0',
+    date: 'Giugno 2026',
+    entries: [
+      { type: 'new', text: '13 nuovi badge — il catalogo sale a 63! Timing: ⚡ Blitz (gol entro il 1° minuto) e 🔫 Uno-Due (doppietta in ≤5 minuti). Voti: 🎩 Standing Ovation (voto ≥9 in una partita) e 📚 Il Professore (media voti ≥7.5 su min 3 partite). Duo: 🍀 Coppia d\'Oro (≥80% vittorie con un compagno fisso, min 5 partite). Presenze: ⚖️ Equilibrista (3 pareggi consecutivi), 📅 Stacanovista (10 partite di fila senza saltarne una), 🦾 Terminator (segna alla prima partita dopo un infortunio). H2H: 😈 Incubo Ricorrente (≥80% sconfitte contro lo stesso avversario, min 5 incroci). Stagionali goliardici: 🎃 Gol di Halloween (25 ott–2 nov) e 🎄 Gol sotto l\'Albero (20–31 dic). Temperatura: 🧊 Iceman (gol con ≤2°C) e 🥵 Sahara (gol con ≥32°C). Tutti calcolati al volo dai dati già raccolti.' },
+    ],
+  },
+  {
     version: '3.17.0',
     date: 'Giugno 2026',
     entries: [

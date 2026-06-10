@@ -300,6 +300,178 @@ describe('nuovi badge — parziali, relazioni, premi, trend PI', () => {
   });
 });
 
+describe('nuovi badge — timing, voti, duo, presenze, stagionali, temperature', () => {
+  const redGoal = (over = {}) => ({ type: 'goal', team: 'red', scorerId: 'p1', ...over });
+
+  // ── TIMING ──────────────────────────────────────────────────────────────────
+  it('blitz: gol al minuto 0 o 1', () => {
+    const m0 = match({ events: [redGoal({ minute: 0 })] });
+    expect(badge('blitz').check({}, player(), [m0])).toBe(true);
+    const m1 = match({ events: [redGoal({ minute: 1 })] });
+    expect(badge('blitz').check({}, player(), [m1])).toBe(true);
+    const m2 = match({ events: [redGoal({ minute: 2 })] });
+    expect(badge('blitz').check({}, player(), [m2])).toBe(false);
+    expect(badge('blitz').check({}, player(), [])).toBe(false);
+  });
+
+  it('uno_due: doppietta in ≤5 minuti', () => {
+    const m = match({ events: [redGoal({ minute: 10 }), redGoal({ minute: 14 })] });
+    expect(badge('uno_due').check({}, player(), [m])).toBe(true);
+    // esattamente 5 minuti → true
+    const mEdge = match({ events: [redGoal({ minute: 5 }), redGoal({ minute: 10 })] });
+    expect(badge('uno_due').check({}, player(), [mEdge])).toBe(true);
+    // 6 minuti → false
+    const mFar = match({ events: [redGoal({ minute: 5 }), redGoal({ minute: 11 })] });
+    expect(badge('uno_due').check({}, player(), [mFar])).toBe(false);
+    // minute mancante → non conta per il calcolo → false
+    const mNoMin = match({ events: [redGoal(), redGoal()] });
+    expect(badge('uno_due').check({}, player(), [mNoMin])).toBe(false);
+  });
+
+  // ── VOTI ────────────────────────────────────────────────────────────────────
+  it('standing_ovation: voto ≥9 in una partita', () => {
+    const m = match({ ratings: { p1: 9 } });
+    expect(badge('standing_ovation').check({}, player(), [m])).toBe(true);
+    const mLow = match({ ratings: { p1: 8.9 } });
+    expect(badge('standing_ovation').check({}, player(), [mLow])).toBe(false);
+    expect(badge('standing_ovation').check({}, player(), [match()])).toBe(false);
+  });
+
+  it('il_professore: media ≥7.5 con min 3 partite votate', () => {
+    const rated = (r) => match({ ratings: { p1: r } });
+    expect(badge('il_professore').check({}, player(), [rated(8), rated(7.5), rated(7.5)])).toBe(true);
+    // media esattamente 7.5 → true
+    expect(badge('il_professore').check({}, player(), [rated(7.5), rated(7.5), rated(7.5)])).toBe(true);
+    // sotto 7.5
+    expect(badge('il_professore').check({}, player(), [rated(8), rated(8), rated(6)])).toBe(false);
+    // solo 2 partite votate → false
+    expect(badge('il_professore').check({}, player(), [rated(10), rated(10)])).toBe(false);
+    // partita senza rating non conta nel denominatore
+    const withUnrated = [rated(8), rated(8), match()]; // solo 2 votate → false
+    expect(badge('il_professore').check({}, player(), withUnrated)).toBe(false);
+  });
+
+  // ── DUO ─────────────────────────────────────────────────────────────────────
+  it("coppia_doro: ≥80% vittorie con un compagno (min 5 partite)", () => {
+    // p1 (rosso) con p3 come compagno, 4/5 vittorie → 80%
+    const winWith = (id) => match({ id, redScore: 2, blueScore: 1,
+      redTeam: [{ id: 'p1' }, { id: 'p3' }], blueTeam: [{ id: 'p2' }] });
+    const loseWith = (id) => match({ id, redScore: 0, blueScore: 1,
+      redTeam: [{ id: 'p1' }, { id: 'p3' }], blueTeam: [{ id: 'p2' }] });
+    const five = [winWith('a'), winWith('b'), winWith('c'), winWith('d'), loseWith('e')];
+    expect(badge('coppia_doro').check({}, player(), five)).toBe(true);
+    // solo 4 partite insieme → false
+    const four = five.slice(0, 4);
+    expect(badge('coppia_doro').check({}, player(), four)).toBe(false);
+    // 50% vittorie → false
+    const half = [winWith('a'), winWith('b'), loseWith('c'), loseWith('d'), loseWith('e')];
+    expect(badge('coppia_doro').check({}, player(), half)).toBe(false);
+  });
+
+  // ── PRESENZE ────────────────────────────────────────────────────────────────
+  it('equilibrista: 3 pareggi consecutivi', () => {
+    const draw = (id) => match({ id, redScore: 1, blueScore: 1, date: Date.now() });
+    const win  = (id) => match({ id, redScore: 2, blueScore: 0, date: Date.now() });
+    expect(badge('equilibrista').check({}, player(), [draw('a'), draw('b'), draw('c')])).toBe(true);
+    expect(badge('equilibrista').check({}, player(), [draw('a'), draw('b')])).toBe(false);
+    // pareggio interrotto da una vittoria → streak si azzera
+    expect(badge('equilibrista').check({}, player(), [draw('a'), win('x'), draw('b'), draw('c')])).toBe(false);
+  });
+
+  it('stacanovista: presente in 10 partite consecutive del gruppo', () => {
+    const present = (id) => match({ id, date: Date.now() });
+    const absent = (id) => match({ id, date: Date.now(),
+      redTeam: [{ id: 'p9' }], blueTeam: [{ id: 'p8' }] });
+    const ten = Array.from({ length: 10 }, (_, i) => present(`m${i}`));
+    expect(badge('stacanovista').check({}, player(), ten)).toBe(true);
+    expect(badge('stacanovista').check({}, player(), ten.slice(0, 9))).toBe(false);
+    // assenza a metà azzera la streak
+    const broken = [...ten.slice(0, 5), absent('x'), ...ten.slice(5)];
+    expect(badge('stacanovista').check({}, player(), broken)).toBe(false);
+  });
+
+  it('terminator: segna alla prima partita dopo un infortunio', () => {
+    const day = 86400000;
+    const injMatch = match({ id: 'inj', date: Date.now() - 2 * day,
+      events: [{ type: 'injury', playerId: 'p1' }] });
+    const comeback = match({ id: 'cb', date: Date.now(),
+      events: [redGoal()] });
+    expect(badge('terminator').check({}, player(), [injMatch, comeback])).toBe(true);
+    // torna ma non segna → false
+    const noGoal = match({ id: 'ng', date: Date.now(), events: [] });
+    expect(badge('terminator').check({}, player(), [injMatch, noGoal])).toBe(false);
+    // nessun infortunio → false
+    expect(badge('terminator').check({}, player(), [match({ id: 'a' }), comeback])).toBe(false);
+  });
+
+  // ── H2H ─────────────────────────────────────────────────────────────────────
+  it('incubo_ricorrente: perde ≥80% h2h vs stesso avversario (min 5)', () => {
+    const loseVs = (id) => match({ id, redScore: 0, blueScore: 1 });
+    const winVs  = (id) => match({ id, redScore: 1, blueScore: 0 });
+    // 4/5 sconfitte vs p2 → 80%
+    expect(badge('incubo_ricorrente').check({}, player(),
+      [loseVs('a'), loseVs('b'), loseVs('c'), loseVs('d'), winVs('e')])).toBe(true);
+    // solo 4 partite → false
+    expect(badge('incubo_ricorrente').check({}, player(),
+      [loseVs('a'), loseVs('b'), loseVs('c'), loseVs('d')])).toBe(false);
+    // 60% sconfitte → false
+    expect(badge('incubo_ricorrente').check({}, player(),
+      [loseVs('a'), loseVs('b'), loseVs('c'), winVs('d'), winVs('e')])).toBe(false);
+  });
+
+  // ── STAGIONALI ──────────────────────────────────────────────────────────────
+  it('gol_halloween: gol tra 25 ott e 2 nov', () => {
+    const makeMatch = (month, day) => match({
+      date: new Date(2025, month, day).getTime(),
+      events: [redGoal()],
+    });
+    expect(badge('gol_halloween').check({}, player(), [makeMatch(9, 25)])).toBe(true);  // 25 ott
+    expect(badge('gol_halloween').check({}, player(), [makeMatch(9, 31)])).toBe(true);  // 31 ott
+    expect(badge('gol_halloween').check({}, player(), [makeMatch(10, 1)])).toBe(true);  // 1 nov
+    expect(badge('gol_halloween').check({}, player(), [makeMatch(10, 2)])).toBe(true);  // 2 nov
+    expect(badge('gol_halloween').check({}, player(), [makeMatch(9, 24)])).toBe(false); // 24 ott
+    expect(badge('gol_halloween').check({}, player(), [makeMatch(10, 3)])).toBe(false); // 3 nov
+    // nel periodo ma senza gol
+    const noGoal = match({ date: new Date(2025, 9, 28).getTime(), events: [] });
+    expect(badge('gol_halloween').check({}, player(), [noGoal])).toBe(false);
+  });
+
+  it('gol_sotto_albero: gol dal 20 al 31 dicembre', () => {
+    const makeMatch = (day) => match({
+      date: new Date(2025, 11, day).getTime(),
+      events: [redGoal()],
+    });
+    expect(badge('gol_sotto_albero').check({}, player(), [makeMatch(20)])).toBe(true);
+    expect(badge('gol_sotto_albero').check({}, player(), [makeMatch(31)])).toBe(true);
+    expect(badge('gol_sotto_albero').check({}, player(), [makeMatch(19)])).toBe(false);
+    // novembre → false
+    const nov = match({ date: new Date(2025, 10, 25).getTime(), events: [redGoal()] });
+    expect(badge('gol_sotto_albero').check({}, player(), [nov])).toBe(false);
+  });
+
+  // ── TEMPERATURA ─────────────────────────────────────────────────────────────
+  it('iceman: gol con temp ≤2°C', () => {
+    const cold = match({ weather: { temp: 2 }, events: [redGoal()] });
+    expect(badge('iceman').check({}, player(), [cold])).toBe(true);
+    const mild = match({ weather: { temp: 3 }, events: [redGoal()] });
+    expect(badge('iceman').check({}, player(), [mild])).toBe(false);
+    // no weather → false
+    expect(badge('iceman').check({}, player(), [match({ events: [redGoal()] })])).toBe(false);
+    // cold but no goal
+    const coldNoGoal = match({ weather: { temp: 0 }, events: [] });
+    expect(badge('iceman').check({}, player(), [coldNoGoal])).toBe(false);
+  });
+
+  it('sahara: gol con temp ≥32°C', () => {
+    const hot = match({ weather: { temp: 32 }, events: [redGoal()] });
+    expect(badge('sahara').check({}, player(), [hot])).toBe(true);
+    const warm = match({ weather: { temp: 31 }, events: [redGoal()] });
+    expect(badge('sahara').check({}, player(), [warm])).toBe(false);
+    // no weather → false
+    expect(badge('sahara').check({}, player(), [match({ events: [redGoal()] })])).toBe(false);
+  });
+});
+
 describe('coerenza definizioni', () => {
   it('ogni badge ha id, icon, label, desc, positive booleano e check funzione', () => {
     const ids = new Set();
