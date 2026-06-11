@@ -143,9 +143,17 @@ export default function HistoryPage() {
     }));
   }, [viewMode, showFilters, seasonFilter, winnerFilter, playerFilter, minGoals, dateFrom, dateTo, calYear, calMonth, calDay]);
 
+  const [subVersion, setSubVersion] = useState(0);
   useEffect(() => {
     const unsub = subscribeToMatches(ms => { setMatches(ms); setLoading(false); });
     return unsub;
+  }, [subVersion]);
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') setSubVersion(v => v + 1);
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
   }, []);
 
   // Restore scroll position once after data loads (saved by goToMatch below)

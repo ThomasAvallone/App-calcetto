@@ -142,6 +142,21 @@ export default function MatchPage() {
     return () => unloadMatch();
   }, [id]);
 
+  // Re-subscribe when the app returns to foreground. On mobile PWAs the Firestore
+  // WebSocket can be suspended while backgrounded; without this the viewer has to
+  // manually refresh to see new goals. Skip if there are pending writes so we
+  // don't interrupt an active admin who is mid-scoring.
+  useEffect(() => {
+    if (match?.status !== 'active') return;
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (hasPendingWrites) return;
+      loadMatch(id);
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [id, match?.status, hasPendingWrites]);
+
   // Timer loop
   useEffect(() => {
     timerRef.current = setInterval(() => {
