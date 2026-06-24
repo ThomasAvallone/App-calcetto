@@ -9,7 +9,7 @@ import { eventsSignature, isHeadlineFresh } from '../utils/eventsSignature';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import toast from 'react-hot-toast';
-import { safeDate } from '../utils/dateUtils';
+import { safeDate, getMs } from '../utils/dateUtils';
 import { scoreFromEvents } from '../utils/matchScore';
 import MatchReplay from '../components/MatchReplay';
 import BestieSection from '../components/match/BestieSection';
@@ -316,6 +316,29 @@ export default function MatchDetailPage() {
       toast.error(e.message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Corregge retroattivamente i minuti degli eventi con minute===0 usando i
+  // timestamp reali degli eventi e la data di inizio partita come riferimento.
+  const handleFixMinutes = async () => {
+    const matchStartMs = getMs(match.date);
+    if (!matchStartMs) return toast.error('Data partita non disponibile');
+    const fixed = (match.events || []).map(ev => {
+      if ((ev.minute ?? 0) !== 0 || !ev.timestamp) return ev;
+      return { ...ev, minute: Math.max(0, Math.floor((ev.timestamp - matchStartMs) / 60000)) };
+    });
+    const changed = fixed.filter((ev, i) => ev.minute !== (match.events[i]?.minute ?? 0)).length;
+    if (changed === 0) return toast('Nessun evento da correggere');
+    const prev = match;
+    setMatch(m => ({ ...m, events: fixed }));
+    try {
+      await updateMatch(id, { events: fixed });
+      refreshHeadline({ ...match, events: fixed });
+      toast.success(`${changed} ${changed === 1 ? 'minuto corretto' : 'minuti corretti'}`);
+    } catch (e) {
+      setMatch(prev);
+      toast.error('Errore nel salvataggio');
     }
   };
 
@@ -1011,6 +1034,26 @@ export default function MatchDetailPage() {
           </button>
         </div>
       )}
+
+      {/* Correggi minuti — compare solo se ci sono gol/autogol con minuto 0 e timestamp */}
+      {isAdmin && (() => {
+        const fixable = (match.events || []).filter(
+          ev => ['goal', 'autogoal'].includes(ev.type) && (ev.minute ?? 0) === 0 && ev.timestamp
+        );
+        if (!fixable.length) return null;
+        return (
+          <div className="card" style={{ border: '1px solid rgba(246,173,85,0.35)', background: 'rgba(246,173,85,0.06)' }}>
+            <p style={{ fontSize: '0.88rem', color: '#F6AD55', marginBottom: '0.75rem' }}>
+              ⚠️ {fixable.length} {fixable.length === 1 ? 'gol senza' : 'gol senza'} minuto (timer non avviato durante la partita).
+              Il minuto verrà calcolato dal timestamp reale degli eventi.
+            </p>
+            <button className="btn btn-full" style={{ background: 'rgba(246,173,85,0.15)', border: '1px solid #F6AD55', color: '#F6AD55' }}
+              onClick={handleFixMinutes} disabled={saving}>
+              🕐 Correggi minuti dal timestamp
+            </button>
+          </div>
+        );
+      })()}
 
       {showReplay && <MatchReplay match={match} onClose={() => setShowReplay(false)} />}
     </div>

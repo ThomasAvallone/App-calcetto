@@ -8,6 +8,7 @@ import {
   recordGoalEvent, deleteGoalEvent, recordChronicleEvent,
 } from '../firebase/firestore';
 import { scoreFromEvents } from '../utils/matchScore';
+import { getMs } from '../utils/dateUtils';
 
 // ─── STORE ────────────────────────────────────────────────────────────────────
 
@@ -16,6 +17,17 @@ const DEFAULT_TIMER_STATE = {
   startTimestamp: null,
   elapsedMs: 0,
 };
+
+// Minuto dell'evento: usa il cronometro manuale se mai avviato (elapsedMs > 0
+// o isRunning), altrimenti cade sul tempo reale trascorso dalla data partita.
+// Così i gol hanno sempre un minuto sensato anche se il timer non è stato usato.
+function _minuteFromTimer(get) {
+  const { timerState, match } = get();
+  const elapsed = get().getElapsedSeconds();
+  if (elapsed > 0 || timerState.isRunning) return Math.floor(elapsed / 60);
+  const matchStartMs = getMs(match?.date);
+  return matchStartMs > 0 ? Math.max(0, Math.floor((Date.now() - matchStartMs) / 60000)) : 0;
+}
 
 // Il punteggio live si deriva SEMPRE dagli eventi (source of truth, vedi
 // scoreFromEvents): i campi redScore/blueScore del doc sono mantenuti via
@@ -181,7 +193,7 @@ const useMatchStore = create(
       },
 
       async recordGoal({ team, scorerId, scorerName, assistId, assistName, gkConcededId, gkConcededName }) {
-        const minute = Math.floor(get().getElapsedSeconds() / 60);
+        const minute = _minuteFromTimer(get);
         await get()._appendEvent({
           id: crypto.randomUUID(),
           type: 'goal',
@@ -196,7 +208,7 @@ const useMatchStore = create(
       },
 
       async recordAutogoal({ team, scorerId, scorerName, gkConcededId, gkConcededName }) {
-        const minute = Math.floor(get().getElapsedSeconds() / 60);
+        const minute = _minuteFromTimer(get);
         await get()._appendEvent({
           id: crypto.randomUUID(),
           type: 'autogoal',
@@ -208,7 +220,7 @@ const useMatchStore = create(
       },
 
       async recordInjury({ playerId, playerName, team }) {
-        const minute = Math.floor(get().getElapsedSeconds() / 60);
+        const minute = _minuteFromTimer(get);
         await get()._appendEvent({
           id: crypto.randomUUID(),
           type: 'injury',
