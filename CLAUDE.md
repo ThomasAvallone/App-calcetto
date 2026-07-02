@@ -61,6 +61,7 @@ src/
 │   ├── matchSyncState.js / matchSyncState.test.js  # stato indicatore sync live (puro)
 │   ├── withTimeout.js / withTimeout.test.js  # withTimeout/isTimeout — bound su await di write Firestore (offline non risolvono mai)
 │   ├── eventsSignature.js / eventsSignature.test.js  # firma eventi → invalida titolo/pagelle AI dopo modifiche in post
+│   ├── eventMinute.js / eventMinute.test.js  # minuto eventi senza cronometro: fallback live + fix retroattivo
 │   └── waitUndo.js           # Toast con countdown per operazioni annullabili
 ├── constants/
 │   ├── colors.js             # Costanti colori (CLR_WIN, CLR_LOSS, ecc.)
@@ -175,6 +176,7 @@ ogni nuova funzione di calcolo va messa lì (non inline nei componenti) e testat
 | `teamBalance.js` | `balanceTeams` (snake draft), `balanceWithLocks` (lock + greedy PI, `null` su overflow) |
 | `matchSyncState.js` | `matchSyncState` (offline>syncing>synced) + `shouldShowSyncChip` (nasconde synced ai viewer) |
 | `withTimeout.js` | `withTimeout(promise, ms)` + `isTimeout(e)` — TimeoutError, no unhandled rejection tardive |
+| `eventMinute.js` | `deriveEventMinute` (fallback live se cronometro mai avviato) + `fixZeroMinutes` (fix retroattivo dai timestamp; ancora match.date validata, altrimenti progressione dal primo evento) |
 | `playerStats.js` (+) | `aggregatePlayerMatchStats` (stats di un player su una lista di partite; proration assist storici cap a 1) |
 | `firestore.js` | solo `sanitizePublicName` (resto non testato: richiede Firebase) |
 

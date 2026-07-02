@@ -9,6 +9,7 @@ import {
 } from '../firebase/firestore';
 import { scoreFromEvents } from '../utils/matchScore';
 import { getMs } from '../utils/dateUtils';
+import { deriveEventMinute } from '../utils/eventMinute';
 
 // ─── STORE ────────────────────────────────────────────────────────────────────
 
@@ -18,15 +19,16 @@ const DEFAULT_TIMER_STATE = {
   elapsedMs: 0,
 };
 
-// Minuto dell'evento: usa il cronometro manuale se mai avviato (elapsedMs > 0
-// o isRunning), altrimenti cade sul tempo reale trascorso dalla data partita.
-// Così i gol hanno sempre un minuto sensato anche se il timer non è stato usato.
+// Minuto dell'evento: cronometro manuale se usato, altrimenti fallback sul
+// tempo reale da match.date (validato — logica pura in utils/eventMinute.js).
 function _minuteFromTimer(get) {
   const { timerState, match } = get();
-  const elapsed = get().getElapsedSeconds();
-  if (elapsed > 0 || timerState.isRunning) return Math.floor(elapsed / 60);
-  const matchStartMs = getMs(match?.date);
-  return matchStartMs > 0 ? Math.max(0, Math.floor((Date.now() - matchStartMs) / 60000)) : 0;
+  return deriveEventMinute({
+    elapsedSeconds: get().getElapsedSeconds(),
+    isRunning: timerState.isRunning,
+    matchDateMs: getMs(match?.date),
+    nowMs: Date.now(),
+  });
 }
 
 // Il punteggio live si deriva SEMPRE dagli eventi (source of truth, vedi

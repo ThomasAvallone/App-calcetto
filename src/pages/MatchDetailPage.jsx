@@ -11,6 +11,7 @@ import { it } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 import { safeDate, getMs } from '../utils/dateUtils';
 import { scoreFromEvents } from '../utils/matchScore';
+import { fixZeroMinutes } from '../utils/eventMinute';
 import MatchReplay from '../components/MatchReplay';
 import BestieSection from '../components/match/BestieSection';
 import RatingSection from '../components/match/RatingSection';
@@ -320,15 +321,12 @@ export default function MatchDetailPage() {
   };
 
   // Corregge retroattivamente i minuti degli eventi con minute===0 usando i
-  // timestamp reali degli eventi e la data di inizio partita come riferimento.
+  // timestamp reali (logica pura + validazione ancora in utils/eventMinute.js).
+  // Solo a partita finished: su partita attiva la riscrittura in blocco degli
+  // eventi potrebbe cancellare eventi live concorrenti (vedi invariante eventi).
   const handleFixMinutes = async () => {
-    const matchStartMs = getMs(match.date);
-    if (!matchStartMs) return toast.error('Data partita non disponibile');
-    const fixed = (match.events || []).map(ev => {
-      if ((ev.minute ?? 0) !== 0 || !ev.timestamp) return ev;
-      return { ...ev, minute: Math.max(0, Math.floor((ev.timestamp - matchStartMs) / 60000)) };
-    });
-    const changed = fixed.filter((ev, i) => ev.minute !== (match.events[i]?.minute ?? 0)).length;
+    if (match.status !== 'finished') return;
+    const { events: fixed, changed } = fixZeroMinutes(match.events, getMs(match.date));
     if (changed === 0) return toast('Nessun evento da correggere');
     const prev = match;
     setMatch(m => ({ ...m, events: fixed }));
@@ -1035,17 +1033,16 @@ export default function MatchDetailPage() {
         </div>
       )}
 
-      {/* Correggi minuti — compare solo se ci sono gol/autogol con minuto 0 e timestamp */}
-      {isAdmin && (() => {
-        const fixable = (match.events || []).filter(
-          ev => ['goal', 'autogoal'].includes(ev.type) && (ev.minute ?? 0) === 0 && ev.timestamp
-        );
-        if (!fixable.length) return null;
+      {/* Correggi minuti — stessa logica dell'handler (fixZeroMinutes), così il
+          conteggio mostrato coincide sempre con quello che verrà corretto */}
+      {isAdmin && match.status === 'finished' && (() => {
+        const { changed } = fixZeroMinutes(match.events, getMs(match.date));
+        if (changed === 0) return null;
         return (
           <div className="card" style={{ border: '1px solid rgba(246,173,85,0.35)', background: 'rgba(246,173,85,0.06)' }}>
             <p style={{ fontSize: '0.88rem', color: '#F6AD55', marginBottom: '0.75rem' }}>
-              ⚠️ {fixable.length} {fixable.length === 1 ? 'gol senza' : 'gol senza'} minuto (timer non avviato durante la partita).
-              Il minuto verrà calcolato dal timestamp reale degli eventi.
+              ⚠️ {changed} {changed === 1 ? 'evento senza minuto' : 'eventi senza minuto'} (timer non avviato durante la partita).
+              Il minuto verrà ricavato dall'orario reale di registrazione.
             </p>
             <button className="btn btn-full" style={{ background: 'rgba(246,173,85,0.15)', border: '1px solid #F6AD55', color: '#F6AD55' }}
               onClick={handleFixMinutes} disabled={saving}>
