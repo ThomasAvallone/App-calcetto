@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { deriveEventMinute, fixZeroMinutes, MAX_PLAUSIBLE_MINUTE } from './eventMinute';
+import { deriveEventMinute, fixZeroMinutes, hasKnownTiming, maxEventMinute, MAX_PLAUSIBLE_MINUTE } from './eventMinute';
 
 const MIN = 60000;
 const T0 = 1750000000000; // ancora fittizia
@@ -42,18 +42,54 @@ describe('deriveEventMinute — fallback tempo reale', () => {
   });
 });
 
-describe('fixZeroMinutes — ancora match.date plausibile', () => {
+describe('deriveEventMinute — clamp di monotonicità (lastEventMinute)', () => {
+  it('cronometro avviato DOPO gol col fallback: il minuto non torna indietro', () => {
+    // cronaca già a 25' (fallback), admin avvia il timer → elapsed 120s = 2'
+    expect(deriveEventMinute({ elapsedSeconds: 120, isRunning: true, matchDateMs: T0, nowMs: T0 + 27 * MIN, lastEventMinute: 25 }))
+      .toBe(25);
+    // quando il timer supera il massimo, riprende a contare normalmente
+    expect(deriveEventMinute({ elapsedSeconds: 26 * 60, isRunning: true, matchDateMs: T0, nowMs: T0 + 51 * MIN, lastEventMinute: 25 }))
+      .toBe(26);
+  });
+
+  it('è un no-op nel flusso puro-timer e puro-fallback (già monotoni)', () => {
+    expect(deriveEventMinute({ elapsedSeconds: 40 * 60, isRunning: true, matchDateMs: T0, nowMs: T0, lastEventMinute: 12 }))
+      .toBe(40);
+    expect(deriveEventMinute({ elapsedSeconds: 0, isRunning: false, matchDateMs: T0, nowMs: T0 + 40 * MIN, lastEventMinute: 12 }))
+      .toBe(40);
+  });
+
+  it('clamp anche sul fallback implausibile (0 → resta almeno lastEventMinute)', () => {
+    expect(deriveEventMinute({ elapsedSeconds: 0, isRunning: false, matchDateMs: 0, nowMs: T0, lastEventMinute: 7 }))
+      .toBe(7);
+  });
+});
+
+describe('maxEventMinute / hasKnownTiming', () => {
+  it('maxEventMinute: massimo tra i minuti numerici, 0 senza eventi', () => {
+    expect(maxEventMinute([{ minute: 3 }, { minute: 41 }, { minute: null }, {}])).toBe(41);
+    expect(maxEventMinute([])).toBe(0);
+    expect(maxEventMinute(null)).toBe(0);
+  });
+
+  it('hasKnownTiming: true solo con almeno un minuto > 0', () => {
+    expect(hasKnownTiming([{ minute: 0 }, { minute: 0 }])).toBe(false);
+    expect(hasKnownTiming([{ minute: 0 }, { minute: 12 }])).toBe(true);
+    expect(hasKnownTiming([])).toBe(false);
+    expect(hasKnownTiming(null)).toBe(false);
+  });
+});
+
+describe('fixZeroMinutes — ancora match.date plausibile (partita tutta a minute 0)', () => {
   it('corregge i minuti dai timestamp e conta solo gli eventi modificati', () => {
     const events = [
       { type: 'goal', minute: 0, timestamp: T0 + 12 * MIN },
       { type: 'goal', minute: 0, timestamp: T0 + 47 * MIN },
-      { type: 'goal', minute: 33, timestamp: T0 + 33 * MIN }, // già valorizzato: intoccabile
     ];
     const { events: out, changed } = fixZeroMinutes(events, T0);
     expect(changed).toBe(2);
     expect(out[0].minute).toBe(12);
     expect(out[1].minute).toBe(47);
-    expect(out[2]).toBe(events[2]); // stessa referenza, non riscritto
   });
 
   it('include anche infortuni/parate con minuto 0', () => {
@@ -87,6 +123,20 @@ describe('fixZeroMinutes — ancora match.date plausibile', () => {
   });
 });
 
+describe('fixZeroMinutes — guard timing noto (zeri ambigui = legittimi)', () => {
+  it('se qualche evento ha già minuto > 0 NON tocca nulla', () => {
+    // il gol a 0' col cronometro avviato è un vero gol del primo minuto:
+    // riscriverlo dal timestamp contro un'ancora diversa creerebbe incoerenza
+    const events = [
+      { type: 'goal', minute: 0, timestamp: T0 + 40 * MIN },  // legittimo 1° minuto (match iniziato tardi)
+      { type: 'goal', minute: 33, timestamp: T0 + 73 * MIN },
+    ];
+    const { events: out, changed } = fixZeroMinutes(events, T0);
+    expect(changed).toBe(0);
+    expect(out).toBe(events);
+  });
+});
+
 describe('fixZeroMinutes — ancora inaffidabile → progressione dal primo evento', () => {
   it('date solo-giorno (mezzanotte): usa il primo timestamp come minuto 0', () => {
     const midnight = T0;
@@ -109,6 +159,18 @@ describe('fixZeroMinutes — ancora inaffidabile → progressione dal primo even
     const { events: out } = fixZeroMinutes(events, T0 + 60 * MIN);
     expect(out[0].minute).toBe(0);
     expect(out[1].minute).toBe(15);
+  });
+
+  it('timestamp anomalo (clock skew, giorni dopo): quell\'evento resta intatto', () => {
+    const events = [
+      { type: 'goal', minute: 0, timestamp: T0 },
+      { type: 'goal', minute: 0, timestamp: T0 + 9 * MIN },
+      { type: 'goal', minute: 0, timestamp: T0 + 2880 * MIN }, // 2 giorni dopo
+    ];
+    const { events: out, changed } = fixZeroMinutes(events, 0);
+    expect(changed).toBe(1);
+    expect(out[1].minute).toBe(9);
+    expect(out[2]).toBe(events[2]);   // mai minuti oltre MAX_PLAUSIBLE_MINUTE
   });
 });
 

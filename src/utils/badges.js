@@ -1,6 +1,7 @@
 import { getMs, safeDate } from './dateUtils';
 import { computePlayerWeatherStats } from './weatherStats';
 import { withProgressiveScore } from './matchScore';
+import { hasKnownTiming } from './eventMinute';
 
 // Helper usato dai badge meteo: filtra le partite del giocatore e calcola le stats meteo.
 // Esclude esplicitamente partite storiche e non terminate (defensive: computePlayerWeatherStats
@@ -201,7 +202,9 @@ export const BADGE_DEFS = [
         .sort((a, b) => getMs(b.date) - getMs(a.date));
       let streak = 0;
       for (const m of played) {
-        const earlyGoal = (m.events || []).some(
+        // hasKnownTiming: in partite col cronometro mai avviato tutti i gol
+        // hanno minute 0 = "sconosciuto", non "primo minuto" → non contano.
+        const earlyGoal = hasKnownTiming(m.events) && (m.events || []).some(
           ev => ev.type === 'goal' && ev.scorerId === pid && (ev.minute || 0) < 10
         );
         if (earlyGoal) { streak++; if (streak >= 3) return true; }
@@ -531,6 +534,9 @@ export const BADGE_DEFS = [
       if (!p?.id) return false;
       const pid = p.id;
       for (const m of _playedMatches(pid, matches)) {
+        // hasKnownTiming: minute 0 in partite senza cronometro = "sconosciuto",
+        // non "primo minuto" — senza guard il badge andrebbe a ogni marcatore.
+        if (!hasKnownTiming(m.events)) continue;
         if ((m.events || []).some(e => e.type === 'goal' && e.scorerId === pid && (e.minute || 0) <= 1))
           return true;
       }
@@ -547,6 +553,9 @@ export const BADGE_DEFS = [
       if (!p?.id) return false;
       const pid = p.id;
       for (const m of _playedMatches(pid, matches)) {
+        // Stessa guard di blitz: due gol entrambi a minute 0 "sconosciuto"
+        // darebbero diff 0 ≤ 5 → doppietta-lampo regalata.
+        if (!hasKnownTiming(m.events)) continue;
         const goals = (m.events || [])
           .filter(e => e.type === 'goal' && e.scorerId === pid && typeof e.minute === 'number')
           .sort((a, b) => a.minute - b.minute);

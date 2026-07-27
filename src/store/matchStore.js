@@ -9,7 +9,7 @@ import {
 } from '../firebase/firestore';
 import { scoreFromEvents } from '../utils/matchScore';
 import { getMs } from '../utils/dateUtils';
-import { deriveEventMinute } from '../utils/eventMinute';
+import { deriveEventMinute, maxEventMinute } from '../utils/eventMinute';
 
 // ─── STORE ────────────────────────────────────────────────────────────────────
 
@@ -20,7 +20,9 @@ const DEFAULT_TIMER_STATE = {
 };
 
 // Minuto dell'evento: cronometro manuale se usato, altrimenti fallback sul
-// tempo reale da match.date (validato — logica pura in utils/eventMinute.js).
+// tempo reale da match.date (validato). `lastEventMinute` garantisce la
+// monotonicità della cronaca anche se il cronometro viene avviato DOPO gol
+// registrati col fallback (logica pura in utils/eventMinute.js).
 function _minuteFromTimer(get) {
   const { timerState, match } = get();
   return deriveEventMinute({
@@ -28,6 +30,7 @@ function _minuteFromTimer(get) {
     isRunning: timerState.isRunning,
     matchDateMs: getMs(match?.date),
     nowMs: Date.now(),
+    lastEventMinute: maxEventMinute(match?.events),
   });
 }
 
@@ -64,7 +67,42 @@ const useMatchStore = create(
         if (unsubscribeState) unsubscribeState();
         // Cancellation token: stale loads/subscriptions are silently ignored
         const token = Date.now() + Math.random();
+        // Refresh della stessa partita già in store (es. ritorno in foreground):
+        // niente overwrite di match/timerState dal getDoc — i dati arrivano dalle
+        // nuove subscription (latency-compensated: non perdono gli optimistic
+        // update né resettano il cronometro se una read fallisce).
+        const isRefresh = get().activeMatchId === matchId && !!get().match;
         set({ _loadToken: token, loadError: null, unsubscribeMatch: null, unsubscribeState: null });
+
+        const subscribe = () => {
+          const unsub = subscribeToMatch(matchId, (updatedMatch) => {
+            if (get()._loadToken !== token) return;
+            if (updatedMatch) set({ match: withDerivedScore(updatedMatch) });
+          });
+          const unsubState = subscribeToMatchState(matchId, (state) => {
+            if (get()._loadToken !== token) return;
+            if (state) {
+              set({
+                timerState: {
+                  isRunning: state.isRunning || false,
+                  startTimestamp: state.startTimestamp || null,
+                  elapsedMs: state.elapsedMs || 0,
+                }
+              });
+            }
+          });
+          set({ unsubscribeMatch: unsub, unsubscribeState: unsubState });
+        };
+
+        if (isRefresh) {
+          subscribe();
+          // Il getDoc serve solo a riattivare il transport dopo un background
+          // prolungato (il WebChannel sospeso può impiegare 30-60s a riprendersi
+          // da solo): l'esito non tocca lo stato, mai errori all'utente qui.
+          getMatch(matchId).catch(() => {});
+          return;
+        }
+
         try {
           const [match, timerState] = await Promise.all([
             getMatch(matchId),
@@ -85,23 +123,7 @@ const useMatchStore = create(
               elapsedMs: timerState?.elapsedMs || 0,
             },
           });
-          const unsub = subscribeToMatch(matchId, (updatedMatch) => {
-            if (get()._loadToken !== token) return;
-            if (updatedMatch) set({ match: withDerivedScore(updatedMatch) });
-          });
-          const unsubState = subscribeToMatchState(matchId, (state) => {
-            if (get()._loadToken !== token) return;
-            if (state) {
-              set({
-                timerState: {
-                  isRunning: state.isRunning || false,
-                  startTimestamp: state.startTimestamp || null,
-                  elapsedMs: state.elapsedMs || 0,
-                }
-              });
-            }
-          });
-          set({ unsubscribeMatch: unsub, unsubscribeState: unsubState });
+          subscribe();
         } catch (e) {
           if (get()._loadToken !== token) return;
           set({ loadError: 'load-failed' });
@@ -114,6 +136,11 @@ const useMatchStore = create(
         if (unsubscribeMatch) unsubscribeMatch();
         if (unsubscribeState) unsubscribeState();
         set({
+          // Invalida anche i loadMatch ancora in volo: senza questo, un load
+          // partito prima dell'unmount (es. da visibilitychange) completerebbe
+          // DOPO l'unload risuscitando match/activeMatchId e creando subscription
+          // orfane che nessuna pagina possiede più.
+          _loadToken: Date.now() + Math.random(),
           activeMatchId: null,
           match: null,
           unsubscribeMatch: null,

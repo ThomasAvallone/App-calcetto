@@ -304,14 +304,23 @@ describe('nuovi badge — timing, voti, duo, presenze, stagionali, temperature',
   const redGoal = (over = {}) => ({ type: 'goal', team: 'red', scorerId: 'p1', ...over });
 
   // ── TIMING ──────────────────────────────────────────────────────────────────
-  it('blitz: gol al minuto 0 o 1', () => {
-    const m0 = match({ events: [redGoal({ minute: 0 })] });
+  it('blitz: gol al minuto 0 o 1 (solo con timing noto)', () => {
+    // il gol a 0' conta solo se la partita ha timing noto (altro evento con minuto > 0)
+    const m0 = match({ events: [redGoal({ minute: 0 }), redGoal({ minute: 20, scorerId: 'p2' })] });
     expect(badge('blitz').check({}, player(), [m0])).toBe(true);
     const m1 = match({ events: [redGoal({ minute: 1 })] });
     expect(badge('blitz').check({}, player(), [m1])).toBe(true);
     const m2 = match({ events: [redGoal({ minute: 2 })] });
     expect(badge('blitz').check({}, player(), [m2])).toBe(false);
     expect(badge('blitz').check({}, player(), [])).toBe(false);
+  });
+
+  it('blitz/uno_due/early_bird: partita senza cronometro (tutti i gol a minute 0) NON assegna nulla', () => {
+    // timer mai avviato → minute 0 = "sconosciuto", non "primo minuto"
+    const noTimer = match({ events: [redGoal({ minute: 0 }), redGoal({ minute: 0 }), redGoal({ minute: 0, scorerId: 'p2' })] });
+    expect(badge('blitz').check({}, player(), [noTimer])).toBe(false);
+    expect(badge('uno_due').check({}, player(), [noTimer])).toBe(false);
+    expect(badge('early_bird').check({}, player(), [noTimer, noTimer, noTimer])).toBe(false);
   });
 
   it('uno_due: doppietta in ≤5 minuti', () => {
