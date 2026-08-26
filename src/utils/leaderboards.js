@@ -6,6 +6,29 @@ export function getSeasonStartMs(now = new Date()) {
   return new Date(year, 8, 1).getTime();
 }
 
+/** Inizio della finestra temporale di un periodo ('all' → 0 = nessun limite). */
+export function periodCutoffMs(period, now = Date.now()) {
+  if (period === '30d') return now - 30 * 24 * 60 * 60 * 1000;
+  if (period === 'season') return getSeasonStartMs(new Date(now));
+  return 0;
+}
+
+/**
+ * Filtra le partite per periodo ('all' | 'season' | '30d').
+ *
+ * ⚠️ Filtra SOLO per data: le partite storiche (`isHistorical`) vanno CONTATE
+ * in ogni vista per periodo. L'unica eccezione è l'all-time di
+ * `computeStandings`, che al loro posto somma `p.historicalStats` per non
+ * conteggiarle due volte. Escluderle altrove faceva divergere i numeri della
+ * stessa stagione tra pagine diverse — usare questo helper per ogni nuova
+ * vista per periodo, invece di re-implementare il filtro.
+ */
+export function filterByPeriod(matches, period, now = Date.now()) {
+  const cutoff = periodCutoffMs(period, now);
+  const list = matches || [];
+  return cutoff === 0 ? list : list.filter(m => getMs(m.date) >= cutoff);
+}
+
 // Classifica a punti (V×3 + P) con tie-break su diff. reti e gol fatti.
 // period: 'all' | 'season' | '30d'.
 // ⚠️ I doc storici (isHistorical) si escludono SOLO nell'all-time, dove al loro
@@ -18,13 +41,10 @@ export function getSeasonStartMs(now = new Date()) {
 // (computeStatsFromMatches su una finestra filtrata solo per data), la scheda
 // giocatore, la Dashboard e gli Annali — che le includono.
 export function computeStandings(players, finishedMatches, period, now = Date.now()) {
-  const cutoff = period === '30d'
-    ? now - 30 * 24 * 60 * 60 * 1000
-    : period === 'season' ? getSeasonStartMs() : 0;
   const base = period === 'all'
     ? (finishedMatches || []).filter(m => !m.isHistorical)
     : (finishedMatches || []);
-  const filtered = cutoff === 0 ? base : base.filter(m => getMs(m.date) >= cutoff);
+  const filtered = filterByPeriod(base, period, now);
   return (players || [])
     .map(p => {
       let v = 0, x = 0, s = 0, gf = 0, gs = 0;

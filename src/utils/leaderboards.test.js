@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeStandings, computeDuoStats, getSeasonStartMs, computeH2HStats, computeSquadreStats, rankGoalkeepers } from './leaderboards';
+import { computeStandings, computeDuoStats, getSeasonStartMs, filterByPeriod, computeH2HStats, computeSquadreStats, rankGoalkeepers } from './leaderboards';
 
 const players = [
   { id: 'a', name: 'A' },
@@ -12,6 +12,29 @@ const M = (over) => ({
   status: 'finished', isHistorical: false,
   redTeam: [{ id: 'a' }], blueTeam: [{ id: 'b' }],
   redScore: 0, blueScore: 0, date: '2026-01-01T00:00:00Z', ...over,
+});
+
+describe('filterByPeriod — finestra condivisa', () => {
+  const now = Date.parse('2026-02-01T00:00:00Z');
+  const ms = [
+    M({ date: '2024-05-01T00:00:00Z' }),                        // stagione passata
+    M({ date: '2025-10-05T00:00:00Z', isHistorical: true }),    // stagione corrente, storica
+    M({ date: '2026-01-20T00:00:00Z' }),                        // ultimi 30gg
+  ];
+
+  it('all = nessun limite, season = dal 1 set, 30d = ultimi 30 giorni', () => {
+    expect(filterByPeriod(ms, 'all', now)).toHaveLength(3);
+    expect(filterByPeriod(ms, 'season', now)).toHaveLength(2);
+    expect(filterByPeriod(ms, '30d', now)).toHaveLength(1);
+  });
+
+  it('NON esclude le partite storiche (la regola vale per tutte le viste)', () => {
+    expect(filterByPeriod(ms, 'season', now).some(m => m.isHistorical)).toBe(true);
+  });
+
+  it('lista nulla → array vuoto', () => {
+    expect(filterByPeriod(null, 'season', now)).toEqual([]);
+  });
 });
 
 describe('getSeasonStartMs', () => {

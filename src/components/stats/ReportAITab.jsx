@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { generatePeriodReport } from '../../services/geminiService';
 import { getAICache, setAICache } from '../../firebase/firestore';
-import { getMs } from '../../utils/dateUtils';
-import { getSeasonStartMs } from '../../utils/leaderboards';
+import { filterByPeriod } from '../../utils/leaderboards';
 import { computeStatsFromMatches } from '../../utils/playerStats';
 import toast from 'react-hot-toast';
 
@@ -30,13 +29,7 @@ export default function ReportAITab({ finishedMatches, players, reportText, setR
   }, [reportPeriod]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const buildStats = (period) => {
-    const now = Date.now();
-    const cutoff = period === '30d'
-      ? now - 30 * 24 * 60 * 60 * 1000
-      : period === 'season'
-        ? getSeasonStartMs()
-        : 0;
-    const filtered = cutoff === 0 ? finishedMatches : finishedMatches.filter(m => getMs(m.date) >= cutoff);
+    const filtered = filterByPeriod(finishedMatches, period);
     const matchCount = filtered.length;
     const totalGoals = filtered.reduce((s, m) => s + (m.redScore || 0) + (m.blueScore || 0), 0);
 

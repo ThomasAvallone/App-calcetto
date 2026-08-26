@@ -13,7 +13,7 @@ import { safeDate, getMs } from '../utils/dateUtils';
 import { CLR_WIN, CLR_LOSS, CLR_MUTED } from '../constants/colors';
 import { fetchWeatherForDate } from '../services/weatherService';
 import { aggregatePlayerMatchStats } from '../utils/playerStats';
-import { getSeasonStartMs } from '../utils/leaderboards';
+import { getSeasonStartMs, filterByPeriod } from '../utils/leaderboards';
 import { getNextBadgeHint } from '../utils/nextBadge';
 import MyStatsCard from '../components/dashboard/MyStatsCard';
 import CoppaDiLattaCard from '../components/dashboard/CoppaDiLattaCard';
@@ -102,13 +102,11 @@ export default function DashboardPage() {
   const seasonStartMs = useMemo(() => getSeasonStartMs(), []);
   const seasonMatchesPerPlayer = useMemo(() => {
     const s = new Set();
-    finishedMatches.forEach(m => {
-      if (getMs(m.date) >= seasonStartMs) {
-        [...(m.redTeam || []), ...(m.blueTeam || [])].forEach(p => s.add(p.id));
-      }
+    filterByPeriod(finishedMatches, 'season').forEach(m => {
+      [...(m.redTeam || []), ...(m.blueTeam || [])].forEach(p => s.add(p.id));
     });
     return s;
-  }, [finishedMatches, seasonStartMs]);
+  }, [finishedMatches]);
 
   // ── "I tuoi numeri": stats stagione + ranking globale per il player collegato all'utente
   const myPlayer = useMemo(
@@ -136,7 +134,7 @@ export default function DashboardPage() {
     });
     // Stats stagione corrente — aggregazione delegata a aggregatePlayerMatchStats
     // (source of truth condivisa con PlayersPage), filtrando alle partite di stagione.
-    const seasonMatches = playerMatches.filter(m => getMs(m.date) >= seasonStartMs);
+    const seasonMatches = filterByPeriod(playerMatches, 'season');
     const agg = aggregatePlayerMatchStats(myPlayer, seasonMatches);
     const season = {
       matches: agg.matches, goals: agg.goals, assists: agg.assists, autogoals: agg.autogoals,

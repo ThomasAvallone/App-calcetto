@@ -11,7 +11,7 @@ import ReportAITab from '../components/stats/ReportAITab';
 import HallTab from '../components/stats/HallTab';
 import TrendTab from '../components/stats/TrendTab';
 import { computeWeatherStats } from '../utils/weatherStats';
-import { getSeasonStartMs, computeStandings, computeDuoStats, computeH2HStats, computeSquadreStats, rankGoalkeepers } from '../utils/leaderboards';
+import { filterByPeriod, computeStandings, computeDuoStats, computeH2HStats, computeSquadreStats, rankGoalkeepers } from '../utils/leaderboards';
 
 const LEADERBOARD_TABS = [
   { key: 'goals',   label: '⚽ Gol' },
@@ -233,16 +233,14 @@ export default function StatsPage() {
     return () => { cancelled = true; };
   }, [h2hP1, h2hP2]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Pre-filter matches per period (stable refs unless finishedMatches change)
-  const seasonFilteredMatches = useMemo(() => {
-    const cutoff = getSeasonStartMs();
-    return finishedMatches.filter(m => getMs(m.date) >= cutoff);
-  }, [finishedMatches]);
+  // Pre-filter matches per period (stable refs unless finishedMatches change).
+  // filterByPeriod è la regola condivisa: filtra solo per data, le storiche
+  // contano (vedi il commento nell'helper).
+  const seasonFilteredMatches = useMemo(
+    () => filterByPeriod(finishedMatches, 'season', now), [finishedMatches, now]);
 
-  const thirtyDayFilteredMatches = useMemo(() => {
-    const cutoff = now - 30 * 24 * 60 * 60 * 1000;
-    return finishedMatches.filter(m => getMs(m.date) >= cutoff);
-  }, [finishedMatches, now]);
+  const thirtyDayFilteredMatches = useMemo(
+    () => filterByPeriod(finishedMatches, '30d', now), [finishedMatches, now]);
 
   // Pre-compute stats per period (avoids recomputing on period tab switch)
   // All three periods use the same live computation from matches — no stale p.stats.

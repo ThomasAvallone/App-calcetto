@@ -7,7 +7,7 @@ import { useMatchesSubscription } from '../hooks/useMatchesSubscription';
 import { usePIConfig } from '../hooks/usePIConfig';
 import { HISTORICAL_SEASONS, suggestHistoricalNames, computeCumulativeStats, getUnlinkedNames } from '../data/historicalData';
 import { aggregatePlayerMatchStats } from '../utils/playerStats';
-import { getSeasonStartMs } from '../utils/leaderboards';
+import { filterByPeriod } from '../utils/leaderboards';
 import toast from 'react-hot-toast';
 import { getMs } from '../utils/dateUtils';
 import { RESULT_COLORS, CLR_WIN, CLR_DRAW, CLR_LOSS, CLR_MUTED, MEDAL_COLORS } from '../constants/colors';
@@ -179,17 +179,15 @@ export default function PlayersPage() {
     return map;
   }, [finishedMatches]);
 
-  // Current season start: September 1st of the current football season
-  const seasonStartMs = useMemo(() => getSeasonStartMs(), []);
 
   // Season stats per player (goals/assists/etc. from current-season matches only).
   // Aggregazione delegata a aggregatePlayerMatchStats (source of truth condivisa).
   const playerSeasonStats = useMemo(() => {
-    const seasonMatches = finishedMatches.filter(m => getMs(m.date) >= seasonStartMs);
+    const seasonMatches = filterByPeriod(finishedMatches, 'season');
     const stats = {};
     for (const p of players) stats[p.id] = aggregatePlayerMatchStats(p, seasonMatches);
     return stats;
-  }, [players, finishedMatches, seasonStartMs]);
+  }, [players, finishedMatches]);
 
   // All-time clean sheets per player: il portiere non ha subito gol personalmente
   const playerCleanSheets = useMemo(() => {
