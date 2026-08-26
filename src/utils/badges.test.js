@@ -378,24 +378,36 @@ describe('nuovi badge — timing, voti, duo, presenze, stagionali, temperature',
   });
 
   // ── PRESENZE ────────────────────────────────────────────────────────────────
+  // ⚠️ equilibrista e stacanovista ORDINANO le partite per data: con `date:
+  // Date.now()` su ogni partita l'ordine dipende dal tick del millisecondo fra
+  // una chiamata e l'altra (se l'ultima creata prende un ms successivo il sort
+  // la sposta in fondo) → test flaky. Qui le date sono esplicite e crescenti.
+  const DAY = 86400000;
+  const T0 = new Date(2026, 0, 5, 21).getTime();
+  const at = (i) => T0 + i * DAY;
+
   it('equilibrista: 3 pareggi consecutivi', () => {
-    const draw = (id) => match({ id, redScore: 1, blueScore: 1, date: Date.now() });
-    const win  = (id) => match({ id, redScore: 2, blueScore: 0, date: Date.now() });
-    expect(badge('equilibrista').check({}, player(), [draw('a'), draw('b'), draw('c')])).toBe(true);
-    expect(badge('equilibrista').check({}, player(), [draw('a'), draw('b')])).toBe(false);
+    const draw = (i) => match({ id: `d${i}`, redScore: 1, blueScore: 1, date: at(i) });
+    const win  = (i) => match({ id: `w${i}`, redScore: 2, blueScore: 0, date: at(i) });
+    expect(badge('equilibrista').check({}, player(), [draw(0), draw(1), draw(2)])).toBe(true);
+    expect(badge('equilibrista').check({}, player(), [draw(0), draw(1)])).toBe(false);
     // pareggio interrotto da una vittoria → streak si azzera
-    expect(badge('equilibrista').check({}, player(), [draw('a'), win('x'), draw('b'), draw('c')])).toBe(false);
+    expect(badge('equilibrista').check({}, player(), [draw(0), win(1), draw(2), draw(3)])).toBe(false);
   });
 
   it('stacanovista: presente in 10 partite consecutive del gruppo', () => {
-    const present = (id) => match({ id, date: Date.now() });
-    const absent = (id) => match({ id, date: Date.now(),
+    const present = (i) => match({ id: `m${i}`, date: at(i) });
+    const absent = (i) => match({ id: `x${i}`, date: at(i),
       redTeam: [{ id: 'p9' }], blueTeam: [{ id: 'p8' }] });
-    const ten = Array.from({ length: 10 }, (_, i) => present(`m${i}`));
+    const ten = Array.from({ length: 10 }, (_, i) => present(i));
     expect(badge('stacanovista').check({}, player(), ten)).toBe(true);
     expect(badge('stacanovista').check({}, player(), ten.slice(0, 9))).toBe(false);
-    // assenza a metà azzera la streak
-    const broken = [...ten.slice(0, 5), absent('x'), ...ten.slice(5)];
+    // assenza a metà azzera la streak: 5 presenti + 1 assente + 5 presenti
+    const broken = [
+      ...Array.from({ length: 5 }, (_, i) => present(i)),
+      absent(5),
+      ...Array.from({ length: 5 }, (_, i) => present(6 + i)),
+    ];
     expect(badge('stacanovista').check({}, player(), broken)).toBe(false);
   });
 

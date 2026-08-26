@@ -140,6 +140,7 @@ export function buildSeasonCSV(season) {
     ['Gol', season.totalGoals],
     ['Autogol', season.totalAutoGoals ?? 0],
     ['Giocatori', season.totalPlayers],
+    ...(season.unattributedGoals > 0 ? [['Gol senza marcatore', season.unattributedGoals]] : []),
     [],
     ['Record', 'Nome', 'Valore', 'Dettaglio'],
   ];

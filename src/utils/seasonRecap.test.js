@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { seasonIdOf, seasonBounds, seasonLabelOf, listAppSeasonIds, computeSeasonRecap } from './seasonRecap';
+import { seasonIdOf, seasonBounds, seasonLabelOf, listAppSeasonIds, computeSeasonRecap, isSeasonInProgress, withSeasonProgressFlag } from './seasonRecap';
 import { buildSeasonCSV } from './dataExport';
 
-const D = (y, m, d) => new Date(y, m, d, 21, 0).getTime();
+const D = (y, m, d, h = 21) => new Date(y, m, d, h, 0).getTime();
 
 const players = [
   { id: 'p1', name: 'Marco' },
@@ -94,6 +94,31 @@ describe('computeSeasonRecap — totali e righe giocatore', () => {
     expect(dani).toMatchObject({ gol: 2, assist: 1, vinte: 1, perse: 1 });
   });
 
+  it('unattributedGoals: gol del punteggio senza evento marcatore', () => {
+    // 3-1 ma solo 2 eventi gol registrati → 2 gol senza marcatore
+    const parziale = [appMatch({
+      date: D(2026, 0, 10), red: 3, blue: 1,
+      events: [goal(players[0]), goal(players[2])],
+    })];
+    const r = computeSeasonRecap(players, parziale, '2025-26', D(2026, 9, 1));
+    expect(r.totalGoals).toBe(4);
+    expect(r.unattributedGoals).toBe(2);
+  });
+
+  it('unattributedGoals: 0 quando ogni gol ha un evento (autogol inclusi)', () => {
+    const completo = [appMatch({
+      date: D(2026, 0, 10), red: 2, blue: 1,
+      events: [
+        goal(players[0]), goal(players[1]),
+        { type: 'autogoal', scorerId: 'p1', scorerName: 'Marco', team: 'red' },
+      ],
+    })];
+    const r = computeSeasonRecap(players, completo, '2025-26', D(2026, 9, 1));
+    expect(r.totalGoals).toBe(3);
+    expect(r.totalAutoGoals).toBe(1);
+    expect(r.unattributedGoals).toBe(0);
+  });
+
   it('stagione senza partite → null', () => {
     expect(computeSeasonRecap(players, matches, '2019-20')).toBe(null);
     expect(computeSeasonRecap(players, [], '2025-26')).toBe(null);
@@ -103,6 +128,48 @@ describe('computeSeasonRecap — totali e righe giocatore', () => {
     const r = computeSeasonRecap(players, matches, '2025-26', D(2026, 4, 1));
     expect(r.inCorso).toBe(true);
     expect(r.months).toBe('settembre – in corso');
+  });
+});
+
+describe('chiusura stagione a fine agosto', () => {
+  const matches = [
+    appMatch({ date: D(2025, 8, 2), over: { isHistorical: true } }), // 2 set 2025
+    appMatch({ date: D(2026, 7, 25) }),                              // 25 ago 2026
+  ];
+
+  it('resta In Corso fino al 31 agosto compreso', () => {
+    expect(computeSeasonRecap(players, matches, '2025-26', D(2026, 7, 26)).inCorso).toBe(true);
+    // ultimo istante utile della stagione
+    const lastMs = new Date(2026, 7, 31, 23, 59, 59, 999).getTime();
+    expect(computeSeasonRecap(players, matches, '2025-26', lastMs).inCorso).toBe(true);
+  });
+
+  it('si chiude esattamente il 1° settembre alle 00:00', () => {
+    const firstMs = new Date(2026, 8, 1, 0, 0, 0, 0).getTime();
+    const r = computeSeasonRecap(players, matches, '2025-26', firstMs);
+    expect(r.inCorso).toBe(false);
+    expect(r.months).toBe('settembre – agosto');
+    // e la nuova stagione diventa quella in corso
+    expect(isSeasonInProgress('2026-27', firstMs)).toBe(true);
+  });
+
+  it('una partita del 1° settembre apre la stagione nuova, non prolunga la vecchia', () => {
+    const conNuova = [...matches, appMatch({ date: D(2026, 8, 1, 0) })];
+    expect(listAppSeasonIds(conNuova)).toEqual(['2025-26', '2026-27']);
+    expect(computeSeasonRecap(players, conNuova, '2025-26', D(2026, 8, 2)).totalMatches).toBe(2);
+  });
+
+  it('withSeasonProgressFlag corregge il flag hardcoded delle stagioni statiche', () => {
+    const statica = { id: '2025-26', inCorso: true, months: 'settembre – in corso' };
+    // a stagione finita il flag va spento
+    const chiusa = withSeasonProgressFlag(statica, D(2026, 8, 15));
+    expect(chiusa.inCorso).toBe(false);
+    expect(chiusa.months).toBe('settembre – agosto');
+    // durante la stagione resta invariata (stessa referenza)
+    expect(withSeasonProgressFlag(statica, D(2026, 3, 1))).toBe(statica);
+    // le vecchie stagioni con months personalizzati non vengono toccate
+    const vecchia = { id: '2020-21', months: 'set–ott 2020 + apr–ago 2021' };
+    expect(withSeasonProgressFlag(vecchia, D(2026, 8, 15))).toBe(vecchia);
   });
 });
 
@@ -132,8 +199,9 @@ describe('computeSeasonRecap — record', () => {
   });
 
   it('partita record, gol in una partita, mese top, autogol', () => {
-    expect(r.records.biggestMatch).toMatchObject({ score: '3-0', totalGoals: 3 });
-    expect(r.records.smallestMatch).toMatchObject({ totalGoals: 1 });
+    // 3-0 e 2-1 valgono entrambe 3 gol: pari merito uniti come nei dati storici
+    expect(r.records.biggestMatch).toMatchObject({ score: '3-0 / 2-1', totalGoals: 3 });
+    expect(r.records.smallestMatch).toMatchObject({ score: '0-1', totalGoals: 1 });
     expect(r.records.bestMatchGoals).toMatchObject({ name: 'Marco', value: 3 });
     expect(r.records.bestMonth).toMatchObject({ name: 'Ottobre', value: 6 });
     expect(r.records.mostAutoGoals).toMatchObject({ name: 'Marco', value: 1 });
@@ -146,6 +214,105 @@ describe('computeSeasonRecap — record', () => {
     // p3/p4 perdono le prime due → striscia di sconfitte 2
     expect(r.records.bestLossStreak).toMatchObject({ value: 2 });
     expect(r.records.bestLossStreak.name).toContain('Gianni');
+  });
+});
+
+describe('computeSeasonRecap — risoluzione marcatore (id, non nome)', () => {
+  it('conta i gol storici anche senza scorerName (risolti da scorerId)', () => {
+    // gli eventi importati dallo storico possono non avere scorerName
+    const matches = [
+      appMatch({
+        date: D(2025, 9, 7), red: 5, blue: 0, over: { isHistorical: true },
+        events: Array.from({ length: 5 }, () => ({ type: 'goal', scorerId: 'p1' })),
+      }),
+      appMatch({ date: D(2026, 1, 3), red: 1, blue: 0, events: [goal(players[1])] }),
+    ];
+    const r = computeSeasonRecap(players, matches, '2025-26', D(2026, 9, 1));
+    expect(r.records.bestMatchGoals).toMatchObject({ name: 'Marco', value: 5 });
+    expect(r.records.bestMonthGoals).toMatchObject({ name: 'Marco', value: 5 });
+  });
+
+  it('un rename non spezza i gol su due chiavi (chiave = scorerId)', () => {
+    // eventi vecchi col nome precedente, nuovi col nome attuale, stesso id
+    const matches = [appMatch({
+      date: D(2026, 0, 10), red: 4, blue: 0,
+      events: [
+        { type: 'goal', scorerId: 'p1', scorerName: 'Marchino' },
+        { type: 'goal', scorerId: 'p1', scorerName: 'Marchino' },
+        { type: 'goal', scorerId: 'p1', scorerName: 'Marco' },
+        { type: 'goal', scorerId: 'p1', scorerName: 'Marco' },
+      ],
+    })];
+    const r = computeSeasonRecap(players, matches, '2025-26', D(2026, 9, 1));
+    // 4 gol sulla stessa chiave, col nome ATTUALE del giocatore
+    expect(r.records.bestMatchGoals).toMatchObject({ name: 'Marco', value: 4 });
+  });
+});
+
+describe('computeSeasonRecap — giocatori eliminati e pari merito', () => {
+  it('un giocatore eliminato dall app resta nel riepilogo (roster con id ignoto)', () => {
+    const matches = [appMatch({
+      date: D(2026, 0, 10), red: 3, blue: 0,
+      over: { redTeam: [players[0], { id: 'pX', name: 'Ex Socio' }] },
+      events: [goal(players[0]), { type: 'goal', scorerId: 'pX', scorerName: 'Ex Socio' },
+               { type: 'goal', scorerId: 'pX', scorerName: 'Ex Socio' }],
+    })];
+    const r = computeSeasonRecap(players, matches, '2025-26', D(2026, 9, 1));
+    const ex = r.players.find(p => p.name === 'Ex Socio');
+    // presenze, gol e V/N/P completi anche se non è più fra i players
+    expect(ex).toMatchObject({ presenze: 1, gol: 2, vinte: 1, perse: 0 });
+    expect(r.records.topScorer).toMatchObject({ name: 'Ex Socio', value: 2 });
+  });
+
+  it('pari merito uniti anche su bestMatchGoals (nomi e date)', () => {
+    const matches = [
+      appMatch({ date: D(2026, 0, 10), red: 2, blue: 0, events: [goal(players[0]), goal(players[0])] }),
+      appMatch({ date: D(2026, 1, 10), red: 2, blue: 0, events: [goal(players[1]), goal(players[1])] }),
+    ];
+    const r = computeSeasonRecap(players, matches, '2025-26', D(2026, 9, 1));
+    expect(r.records.bestMatchGoals.value).toBe(2);
+    expect(r.records.bestMatchGoals.name).toBe('Marco / Luca');
+    expect(r.records.bestMatchGoals.detail).toContain(' e ');
+  });
+
+  it('bestMatchGoals non si mostra se nessuno ha fatto almeno una doppietta', () => {
+    const matches = [appMatch({ date: D(2026, 0, 10), red: 1, blue: 1, events: [goal(players[0]), goal(players[2])] })];
+    const r = computeSeasonRecap(players, matches, '2025-26', D(2026, 9, 1));
+    expect(r.records.bestMatchGoals).toBeUndefined();
+  });
+});
+
+describe('computeSeasonRecap — riconciliazione residui / collegati', () => {
+  it('lo stesso giocatore risolto in una partita e non nell altra NON produce due righe', () => {
+    const marco = { id: 'p1', name: 'Marco', historicalNames: ['MARCHINO'] };
+    const roster = [{ id: 'p2', name: 'Luca' }];
+    const matches = [
+      // risolto (con id)
+      { status: 'finished', date: D(2025, 9, 7), isHistorical: true,
+        redTeam: [marco], blueTeam: roster, redScore: 1, blueScore: 0,
+        events: [{ type: 'goal', scorerId: 'p1' }] },
+      // stessa persona ma nome non risolto dall'import (senza id)
+      { status: 'finished', date: D(2025, 10, 7), isHistorical: true,
+        redTeam: [{ name: 'MARCHINO' }], blueTeam: roster, redScore: 0, blueScore: 2, events: [] },
+    ];
+    const r = computeSeasonRecap([marco, ...roster], matches, '2025-26', D(2026, 9, 1));
+    expect(r.players.filter(p => /marco|marchino/i.test(p.name))).toHaveLength(1);
+    const row = r.players.find(p => p.name === 'Marco');
+    // presenze e V/N/P comprendono anche la partita non risolta
+    expect(row).toMatchObject({ presenze: 2, gol: 1, vinte: 1, perse: 1 });
+    expect(r.records.mostPresent.value).toBe(2);
+  });
+
+  it('le strisce coprono anche i giocatori eliminati dall app', () => {
+    const ghost = { id: 'pX', name: 'Ex Socio' };
+    const mk = (date, redWin) => ({
+      status: 'finished', date, redTeam: [players[0], ghost], blueTeam: [players[2]],
+      redScore: redWin ? 2 : 0, blueScore: redWin ? 0 : 2, events: [],
+    });
+    const matches = [mk(D(2026, 0, 1), true), mk(D(2026, 0, 8), true), mk(D(2026, 0, 15), true)];
+    const r = computeSeasonRecap(players, matches, '2025-26', D(2026, 9, 1));
+    expect(r.records.bestWinStreak.value).toBe(3);
+    expect(r.records.bestWinStreak.name).toContain('Ex Socio');
   });
 });
 

@@ -1,8 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { HISTORICAL_SEASONS } from '../data/historicalData';
 import { useMatchesSubscription } from '../hooks/useMatchesSubscription';
 import usePlayersStore from '../store/playersStore';
-import { computeSeasonRecap, listAppSeasonIds } from '../utils/seasonRecap';
+import { computeSeasonRecap, listAppSeasonIds, withSeasonProgressFlag } from '../utils/seasonRecap';
 import { exportSeasonCSV } from '../utils/dataExport';
 import toast from 'react-hot-toast';
 
@@ -18,18 +18,32 @@ export default function StagioniPage() {
   const allMatches = useMatchesSubscription();
   const { players } = usePlayersStore();
 
+  // La stagione "in corso" dipende dalla data: senza un refresh la pagina
+  // aperta a cavallo del 1° settembre continuerebbe a mostrare la stagione
+  // appena finita come "In Corso". Stesso pattern di StatsPage.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const onVisible = () => { if (document.visibilityState === 'visible') setNow(Date.now()); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, []);
+
   // Le stagioni con partite app vengono calcolate LIVE da Firestore (la parte
   // pre-app della stagione è coperta dai doc isHistorical importati) e
   // sostituiscono l'eventuale entry statica parziale con lo stesso id.
   const seasons = useMemo(() => {
     const liveIds = listAppSeasonIds(allMatches);
     const live = liveIds
-      .map(id => computeSeasonRecap(players, allMatches, id))
+      .map(id => computeSeasonRecap(players, allMatches, id, now))
       .filter(Boolean);
     const liveById = new Set(live.map(s => s.id));
-    return [...HISTORICAL_SEASONS.filter(s => !liveById.has(s.id)), ...live]
-      .sort((a, b) => String(a.id).localeCompare(String(b.id)));
-  }, [allMatches, players]);
+    const statics = HISTORICAL_SEASONS
+      .filter(s => !liveById.has(s.id))
+      // il flag inCorso nei dati statici è hardcoded: va riallineato a `now`
+      // o la 2025/26 resterebbe "In Corso" anche a stagione finita.
+      .map(s => withSeasonProgressFlag(s, now));
+    return [...statics, ...live].sort((a, b) => String(a.id).localeCompare(String(b.id)));
+  }, [allMatches, players, now]);
 
   const [selectedId, setSelectedId] = useState(null);
   const [sortKey, setSortKey] = useState('gol');
@@ -260,6 +274,15 @@ export default function StagioniPage() {
       {season.totalAutoGoals > 0 && (
         <p className="text-xs text-muted mt-2" style={{ textAlign: 'center' }}>
           + {season.totalAutoGoals} autogol nella stagione
+        </p>
+      )}
+
+      {/* Gol senza marcatore: spiega perché la colonna G non somma al totale
+          (nomi storici non collegati → l'import ha scartato quegli eventi). */}
+      {season.unattributedGoals > 0 && (
+        <p className="text-xs mt-1" style={{ textAlign: 'center', color: '#718096' }}>
+          {season.unattributedGoals} gol senza marcatore registrato
+          {season.players.some(p => p.gol === null) && ' — collega i nomi storici dalla scheda giocatore'}
         </p>
       )}
     </div>
