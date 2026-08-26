@@ -385,7 +385,7 @@ describe('buildSeasonCSV', () => {
     expect(csv).toContain('Stagione,2025/2026');
     expect(csv).toContain('Partite,2');
     expect(csv).toContain('Capocannoniere,Marco,4');
-    expect(csv).toContain('Partita più prolifica,3-0,3,7 ottobre 2025');
+    expect(csv).toContain('Partita più prolifica,3–0,3,7 ottobre 2025');
     expect(csv).toContain('Nome,Presenze,Gol,Autogol,Assist,Vinte,Nulle,Perse');
     expect(csv).toContain('Marco,2,4,1,0,1,0,1');
   });
@@ -398,5 +398,17 @@ describe('buildSeasonCSV', () => {
 
   it('anti CSV-injection sui nomi', () => {
     expect(buildSeasonCSV(season)).toContain("'=EVIL()");
+  });
+
+  it('i punteggi dei record non vengono letti da Excel come date', () => {
+    // "3-0" in una cella diventerebbe "03-mar": si usa la lineetta –
+    const csv = buildSeasonCSV(season);
+    expect(csv).toContain('Partita più prolifica,3–0,3,7 ottobre 2025');
+    expect(csv).not.toContain(',3-0,');
+    // pari merito: tutti i trattini del punteggio sostituiti
+    const tie = buildSeasonCSV({ ...season, records: { biggestMatch: { score: '3-0 / 2-1', totalGoals: 3 } } });
+    expect(tie).toContain('3–0 / 2–1');
+    // i nomi normali non vengono toccati
+    expect(buildSeasonCSV({ ...season, records: { topScorer: { name: 'Jean-Luc', value: 4 } } })).toContain('Jean-Luc');
   });
 });

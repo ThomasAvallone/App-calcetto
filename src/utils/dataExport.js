@@ -133,6 +133,15 @@ const RECORD_LABELS = {
   bestLossStreak: 'Sconfitte consecutive',
 };
 
+// Excel interpreta come DATA le celle tipo "12-10" o "2-4" (→ "12-ott"): i
+// punteggi dei record partita finiscono così illeggibili nel file scaricato.
+// Il trattino ASCII viene sostituito da una lineetta (–), che Excel lascia
+// stare, senza toccare escapeCsv (condiviso con gli altri export).
+function noDateAutoFormat(val) {
+  const s = String(val ?? '');
+  return /^\d{1,4}-\d{1,4}( \/ \d{1,4}-\d{1,4})*$/.test(s) ? s.replace(/-/g, '–') : s;
+}
+
 export function buildSeasonCSV(season) {
   const rows = [
     ['Stagione', season.label],
@@ -148,7 +157,7 @@ export function buildSeasonCSV(season) {
     const r = season.records?.[key];
     if (!r) continue;
     // biggestMatch/smallestMatch usano {score, totalGoals} invece di {name, value}
-    rows.push([label, r.name ?? r.score ?? '', r.value ?? r.totalGoals ?? '', r.detail ?? '']);
+    rows.push([label, noDateAutoFormat(r.name ?? r.score ?? ''), r.value ?? r.totalGoals ?? '', r.detail ?? '']);
   }
   rows.push([]);
   rows.push(['Nome', 'Presenze', 'Gol', 'Autogol', 'Assist', 'Vinte', 'Nulle', 'Perse']);
@@ -163,5 +172,10 @@ export function buildSeasonCSV(season) {
 
 export function exportSeasonCSV(season) {
   const blob = new Blob(['\uFEFF' + buildSeasonCSV(season)], { type: 'text/csv;charset=utf-8' });
-  triggerDownload(blob, `calcetto-stagione-${season.id || season.label.replace('/', '-')}.csv`);
+  const id = season.id || season.label.replace(/\//g, '-');
+  // Una stagione conclusa non cambia pi\u00F9 \u2192 nome stabile. Per quella in corso il
+  // file \u00E8 un'istantanea: senza la data due download in giorni diversi si
+  // sovrascriverebbero (le altre export usano tutte todayStamp).
+  const suffix = season.inCorso ? `-${todayStamp()}` : '';
+  triggerDownload(blob, `calcetto-stagione-${id}${suffix}.csv`);
 }
