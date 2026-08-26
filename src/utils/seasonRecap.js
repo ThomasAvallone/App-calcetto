@@ -136,11 +136,38 @@ export function computeSeasonRecap(players, matches, seasonId, now = Date.now())
     for (const ev of m.events || []) if (ev.type === 'autogoal') totalAutoGoals++;
   }
 
+  // ── Identità dei roster ─────────────────────────────────────────────────
+  // Lo stesso giocatore può comparire risolto (con id) in alcune partite e come
+  // nudo nome in altre: succede con gli alias collegati DOPO l'import storico,
+  // che nei doc già scritti restano `{name: 'BORO'}`. Le formazioni vengono
+  // quindi normalizzate UNA VOLTA (nome → id, via name + historicalNames) e
+  // tutto il resto del calcolo — righe, ghost, residui, strisce — lavora sulla
+  // stessa identità. Senza questo passaggio la stessa persona produrrebbe due
+  // righe, e le strisce salterebbero partite comunque conteggiate in classifica
+  // (una sconfitta invisibile che non azzera la striscia di vittorie).
+  const playerIdByName = new Map();
+  for (const p of players || []) {
+    if (!p?.id) continue;
+    for (const n of [p.name, ...(p.historicalNames || [])]) {
+      const k = String(n || '').toUpperCase().trim();
+      if (k && !playerIdByName.has(k)) playerIdByName.set(k, p.id);
+    }
+  }
+  const nameOfId = new Map((players || []).filter(p => p?.id).map(p => [p.id, p.name]));
+  const resolveRoster = (team) => (team || []).map(pl => {
+    if (!pl || pl.id) return pl;
+    const id = playerIdByName.get(String(pl.name || '').toUpperCase().trim());
+    return id ? { ...pl, id, name: nameOfId.get(id) || pl.name } : pl;
+  });
+  const normMatches = seasonMatches.map(m => ({
+    ...m, redTeam: resolveRoster(m.redTeam), blueTeam: resolveRoster(m.blueTeam),
+  }));
+
   // ── Righe giocatore (source of truth: aggregatePlayerMatchStats) ────────
   const rows = [];
   const rowById = new Map();
   const addRow = (p) => {
-    const s = aggregatePlayerMatchStats(p, seasonMatches);
+    const s = aggregatePlayerMatchStats(p, normMatches);
     if (s.matches === 0) return;
     const row = {
       name: p.name,
@@ -161,7 +188,7 @@ export function computeSeasonRecap(players, matches, seasonId, now = Date.now())
   // presenze e V/N/P sono completi.
   const knownIds = new Set((players || []).filter(p => p?.id).map(p => p.id));
   const ghosts = new Map();
-  for (const m of seasonMatches) {
+  for (const m of normMatches) {
     for (const pl of [...(m.redTeam || []), ...(m.blueTeam || [])]) {
       if (!pl?.id || knownIds.has(pl.id) || ghosts.has(pl.id)) continue;
       ghosts.set(pl.id, { id: pl.id, name: pl.name || '?' });
@@ -169,38 +196,23 @@ export function computeSeasonRecap(players, matches, seasonId, now = Date.now())
   }
   for (const g of ghosts.values()) addRow(g);
 
-  // Residui: nomi nei roster SENZA id (storici non collegati dall'import).
-  // ⚠️ Riconciliazione: lo stesso giocatore può comparire risolto (con id) in
-  // alcune partite e come nudo nome in altre — se una sola variante del nome è
-  // fra i suoi historicalNames. Senza il match per nome si creerebbero DUE
-  // righe per la stessa persona (presenze spezzate, totalPlayers gonfiato e
-  // "più presente" sbagliato): le presenze non risolte vengono quindi sommate
-  // alla riga del giocatore collegato. I suoi gol restano quelli degli eventi
-  // con id — lo scarto è già dichiarato da unattributedGoals.
-  const playerIdByName = new Map();
-  for (const p of players || []) {
-    if (!p?.id) continue;
-    for (const n of [p.name, ...(p.historicalNames || [])]) {
-      const k = String(n || '').toUpperCase().trim();
-      if (k && !playerIdByName.has(k)) playerIdByName.set(k, p.id);
-    }
-  }
+  // Residui: nomi che nemmeno la normalizzazione ha saputo collegare a un
+  // giocatore. Hanno solo ciò che si deduce dal punteggio (presenze, V/N/P):
+  // i gol restano ignoti (`null`, ≠ 0) perché i loro eventi non esistono.
   const residuals = new Map();
-  for (const m of seasonMatches) {
+  for (const m of normMatches) {
     for (const [team, other] of [['redTeam', 'blue'], ['blueTeam', 'red']]) {
       for (const pl of m[team] || []) {
-        if (pl.id) continue;
+        if (!pl || pl.id) continue;
         const key = (pl.name || '').toUpperCase().trim();
         if (!key) continue;
         const my = team === 'redTeam' ? (m.redScore ?? 0) : (m.blueScore ?? 0);
         const their = other === 'blue' ? (m.blueScore ?? 0) : (m.redScore ?? 0);
-        const linkedRow = rowById.get(playerIdByName.get(key));
-        const r = linkedRow
-          || residuals.get(key)
+        const r = residuals.get(key)
           || { name: pl.name, presenze: 0, gol: null, autogol: null, assist: null, vinte: 0, nulle: 0, perse: 0 };
         r.presenze++;
         if (my > their) r.vinte++; else if (my < their) r.perse++; else r.nulle++;
-        if (!linkedRow) residuals.set(key, r);
+        residuals.set(key, r);
       }
     }
   }
@@ -260,7 +272,7 @@ export function computeSeasonRecap(players, matches, seasonId, now = Date.now())
   const monthGoals = new Map();       // 'YYYY-M' → gol totali
   const playerMonthGoals = new Map(); // 'key|YYYY-M' → { name, n }
   const matchGoalEntries = [];        // [{name, value, detail}] per i pari merito
-  for (const m of seasonMatches) {
+  for (const m of normMatches) {
     const ms = getMs(m.date);
     const d = new Date(ms);
     const mk = `${d.getFullYear()}-${d.getMonth()}`;
@@ -306,7 +318,7 @@ export function computeSeasonRecap(players, matches, seasonId, now = Date.now())
   for (const [id, row] of rowById) {
     streaks.set(id, { name: row.name, win: 0, loss: 0, bestWin: 0, bestLoss: 0 });
   }
-  for (const m of seasonMatches) {
+  for (const m of normMatches) {
     for (const [team, myScore, theirScore] of [
       ['redTeam', m.redScore ?? 0, m.blueScore ?? 0],
       ['blueTeam', m.blueScore ?? 0, m.redScore ?? 0],

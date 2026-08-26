@@ -338,6 +338,30 @@ describe('computeSeasonRecap — riconciliazione residui / collegati', () => {
     expect(r.records.mostPresent.value).toBe(2);
   });
 
+  it('una sconfitta riconciliata per nome AZZERA la striscia di vittorie', () => {
+    // Boro collegato dopo l'import: vince la 1ª e la 3ª (roster con id) e perde
+    // la 2ª, dove compare come nudo nome. Senza la normalizzazione dei roster la
+    // striscia salterebbe la sconfitta e annuncerebbe "2 vittorie consecutive"
+    // pur mostrando quella sconfitta nella riga sopra.
+    const boro = { id: 'pB', name: 'Boro', historicalNames: ['BORO'] };
+    const avv = { id: 'pA', name: 'Avversario' };
+    const mk = (date, red, win) => ({
+      status: 'finished', date, isHistorical: true,
+      redTeam: [red], blueTeam: [avv],
+      redScore: win ? 2 : 0, blueScore: win ? 0 : 2, events: [],
+    });
+    const matches = [
+      mk(D(2025, 9, 1), boro, true),
+      mk(D(2025, 9, 8), { name: 'BORO' }, false), // stessa persona, non risolta
+      mk(D(2025, 9, 15), boro, true),
+    ];
+    const r = computeSeasonRecap([boro, avv], matches, '2025-26', D(2026, 9, 1));
+    expect(r.players.find(p => p.name === 'Boro')).toMatchObject({ presenze: 3, vinte: 2, perse: 1 });
+    // niente striscia da 2: la sconfitta di mezzo la interrompe
+    expect(r.records.bestWinStreak).toBeUndefined();
+    expect(r.records.bestLossStreak).toBeUndefined();
+  });
+
   it('le strisce coprono anche i giocatori eliminati dall app', () => {
     const ghost = { id: 'pX', name: 'Ex Socio' };
     const mk = (date, redWin) => ({
