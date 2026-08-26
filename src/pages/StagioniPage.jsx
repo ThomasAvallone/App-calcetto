@@ -32,27 +32,43 @@ export default function StagioniPage() {
   // pre-app della stagione è coperta dai doc isHistorical importati) e
   // sostituiscono l'eventuale entry statica parziale con lo stesso id.
   const seasons = useMemo(() => {
-    const liveIds = listAppSeasonIds(allMatches);
-    const live = liveIds
+    const staticById = new Map(HISTORICAL_SEASONS.map(s => [s.id, s]));
+    const live = listAppSeasonIds(allMatches)
       .map(id => computeSeasonRecap(players, allMatches, id, now))
       .filter(Boolean);
-    const liveById = new Set(live.map(s => s.id));
-    const statics = HISTORICAL_SEASONS
-      .filter(s => !liveById.has(s.id))
+    // La live sostituisce la statica solo se copre ALMENO le stesse partite:
+    // se le partite storiche non sono (ancora) state importate su Firestore la
+    // versione calcolata sarebbe più povera e la stagione "si rimpicciolirebbe"
+    // sotto gli occhi dell'utente. In quel caso vince il dato dichiarato.
+    const chosen = new Map();
+    for (const s of live) {
+      const stat = staticById.get(s.id);
+      chosen.set(s.id, stat && (stat.totalMatches || 0) > s.totalMatches ? stat : s);
+    }
+    const merged = HISTORICAL_SEASONS.map(s => chosen.get(s.id) || s);
+    for (const s of live) if (!staticById.has(s.id)) merged.push(s);
+    return merged
       // il flag inCorso nei dati statici è hardcoded: va riallineato a `now`
       // o la 2025/26 resterebbe "In Corso" anche a stagione finita.
-      .map(s => withSeasonProgressFlag(s, now));
-    return [...statics, ...live].sort((a, b) => String(a.id).localeCompare(String(b.id)));
+      .map(s => withSeasonProgressFlag(s, now))
+      .sort((a, b) => String(a.id).localeCompare(String(b.id)));
   }, [allMatches, players, now]);
 
   const [selectedId, setSelectedId] = useState(null);
   const [sortKey, setSortKey] = useState('gol');
   const season = seasons.find(s => s.id === selectedId) || seasons[seasons.length - 1];
 
+  const hasAssists = !!season && season.players.some(p => p.assist != null);
+  // Le stagioni più vecchie non hanno gli assist: senza questo ripiego, passando
+  // da una stagione con assist a una senza, sortKey resterebbe 'assist' e la
+  // tabella verrebbe ordinata su valori tutti nulli (ordine arbitrario, nessuna
+  // colonna evidenziata).
+  const activeSort = sortKey === 'assist' && !hasAssists ? 'gol' : sortKey;
+
   const sortedPlayers = useMemo(() => {
     if (!season) return [];
-    return [...season.players].sort((a, b) => (b[sortKey] || 0) - (a[sortKey] || 0));
-  }, [season, sortKey]);
+    return [...season.players].sort((a, b) => (b[activeSort] || 0) - (a[activeSort] || 0));
+  }, [season, activeSort]);
 
   // All-time totals
   const totals = useMemo(() => {
@@ -68,7 +84,6 @@ export default function StagioniPage() {
 
   if (!season) return null;
   const rec = season.records || {};
-  const hasAssists = season.players.some(p => p.assist !== null);
 
   return (
     <div className="page-content">
@@ -215,9 +230,9 @@ export default function StagioniPage() {
             style={{
               padding: '0.3rem 0.65rem',
               borderRadius: '999px',
-              border: sortKey === s.key ? '1px solid #4FD1C5' : '1px solid #4A5568',
-              background: sortKey === s.key ? 'rgba(79,209,197,0.15)' : 'transparent',
-              color: sortKey === s.key ? '#4FD1C5' : '#A0AEC0',
+              border: activeSort === s.key ? '1px solid #4FD1C5' : '1px solid #4A5568',
+              background: activeSort === s.key ? 'rgba(79,209,197,0.15)' : 'transparent',
+              color: activeSort === s.key ? '#4FD1C5' : '#A0AEC0',
               fontSize: '0.75rem',
               fontWeight: 600,
               cursor: 'pointer',
@@ -238,10 +253,10 @@ export default function StagioniPage() {
               <th style={{ textAlign: 'left', padding: '0.5rem 0.3rem', fontWeight: 600 }}>#</th>
               <th style={{ textAlign: 'left', padding: '0.5rem 0.3rem', fontWeight: 600 }}>Nome</th>
               <th style={{ textAlign: 'center', padding: '0.5rem 0.2rem', fontWeight: 600 }}>P</th>
-              <th style={{ textAlign: 'center', padding: '0.5rem 0.2rem', fontWeight: 600, color: sortKey === 'gol' ? '#4FD1C5' : undefined }}>G</th>
-              {hasAssists && <th style={{ textAlign: 'center', padding: '0.5rem 0.2rem', fontWeight: 600, color: sortKey === 'assist' ? '#4FD1C5' : undefined }}>A</th>}
-              <th style={{ textAlign: 'center', padding: '0.5rem 0.2rem', fontWeight: 600, color: sortKey === 'vinte' ? '#4FD1C5' : undefined }}>V</th>
-              <th style={{ textAlign: 'center', padding: '0.5rem 0.2rem', fontWeight: 600, color: sortKey === 'perse' ? '#4FD1C5' : undefined }}>S</th>
+              <th style={{ textAlign: 'center', padding: '0.5rem 0.2rem', fontWeight: 600, color: activeSort === 'gol' ? '#4FD1C5' : undefined }}>G</th>
+              {hasAssists && <th style={{ textAlign: 'center', padding: '0.5rem 0.2rem', fontWeight: 600, color: activeSort === 'assist' ? '#4FD1C5' : undefined }}>A</th>}
+              <th style={{ textAlign: 'center', padding: '0.5rem 0.2rem', fontWeight: 600, color: activeSort === 'vinte' ? '#4FD1C5' : undefined }}>V</th>
+              <th style={{ textAlign: 'center', padding: '0.5rem 0.2rem', fontWeight: 600, color: activeSort === 'perse' ? '#4FD1C5' : undefined }}>S</th>
             </tr>
           </thead>
           <tbody>
@@ -254,11 +269,11 @@ export default function StagioniPage() {
                   {p.name}
                 </td>
                 <td style={{ textAlign: 'center', padding: '0.45rem 0.2rem', color: '#A0AEC0' }}>{p.presenze}</td>
-                <td style={{ textAlign: 'center', padding: '0.45rem 0.2rem', fontWeight: sortKey === 'gol' ? 700 : 400, color: sortKey === 'gol' ? '#4FD1C5' : '#F7FAFC' }}>
-                  {p.gol}
+                <td style={{ textAlign: 'center', padding: '0.45rem 0.2rem', fontWeight: activeSort === 'gol' ? 700 : 400, color: activeSort === 'gol' ? '#4FD1C5' : '#F7FAFC' }}>
+                  {p.gol ?? '-'}
                 </td>
                 {hasAssists && (
-                  <td style={{ textAlign: 'center', padding: '0.45rem 0.2rem', fontWeight: sortKey === 'assist' ? 700 : 400, color: sortKey === 'assist' ? '#4FD1C5' : '#F7FAFC' }}>
+                  <td style={{ textAlign: 'center', padding: '0.45rem 0.2rem', fontWeight: activeSort === 'assist' ? 700 : 400, color: activeSort === 'assist' ? '#4FD1C5' : '#F7FAFC' }}>
                     {p.assist ?? '-'}
                   </td>
                 )}

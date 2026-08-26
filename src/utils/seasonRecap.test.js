@@ -186,6 +186,14 @@ describe('chiusura stagione a fine agosto', () => {
     const vecchia = { id: '2020-21', months: 'set–ott 2020 + apr–ago 2021' };
     expect(withSeasonProgressFlag(vecchia, D(2026, 8, 15))).toBe(vecchia);
   });
+
+  it('a stagione chiusa sparisce anche la nota "in corso" (banner contraddittorio)', () => {
+    const statica = { id: '2025-26', inCorso: true, notes: 'Stagione in corso (dati aggiornati a febbraio 2026)' };
+    expect(withSeasonProgressFlag(statica, D(2026, 8, 15)).notes).toBeUndefined();
+    // una nota non temporale resta
+    const conNota = { id: '2025-26', inCorso: true, notes: '3 partite non giocate' };
+    expect(withSeasonProgressFlag(conNota, D(2026, 8, 15)).notes).toBe('3 partite non giocate');
+  });
 });
 
 describe('computeSeasonRecap — record', () => {

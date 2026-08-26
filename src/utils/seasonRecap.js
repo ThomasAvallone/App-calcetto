@@ -59,7 +59,11 @@ export function withSeasonProgressFlag(season, now = Date.now()) {
   if (!season) return season;
   const inCorso = isSeasonInProgress(season.id, now);
   if (!!season.inCorso === inCorso) return season;
-  return { ...season, inCorso, months: inCorso ? 'settembre – in corso' : 'settembre – agosto' };
+  const out = { ...season, inCorso, months: inCorso ? 'settembre – in corso' : 'settembre – agosto' };
+  // `notes` di una stagione dichiarata "in corso" resterebbe in contraddizione
+  // col badge Conclusa ("Stagione in corso, dati aggiornati a febbraio 2026").
+  if (!inCorso && /in corso/i.test(season.notes || '')) delete out.notes;
+  return out;
 }
 
 /** Id (ordinati) delle stagioni con almeno una partita APP conclusa. */
