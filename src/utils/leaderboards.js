@@ -6,17 +6,25 @@ export function getSeasonStartMs(now = new Date()) {
   return new Date(year, 8, 1).getTime();
 }
 
-// Classifica a punti (V×3 + P) da partite app, con tie-break su diff. reti e gol fatti.
+// Classifica a punti (V×3 + P) con tie-break su diff. reti e gol fatti.
 // period: 'all' | 'season' | '30d'.
-// Per l'all-time si escludono i doc storici (isHistorical) e si sommano invece le
-// p.historicalStats (vinte/nulle/perse) → garantisce P == p.stats.matches, coerente
-// con recalculatePlayerStats. GF/GS restano app-only (non disponibili nello storico).
+// ⚠️ I doc storici (isHistorical) si escludono SOLO nell'all-time, dove al loro
+// posto si sommano le p.historicalStats (vinte/nulle/perse) → garantisce
+// P == p.stats.matches, coerente con recalculatePlayerStats; lì GF/GS restano
+// app-only (lo storico aggregato non ha i gol). Per season/30d quella
+// compensazione non esiste, quindi le storiche vanno CONTATE: hanno punteggio e
+// roster con id. Escluderle rendeva la classifica di stagione incoerente con
+// tutto il resto dell'app — gli altri tab della stessa StatsPage
+// (computeStatsFromMatches su una finestra filtrata solo per data), la scheda
+// giocatore, la Dashboard e gli Annali — che le includono.
 export function computeStandings(players, finishedMatches, period, now = Date.now()) {
   const cutoff = period === '30d'
     ? now - 30 * 24 * 60 * 60 * 1000
     : period === 'season' ? getSeasonStartMs() : 0;
-  const appMatches = (finishedMatches || []).filter(m => !m.isHistorical);
-  const filtered = cutoff === 0 ? appMatches : appMatches.filter(m => getMs(m.date) >= cutoff);
+  const base = period === 'all'
+    ? (finishedMatches || []).filter(m => !m.isHistorical)
+    : (finishedMatches || []);
+  const filtered = cutoff === 0 ? base : base.filter(m => getMs(m.date) >= cutoff);
   return (players || [])
     .map(p => {
       let v = 0, x = 0, s = 0, gf = 0, gs = 0;

@@ -60,10 +60,22 @@ describe('computeStandings', () => {
     expect(table[0].v).toBe(1); // solo la vittoria recente, niente storico
   });
 
-  it('esclude i doc storici (isHistorical) anche nell\'all-time', () => {
+  it('esclude i doc storici (isHistorical) nell\'all-time', () => {
     const matches = [M({ isHistorical: true, redScore: 9, blueScore: 0 })];
     const table = computeStandings(players, matches, 'all');
-    expect(table).toEqual([]); // l'unica partita è storica → nessuna riga app
+    expect(table).toEqual([]); // nell'all-time contano le p.historicalStats
+  });
+
+  it('INCLUDE i doc storici per season/30d (nessuna compensazione da historicalStats)', () => {
+    // Escluderle rendeva la classifica di stagione incoerente con gli altri tab
+    // della stessa pagina, con la scheda giocatore e con gli Annali.
+    const now = Date.parse('2026-02-01T00:00:00Z');
+    const hist = M({ isHistorical: true, redScore: 3, blueScore: 1, date: '2025-10-05T00:00:00Z' });
+    const app = M({ redScore: 1, blueScore: 0, date: '2026-01-20T00:00:00Z' });
+    const season = computeStandings(players, [hist, app], 'season', now);
+    expect(season.find(r => r.id === 'a')).toMatchObject({ p: 2, v: 2, gf: 4, gs: 1 });
+    const d30 = computeStandings(players, [hist, app], '30d', now);
+    expect(d30.find(r => r.id === 'a').p).toBe(1); // solo la partita nel cutoff
   });
 
   it('30d filtra le partite più vecchie del cutoff', () => {
