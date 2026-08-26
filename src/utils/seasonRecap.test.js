@@ -119,6 +119,21 @@ describe('computeSeasonRecap — totali e righe giocatore', () => {
     expect(r.unattributedGoals).toBe(0);
   });
 
+  it('input degeneri non lanciano mai (StagioniPage è una pagina utente)', () => {
+    // un throw qui finirebbe nell'ErrorBoundary → schermata di errore
+    expect(computeSeasonRecap(null, null, null)).toBe(null);
+    expect(computeSeasonRecap(undefined, undefined, '2025-26')).toBe(null);
+    expect(computeSeasonRecap([null], [null], '2025-26')).toBe(null);
+    expect(computeSeasonRecap([], [{}], '2025-26')).toBe(null);
+    expect(listAppSeasonIds([null, {}, undefined])).toEqual([]);
+    // partita con campi mancanti: nessuna eccezione
+    const bare = [{ status: 'finished', date: D(2026, 0, 5), redTeam: null, blueTeam: null, events: null }];
+    expect(computeSeasonRecap([{ id: 'p1', name: 'X' }], bare, '2025-26').totalMatches).toBe(1);
+    // id malformato → nessun 'NaN/NaN' mostrato all'utente
+    expect(seasonLabelOf('boh')).toBe('boh');
+    expect(seasonLabelOf(null)).toBe('');
+  });
+
   it('stagione senza partite → null', () => {
     expect(computeSeasonRecap(players, matches, '2019-20')).toBe(null);
     expect(computeSeasonRecap(players, [], '2025-26')).toBe(null);

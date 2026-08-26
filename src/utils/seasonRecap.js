@@ -36,10 +36,10 @@ export function seasonBounds(seasonId) {
   };
 }
 
-/** '2025-26' → '2025/2026'. */
+/** '2025-26' → '2025/2026'. Id non valido → la stringa grezza (mai 'NaN/NaN'). */
 export function seasonLabelOf(seasonId) {
   const year = parseInt(String(seasonId).slice(0, 4), 10);
-  return `${year}/${year + 1}`;
+  return Number.isFinite(year) ? `${year}/${year + 1}` : String(seasonId ?? '');
 }
 
 /** True se `seasonId` è la stagione in corso alla data `now`. */
@@ -66,7 +66,7 @@ export function withSeasonProgressFlag(season, now = Date.now()) {
 export function listAppSeasonIds(matches) {
   const ids = new Set();
   for (const m of matches || []) {
-    if (m.status !== 'finished' || m.isHistorical) continue;
+    if (m?.status !== 'finished' || m.isHistorical) continue;
     const id = seasonIdOf(getMs(m.date));
     if (id) ids.add(id);
   }
@@ -114,7 +114,7 @@ export function computeSeasonRecap(players, matches, seasonId, now = Date.now())
   const bounds = seasonBounds(seasonId);
   if (!bounds) return null;
   const seasonMatches = (matches || [])
-    .filter(m => m.status === 'finished')
+    .filter(m => m?.status === 'finished')
     .filter(m => {
       const ms = getMs(m.date);
       return ms >= bounds.startMs && ms < bounds.endMs;
