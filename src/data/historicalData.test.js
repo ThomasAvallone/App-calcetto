@@ -7,6 +7,7 @@ import {
   getCurrentRosterPlayers,
   getUnlinkedNames,
 } from './historicalData';
+import { HISTORICAL_MATCHES } from './historicalMatches';
 
 describe('computeCumulativeStats', () => {
   it('somma le statistiche di un nome su tutte le stagioni', () => {
@@ -169,5 +170,57 @@ describe('integrità dati storici (regression guard)', () => {
         expect(sum, `${s.id}/${p.name}`).toBe(p.presenze || 0);
       }
     }
+  });
+});
+
+describe('HISTORICAL_MATCHES — copertura per stagione', () => {
+  const seasonOf = (dateStr) => {
+    const d = new Date(dateStr + 'T12:00:00');
+    const y = d.getMonth() >= 8 ? d.getFullYear() : d.getFullYear() - 1;
+    return `${y}-${String(y + 1).slice(2)}`;
+  };
+
+  const countsBySeason = () => {
+    const c = {};
+    for (const m of HISTORICAL_MATCHES) c[seasonOf(m.date)] = (c[seasonOf(m.date)] || 0) + 1;
+    return c;
+  };
+
+  it('nessuna stagione ha PIÙ partite di quante ne dichiari (niente doppi conteggi)', () => {
+    const counts = countsBySeason();
+    for (const s of HISTORICAL_SEASONS) {
+      expect(counts[s.id] ?? 0, `stagione ${s.id}`).toBeLessThanOrEqual(s.totalMatches);
+    }
+  });
+
+  it('le partite mancanti sono solo quelle note delle prime due stagioni', () => {
+    // ⚠️ STATO NOTO del dataset, non un bug del codice: le due stagioni più
+    // vecchie sono state ricostruite in modo incompleto — mancano 1 partita
+    // (2018-19) e 2 (2019-20) rispetto ai totali dichiarati. Dal 2020-21 in poi
+    // i dati combaciano esattamente.
+    // Conseguenza pratica: per quelle due stagioni il calcolo dal vivo sarebbe
+    // più povero del dato dichiarato — ed è il motivo per cui StagioniPage
+    // mostra la entry statica quando è più completa (vedi il commento lì).
+    const counts = countsBySeason();
+    const gaps = {};
+    for (const s of HISTORICAL_SEASONS) {
+      const d = s.totalMatches - (counts[s.id] ?? 0);
+      if (d !== 0) gaps[s.id] = d;
+    }
+    expect(gaps).toEqual({ '2018-19': 1, '2019-20': 2 });
+  });
+
+  it('due partite hanno un anno palesemente sbagliato e restano fuori da ogni stagione', () => {
+    // Le partite 18 e 20 sono datate agosto 2018 pur trovandosi fra la 17
+    // (9 ago 2019) e la 19 (23 ago 2019): quasi certamente un refuso per il
+    // 2019. Cadono in una stagione "2017-18" che negli annali non esiste, così
+    // contano nelle statistiche all-time ma in nessun riepilogo di stagione.
+    // Non si correggono d'ufficio: spostarle in agosto 2019 porterebbe la
+    // 2018-19 a 21 partite contro le 20 dichiarate, quindi la fonte originale
+    // va ricontrollata prima di toccare qualcosa. Questo test blocca il numero
+    // di orfane a 2: se cambia, deve essere una scelta consapevole.
+    const declared = new Set(HISTORICAL_SEASONS.map(s => s.id));
+    const orphans = HISTORICAL_MATCHES.filter(m => !declared.has(seasonOf(m.date)));
+    expect(orphans.map(m => m.date).sort()).toEqual(['2018-08-16', '2018-08-28']);
   });
 });

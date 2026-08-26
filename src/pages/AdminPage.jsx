@@ -1269,9 +1269,11 @@ export default function AdminPage() {
 
             {/* Import Historical Seasons */}
             <div>
-              <div style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: '0.25rem' }}>📚 Importa Annali Storici</div>
+              <div style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: '0.25rem' }}>📚 Copia Annali su Firestore</div>
               <p className="text-xs text-muted mb-2">
-                Carica su Firestore tutte le {HISTORICAL_SEASONS.length} stagioni storiche. Serve per la pagina Annali.
+                Salva su Firestore una copia delle {HISTORICAL_SEASONS.length} stagioni storiche.
+                Non serve alla pagina Annali, che legge i dati inclusi nell'app e calcola dal vivo
+                le stagioni con partite registrate: è solo una copia di sicurezza.
               </p>
               <button className="btn btn-ghost btn-full" onClick={handleSeedHistory} disabled={seeding}>
                 {seeding ? '⏳ Importazione...' : '📥 Importa Stagioni Storiche'}

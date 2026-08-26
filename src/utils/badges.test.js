@@ -3,10 +3,18 @@ import { BADGE_DEFS, computeBadges } from './badges';
 
 // Helpers per costruire dati minimi
 const player = (over = {}) => ({ id: 'p1', name: 'Test', powerIndex: 50, stats: {}, ...over });
+
+// ⚠️ La data di default è "adesso" (serve ai badge con finestra 30gg) ma
+// STRETTAMENTE CRESCENTE a ogni chiamata. Con `Date.now()` secco tutte le
+// partite condividevano lo stesso istante e l'ordine dipendeva dal tick del
+// millisecondo fra una chiamata e l'altra: i badge che ordinano per data
+// (equilibrista, stacanovista, ...) passavano o fallivano a caso.
+const _base = Date.now();
+let _seq = 0;
 const match = (over = {}) => ({
   id: 'm1', status: 'finished', isHistorical: false,
   redTeam: [{ id: 'p1', name: 'Test' }], blueTeam: [{ id: 'p2', name: 'Avv' }],
-  redScore: 0, blueScore: 0, events: [], date: Date.now(), ...over,
+  redScore: 0, blueScore: 0, events: [], date: _base + (_seq++), ...over,
 });
 const badge = (id) => BADGE_DEFS.find(b => b.id === id);
 const has = (badges, id) => badges.some(b => b.id === id);
