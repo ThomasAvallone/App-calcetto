@@ -136,7 +136,9 @@ export default function StagioniPage() {
             {season.label}
           </h3>
           {season.inCorso && <span className="badge badge-gold">In Corso</span>}
-          {season.isLive && !season.inCorso && (
+          {/* "Conclusa" solo sulla stagione più recente: è l'unica per cui la
+              domanda "è finita?" ha senso — sulle precedenti sarebbe rumore. */}
+          {!season.inCorso && season.id === seasons[seasons.length - 1]?.id && (
             <span className="badge" style={{ background: 'rgba(79,209,197,0.2)', color: '#4FD1C5' }}>Conclusa</span>
           )}
           <button

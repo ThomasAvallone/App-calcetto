@@ -161,6 +161,14 @@ Vitest gira in ambiente **node (no DOM, no localStorage)**. Tutta la logica
 testabile è isolata in moduli puri senza dipendenze da Firestore/DOM/React, così
 ogni nuova funzione di calcolo va messa lì (non inline nei componenti) e testata.
 
+**Test di pagina (jsdom)**: i moduli puri non vedono i bug di *pagina* (badge e
+note in contraddizione, flag stale, ordinamento che sopravvive al cambio dati).
+Per quelli si scrive un `*.test.jsx` che opta per jsdom **solo per quel file**,
+col docblock `// @vitest-environment jsdom` in testa — l'ambiente node degli
+altri test resta invariato. Firebase non è importabile: si mockano gli hook che
+portano i dati (`useMatchesSubscription`, `playersStore`) e `react-hot-toast`.
+Riferimento: `src/pages/StagioniPage.test.jsx`.
+
 | Modulo | Cosa copre |
 |--------|-----------|
 | `playerStats.js` | stats, Power Index, streak, recentForm, `computeStatsFromMatches` |
