@@ -1,5 +1,10 @@
 import React, { useState, useMemo } from 'react';
 import { HISTORICAL_SEASONS } from '../data/historicalData';
+import { useMatchesSubscription } from '../hooks/useMatchesSubscription';
+import usePlayersStore from '../store/playersStore';
+import { computeSeasonRecap, listAppSeasonIds } from '../utils/seasonRecap';
+import { exportSeasonCSV } from '../utils/dataExport';
+import toast from 'react-hot-toast';
 
 const SORT_KEYS = [
   { key: 'gol', label: 'Gol' },
@@ -10,10 +15,25 @@ const SORT_KEYS = [
 ];
 
 export default function StagioniPage() {
-  const seasons = HISTORICAL_SEASONS;
-  const [selectedIdx, setSelectedIdx] = useState(seasons.length - 1);
+  const allMatches = useMatchesSubscription();
+  const { players } = usePlayersStore();
+
+  // Le stagioni con partite app vengono calcolate LIVE da Firestore (la parte
+  // pre-app della stagione è coperta dai doc isHistorical importati) e
+  // sostituiscono l'eventuale entry statica parziale con lo stesso id.
+  const seasons = useMemo(() => {
+    const liveIds = listAppSeasonIds(allMatches);
+    const live = liveIds
+      .map(id => computeSeasonRecap(players, allMatches, id))
+      .filter(Boolean);
+    const liveById = new Set(live.map(s => s.id));
+    return [...HISTORICAL_SEASONS.filter(s => !liveById.has(s.id)), ...live]
+      .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+  }, [allMatches, players]);
+
+  const [selectedId, setSelectedId] = useState(null);
   const [sortKey, setSortKey] = useState('gol');
-  const season = seasons[selectedIdx];
+  const season = seasons.find(s => s.id === selectedId) || seasons[seasons.length - 1];
 
   const sortedPlayers = useMemo(() => {
     if (!season) return [];
@@ -48,28 +68,31 @@ export default function StagioniPage() {
 
       {/* Season selector */}
       <div className="stagger-2" style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', paddingBottom: '0.75rem', marginBottom: '1rem' }}>
-        {seasons.map((s, i) => (
-          <button
-            key={s.id}
-            onClick={() => setSelectedIdx(i)}
-            style={{
-              flexShrink: 0,
-              padding: '0.4rem 0.85rem',
-              borderRadius: '999px',
-              border: i === selectedIdx ? '2px solid #4FD1C5' : '1px solid #4A5568',
-              background: i === selectedIdx ? 'rgba(79,209,197,0.15)' : 'transparent',
-              color: i === selectedIdx ? '#4FD1C5' : '#A0AEC0',
-              fontWeight: i === selectedIdx ? 700 : 500,
-              fontSize: '0.8rem',
-              cursor: 'pointer',
-              fontFamily: 'inherit',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {s.label.replace('20', "'").replace('/20', "/")}
-            {s.inCorso && ' *'}
-          </button>
-        ))}
+        {seasons.map(s => {
+          const isSel = s.id === season?.id;
+          return (
+            <button
+              key={s.id}
+              onClick={() => setSelectedId(s.id)}
+              style={{
+                flexShrink: 0,
+                padding: '0.4rem 0.85rem',
+                borderRadius: '999px',
+                border: isSel ? '2px solid #4FD1C5' : '1px solid #4A5568',
+                background: isSel ? 'rgba(79,209,197,0.15)' : 'transparent',
+                color: isSel ? '#4FD1C5' : '#A0AEC0',
+                fontWeight: isSel ? 700 : 500,
+                fontSize: '0.8rem',
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {s.label.replace('20', "'").replace('/20', "/")}
+              {s.inCorso && ' *'}
+            </button>
+          );
+        })}
       </div>
 
       {/* Season banner */}
@@ -80,10 +103,25 @@ export default function StagioniPage() {
         border: season.inCorso ? '1px solid rgba(246,224,94,0.3)' : '1px solid rgba(79,209,197,0.3)',
       }}>
         <div className="flex items-center gap-2 mb-2">
-          <h3 style={{ color: season.inCorso ? '#F6E05E' : '#4FD1C5', fontSize: '1.2rem' }}>
+          <h3 style={{ color: season.inCorso ? '#F6E05E' : '#4FD1C5', fontSize: '1.2rem', flex: 1 }}>
             {season.label}
           </h3>
           {season.inCorso && <span className="badge badge-gold">In Corso</span>}
+          {season.isLive && !season.inCorso && (
+            <span className="badge" style={{ background: 'rgba(79,209,197,0.2)', color: '#4FD1C5' }}>Conclusa</span>
+          )}
+          <button
+            onClick={() => { exportSeasonCSV(season); toast.success('Riepilogo stagione scaricato'); }}
+            aria-label="Scarica riepilogo CSV"
+            style={{
+              padding: '0.35rem 0.7rem', borderRadius: '8px', cursor: 'pointer',
+              border: '1px solid #4A5568', background: 'rgba(26,32,44,0.5)',
+              color: '#A0AEC0', fontSize: '0.75rem', fontWeight: 600, fontFamily: 'inherit',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            📥 CSV
+          </button>
         </div>
         <p className="text-xs text-muted mb-3">{season.months}</p>
 
@@ -135,6 +173,18 @@ export default function StagioniPage() {
           )}
           {rec.bestMatchGoals && (
             <RecordItem emoji="🎩" label="Gol in 1 partita" name={rec.bestMatchGoals.name} value={`${rec.bestMatchGoals.value}`} />
+          )}
+          {rec.bestMonthGoals && (
+            <RecordItem emoji="🚀" label="Gol in 1 mese" name={rec.bestMonthGoals.name} value={`${rec.bestMonthGoals.value}${rec.bestMonthGoals.detail ? ` (${rec.bestMonthGoals.detail})` : ''}`} />
+          )}
+          {rec.mostLosses && (
+            <RecordItem emoji="💀" label="Più sconfitto" name={rec.mostLosses.name} value={`${rec.mostLosses.value} perse`} />
+          )}
+          {rec.bestLossStreak && (
+            <RecordItem emoji="📉" label="Sconf. consec." name={rec.bestLossStreak.name} value={`${rec.bestLossStreak.value}`} />
+          )}
+          {rec.mostAutoGoals && (
+            <RecordItem emoji="🤦" label="Più autogol" name={rec.mostAutoGoals.name} value={`${rec.mostAutoGoals.value}`} />
           )}
         </div>
       </div>

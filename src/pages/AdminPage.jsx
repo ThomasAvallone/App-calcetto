@@ -15,6 +15,14 @@ import toast from 'react-hot-toast';
 
 const CHANGELOG = [
   {
+    version: '3.20.0',
+    date: 'Agosto 2026',
+    entries: [
+      { type: 'new', text: '🏁 Riepilogo di stagione negli Annali: le stagioni con partite registrate in app (2025/26 in poi) ora sono calcolate in tempo reale da Firestore — parte storica pre-app inclusa — con totali completi, classifica giocatori aggiornata e record estesi (capocannoniere, assistman, strisce di vittorie/sconfitte, mese più prolifico, gol di un giocatore in una partita e in un mese, più sconfitto, più autogol). La entry statica parziale della 2025/26 è sostituita dai dati live.' },
+      { type: 'new', text: '📥 Export CSV per stagione: in ogni stagione degli Annali (anche quelle storiche) un bottone scarica il riepilogo completo in CSV apribile in Excel — intestazione con i totali, tabella dei record e classifica giocatori con presenze/gol/autogol/assist/V-N-P.' },
+    ],
+  },
+  {
     version: '3.19.1',
     date: 'Giugno 2026',
     entries: [

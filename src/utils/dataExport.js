@@ -113,3 +113,54 @@ export function exportPlayersCSV(players) {
   const blob = new Blob(['\uFEFF' + buildPlayersCSV(players)], { type: 'text/csv;charset=utf-8' });
   triggerDownload(blob, `calcetto-giocatori-${todayStamp()}.csv`);
 }
+
+// \u2500\u2500\u2500 CSV: riepilogo di stagione \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+// Accetta sia le stagioni statiche di HISTORICAL_SEASONS sia quelle calcolate
+// live da computeSeasonRecap (stessa forma). buildSeasonCSV \u00E8 puro \u2192 testabile.
+const RECORD_LABELS = {
+  topScorer: 'Capocannoniere',
+  assistman: 'Assistman',
+  mostPresent: 'Pi\u00F9 presente',
+  topWinner: 'Pi\u00F9 vittorioso',
+  mostLosses: 'Pi\u00F9 sconfitto',
+  mostAutoGoals: 'Pi\u00F9 autogol',
+  bestMatchGoals: 'Gol in una partita',
+  bestMonthGoals: 'Gol in un mese (giocatore)',
+  bestMonth: 'Mese pi\u00F9 prolifico',
+  biggestMatch: 'Partita pi\u00F9 prolifica',
+  smallestMatch: 'Partita meno prolifica',
+  bestWinStreak: 'Vittorie consecutive',
+  bestLossStreak: 'Sconfitte consecutive',
+};
+
+export function buildSeasonCSV(season) {
+  const rows = [
+    ['Stagione', season.label],
+    ['Partite', season.totalMatches],
+    ['Gol', season.totalGoals],
+    ['Autogol', season.totalAutoGoals ?? 0],
+    ['Giocatori', season.totalPlayers],
+    [],
+    ['Record', 'Nome', 'Valore', 'Dettaglio'],
+  ];
+  for (const [key, label] of Object.entries(RECORD_LABELS)) {
+    const r = season.records?.[key];
+    if (!r) continue;
+    // biggestMatch/smallestMatch usano {score, totalGoals} invece di {name, value}
+    rows.push([label, r.name ?? r.score ?? '', r.value ?? r.totalGoals ?? '', r.detail ?? '']);
+  }
+  rows.push([]);
+  rows.push(['Nome', 'Presenze', 'Gol', 'Autogol', 'Assist', 'Vinte', 'Nulle', 'Perse']);
+  for (const p of season.players || []) {
+    rows.push([
+      p.name, p.presenze ?? 0, p.gol ?? '', p.autogol ?? '', p.assist ?? '',
+      p.vinte ?? 0, p.nulle ?? 0, p.perse ?? 0,
+    ]);
+  }
+  return toCsv(rows);
+}
+
+export function exportSeasonCSV(season) {
+  const blob = new Blob(['\uFEFF' + buildSeasonCSV(season)], { type: 'text/csv;charset=utf-8' });
+  triggerDownload(blob, `calcetto-stagione-${season.id || season.label.replace('/', '-')}.csv`);
+}
