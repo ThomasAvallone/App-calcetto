@@ -128,19 +128,13 @@ export function computeSeasonRecap(players, matches, seasonId, now = Date.now())
 
   // ── Totali ──────────────────────────────────────────────────────────────
   // totalGoals viene dal punteggio delle partite (per le storiche importate è
-  // il dato dell'Excel, autorevole); eventGoals conta i gol che hanno davvero
-  // un marcatore. La differenza sono gol senza attribuzione — succede quando
-  // un nome storico non è collegato a nessun giocatore e l'import ha scartato
-  // l'evento. Esporla evita che la classifica sembri "non tornare".
-  let totalGoals = 0, totalAutoGoals = 0, eventGoals = 0;
+  // il dato dell'Excel, autorevole). Più sotto si calcola unattributedGoals =
+  // quanti di questi gol NON compaiono in nessuna riga della classifica.
+  let totalGoals = 0, totalAutoGoals = 0;
   for (const m of seasonMatches) {
     totalGoals += (m.redScore ?? 0) + (m.blueScore ?? 0);
-    for (const ev of m.events || []) {
-      if (ev.type === 'autogoal') { totalAutoGoals++; eventGoals++; }
-      else if (ev.type === 'goal') eventGoals++;
-    }
+    for (const ev of m.events || []) if (ev.type === 'autogoal') totalAutoGoals++;
   }
-  const unattributedGoals = Math.max(0, totalGoals - eventGoals);
 
   // ── Righe giocatore (source of truth: aggregatePlayerMatchStats) ────────
   const rows = [];
@@ -212,6 +206,15 @@ export function computeSeasonRecap(players, matches, seasonId, now = Date.now())
   }
   rows.push(...residuals.values());
   rows.sort((a, b) => (b.gol || 0) - (a.gol || 0));
+
+  // Gol che NESSUNA riga della classifica rivendica: è esattamente di quanto la
+  // colonna G non torna rispetto al totale di stagione. Due cause, entrambe di
+  // collegamento dati: l'import ha scartato l'evento perché il nome storico non
+  // è mappato su un giocatore, oppure l'evento esiste ma il suo marcatore non
+  // compare in nessuna formazione (dato d'origine incoerente) e quindi non ha
+  // una riga. Esporla evita che la classifica sembri sbagliata.
+  const claimedGoals = rows.reduce((a, r) => a + (r.gol || 0) + (r.autogol || 0), 0);
+  const unattributedGoals = Math.max(0, totalGoals - claimedGoals);
 
   // ── Record ──────────────────────────────────────────────────────────────
   const records = {};

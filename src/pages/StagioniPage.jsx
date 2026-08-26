@@ -296,8 +296,8 @@ export default function StagioniPage() {
           (nomi storici non collegati → l'import ha scartato quegli eventi). */}
       {season.unattributedGoals > 0 && (
         <p className="text-xs mt-1" style={{ textAlign: 'center', color: '#718096' }}>
-          {season.unattributedGoals} gol senza marcatore registrato
-          {season.players.some(p => p.gol === null) && ' — collega i nomi storici dalla scheda giocatore'}
+          {season.unattributedGoals} gol non attribuiti in classifica
+          {season.players.some(p => p.gol == null) && ' — collega i nomi storici dalla scheda giocatore'}
         </p>
       )}
     </div>

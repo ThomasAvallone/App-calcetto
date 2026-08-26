@@ -105,6 +105,18 @@ describe('computeSeasonRecap — totali e righe giocatore', () => {
     expect(r.unattributedGoals).toBe(2);
   });
 
+  it('unattributedGoals: conta anche i gol di chi non è in formazione (nessuna riga)', () => {
+    // evento con un marcatore che non compare in nessun roster → nessuna riga
+    // lo rivendica, quindi la colonna G non torna di 1
+    const strano = [appMatch({
+      date: D(2026, 0, 10), red: 2, blue: 0,
+      events: [goal(players[0]), { type: 'goal', scorerId: 'pZ', scorerName: 'Fantasma' }],
+    })];
+    const r = computeSeasonRecap(players, strano, '2025-26', D(2026, 9, 1));
+    expect(r.players.some(p => p.name === 'Fantasma')).toBe(false);
+    expect(r.unattributedGoals).toBe(1);
+  });
+
   it('unattributedGoals: 0 quando ogni gol ha un evento (autogol inclusi)', () => {
     const completo = [appMatch({
       date: D(2026, 0, 10), red: 2, blue: 1,
